@@ -199,7 +199,7 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
         `;
 
         await resend.emails.send({
-          from: "LevelUpMusic <noreply@levelupmusic.com>",
+          from: "LevelUpMusic <onboarding@resend.dev>",
           to: buyerEmail,
           subject: "Votre achat est confirmé 🎵",
           html,
