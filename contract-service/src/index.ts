@@ -161,7 +161,4 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
   }
 });
 
-const port = Number(process.env.PORT || 3000);
-app.listen(port, () => {
-  console.log(`[contract-service] listening on port ${port}`);
-});
+export default app;
