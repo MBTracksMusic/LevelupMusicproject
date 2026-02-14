@@ -1,14 +1,19 @@
 import "dotenv/config";
 import fs from "node:fs/promises";
 import express, { type Request, type Response } from "express";
+import { Resend } from "resend";
 import { supabase } from "./supabaseClient.js";
 import { generatePDF } from "./generatePDF.js";
 import type { PurchaseContractPayload } from "./types.js";
+import serverless from "serverless-http";
+
 
 const app = express();
 app.use(express.json());
 
 const contractServiceSecret = process.env.CONTRACT_SERVICE_SECRET;
+const resendApiKey = process.env.RESEND_API_KEY;
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 if (!contractServiceSecret) {
   throw new Error("Missing CONTRACT_SERVICE_SECRET");
@@ -20,6 +25,14 @@ const toOne = <T>(value: T | T[] | null | undefined): T | null => {
   }
   return value ?? null;
 };
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 
 app.get("/health", (_req: Request, res: Response) => {
   return res.json({ status: "ok" });
@@ -47,7 +60,7 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
         license_type,
         contract_pdf_path,
         completed_at,
-        buyer:user_profiles!purchases_user_id_fkey(username),
+        buyer:user_profiles!purchases_user_id_fkey(username, email),
         product:products!purchases_product_id_fkey(
           title,
           producer:user_profiles!products_producer_id_fkey(username)
@@ -66,7 +79,10 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
       license_type: string | null;
       contract_pdf_path: string | null;
       completed_at: string | null;
-      buyer: { username: string | null } | { username: string | null }[] | null;
+      buyer:
+        | { username: string | null; email: string | null }
+        | { username: string | null; email: string | null }[]
+        | null;
       product:
         | {
             title: string | null;
@@ -86,6 +102,7 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
     const buyer = toOne(rawPurchase.buyer);
     const product = toOne(rawPurchase.product);
     const producer = toOne(product?.producer ?? null);
+    const buyerEmail = buyer?.email ?? null;
 
     const purchase: PurchaseContractPayload = {
       id: rawPurchase.id,
@@ -154,6 +171,48 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
       return res.status(500).json({ error: "Failed to update purchase contract path" });
     }
 
+    if (!buyerEmail) {
+      console.warn("[contract-service] Missing buyer email, skipping confirmation email", { purchaseId });
+    } else if (!resend) {
+      console.warn("[contract-service] Missing RESEND_API_KEY, skipping confirmation email", { purchaseId });
+    } else {
+      try {
+        const safeTrackTitle = escapeHtml(trackTitle);
+        const safeProducerName = escapeHtml(producerName);
+        const safeLicenseType = escapeHtml(licenseType);
+        const safeBuyerName = escapeHtml(buyerName);
+
+        const html = `
+          <div style="background:#0f1115;padding:32px 16px;font-family:Inter,Segoe UI,Arial,sans-serif;color:#e8eaed;">
+            <div style="max-width:620px;margin:0 auto;background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:28px;">
+              <h1 style="margin:0 0 16px 0;font-size:22px;line-height:1.3;color:#ffffff;">Votre achat est confirmé 🎵</h1>
+              <p style="margin:0 0 18px 0;color:#b8bfcc;">Bonjour ${safeBuyerName}, merci pour votre achat sur LevelUpMusic.</p>
+              <div style="background:#11141a;border:1px solid #2a2f3a;border-radius:10px;padding:14px 16px;margin:0 0 18px 0;">
+                <p style="margin:0 0 8px 0;"><strong style="color:#ffffff;">Titre :</strong> ${safeTrackTitle}</p>
+                <p style="margin:0 0 8px 0;"><strong style="color:#ffffff;">Producteur :</strong> ${safeProducerName}</p>
+                <p style="margin:0;"><strong style="color:#ffffff;">Licence :</strong> ${safeLicenseType}</p>
+              </div>
+              <p style="margin:0 0 8px 0;color:#d2d7e1;">Votre contrat PDF est maintenant disponible dans votre dashboard.</p>
+              <p style="margin:0;color:#8f98aa;font-size:12px;">© LevelUpMusic</p>
+            </div>
+          </div>
+        `;
+
+        await resend.emails.send({
+          from: "LevelUpMusic <noreply@levelupmusic.com>",
+          to: buyerEmail,
+          subject: "Votre achat est confirmé 🎵",
+          html,
+        });
+      } catch (emailError) {
+        console.error("[contract-service] Failed to send confirmation email", {
+          purchaseId,
+          buyerEmail,
+          error: emailError,
+        });
+      }
+    }
+
     return res.json({ status: "contract_generated", path: storagePath });
   } catch (error) {
     console.error("[contract-service] Unexpected error", error);
@@ -161,4 +220,4 @@ app.post("/generate-contract", async (req: Request, res: Response) => {
   }
 });
 
-export default app;
+export default serverless(app);
