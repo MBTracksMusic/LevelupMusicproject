@@ -1,4 +1,4 @@
-import contractServiceHandler from "../contract-service/dist/index.js";
+import contractServiceHandler from "../contract-service/dist/index";
 
 export default async function handler(req: any, res: any) {
   const queryIndex = typeof req.url === "string" ? req.url.indexOf("?") : -1;
