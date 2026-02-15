@@ -1,3 +1,3 @@
-import app from "../contract-service/src/index";
-
-export default app;
+export default function handler(req, res) {
+  res.status(200).json({ ok: "API detected" });
+}
