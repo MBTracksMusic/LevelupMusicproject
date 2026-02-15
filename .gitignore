@@ -7,7 +7,13 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# ignore frontend dist only
+/dist
+
+# but keep contract-service dist for Vercel
+!contract-service/dist
+!contract-service/dist/**
+
 dist-ssr
 *.local
 
