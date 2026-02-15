@@ -738,3 +738,10 @@ app.all("/generate-contract", (_req: Request, res: Response) => {
 });
 
 export default serverless(app);
+
+console.log("ENV CHECK", {
+  CONTRACT_SERVICE_SECRET: !!process.env.CONTRACT_SERVICE_SECRET,
+  SUPABASE_URL: !!process.env.SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  RESEND_API_KEY: !!process.env.RESEND_API_KEY
+});
