@@ -1,3 +1,4 @@
-import handler from "../contract-service/dist/index.js";
+import serverless from "serverless-http";
+import app from "../contract-service/dist/index.js";
 
-export default handler;
+export default app;
