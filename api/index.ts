@@ -1,4 +1,3 @@
-import serverless from "serverless-http";
-import app from "../contract-service/dist/index.js";
+import app from "../contract-service/src/index";
 
 export default app;
