@@ -1,3 +1,6 @@
+import contractServiceHandler from "../contract-service/dist/index.js";
+
 export default function handler(req: any, res: any) {
-  res.status(200).json({ status: "ok simple" });
+  req.url = "/health";
+  return contractServiceHandler(req, res);
 }
