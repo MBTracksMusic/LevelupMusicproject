@@ -241,6 +241,8 @@ const getSupabaseAdmin = () => {
   });
 };
 
+type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
+
 const buildStoragePath = (payload: GeneratePayload): string => {
   if (payload.purchaseId) {
     const purchaseIdSegment = sanitizePathSegment(payload.purchaseId, `purchase-${Date.now()}`);
@@ -253,7 +255,7 @@ const buildStoragePath = (payload: GeneratePayload): string => {
 };
 
 const uploadContractToSupabase = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseAdminClient,
   pdfBuffer: Uint8Array,
   storagePath: string,
 ) => {
@@ -269,7 +271,7 @@ const uploadContractToSupabase = async (
 };
 
 const getContractSignedUrl = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseAdminClient,
   contractPath: string,
   expiresInSeconds: number,
 ) => {
@@ -348,7 +350,7 @@ const readQueryParam = (query: Record<string, unknown> | undefined, key: string)
 };
 
 const authenticateUser = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseAdminClient,
   headers: Record<string, string | string[] | undefined> | undefined,
 ): Promise<SupabaseAuthUser | null> => {
   const authorizationHeader = firstHeaderValue(headers, "authorization");
@@ -362,7 +364,7 @@ const authenticateUser = async (
 };
 
 const getPurchaseById = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseAdminClient,
   purchaseId: string,
 ): Promise<PurchaseLookupResult | null> => {
   const { data, error } = await supabase
@@ -373,15 +375,16 @@ const getPurchaseById = async (
 
   if (error) throw error;
   if (!data) return null;
+  const row = data as { user_id: string; contract_pdf_path: string | null };
 
   return {
-    user_id: data.user_id as string,
-    contract_pdf_path: (data.contract_pdf_path as string | null) ?? null,
+    user_id: row.user_id,
+    contract_pdf_path: row.contract_pdf_path ?? null,
   };
 };
 
 const getPurchaseContractSeed = async (
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseAdminClient,
   purchaseId: string,
 ): Promise<PurchaseContractSeed | null> => {
   const { data, error } = await supabase
