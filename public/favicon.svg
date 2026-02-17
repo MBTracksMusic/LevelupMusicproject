@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LevelupMusic">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)" />
+  <path d="M16 44V20h6v18h10v6H16z" fill="#e2e8f0" />
+  <path d="M36 44V20h6v9h8v-9h6v24h-6V35h-8v9h-6z" fill="#e2e8f0" />
+  <rect x="14" y="48" width="36" height="4" rx="2" fill="url(#accent)" />
+</svg>
