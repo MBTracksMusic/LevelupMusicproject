@@ -38,11 +38,11 @@ export function CartPage() {
     setIsCheckoutLoading(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData, error: refreshError } = await supabase.auth.refreshSession();
       const accessToken = sessionData.session?.access_token;
 
-      if (!accessToken) {
-        throw new Error('Session expirée, merci de vous reconnecter.');
+      if (refreshError || !accessToken) {
+        throw new Error(refreshError?.message || 'Session expirée, merci de vous reconnecter.');
       }
 
       const { data, error } = await supabase.functions.invoke('create-checkout', {
@@ -55,12 +55,26 @@ export function CartPage() {
         headers: {
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
           Authorization: `Bearer ${accessToken}`,
+          'x-supabase-auth': `Bearer ${accessToken}`,
         },
+        jwt: accessToken,
       });
 
       if (error) {
         const apiError = (data as { error?: string })?.error;
-        throw new Error(apiError || error.message || 'Impossible de démarrer le paiement.');
+        const contextResponse = (error as { context?: Response })?.context;
+        let backendError: string | undefined;
+
+        if (contextResponse instanceof Response) {
+          try {
+            const contextPayload = await contextResponse.clone().json() as { error?: string; message?: string };
+            backendError = contextPayload?.error || contextPayload?.message;
+          } catch {
+            backendError = undefined;
+          }
+        }
+
+        throw new Error(apiError || backendError || error.message || 'Impossible de démarrer le paiement.');
       }
 
       const url = (data as { url?: string })?.url;
