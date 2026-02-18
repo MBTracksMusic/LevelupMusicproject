@@ -25,12 +25,10 @@ export function CartPage() {
     if (!status) return;
 
     const purchasedProductId = searchParams.get('productId');
-    setSearchParams((currentParams) => {
-      const nextParams = new URLSearchParams(currentParams);
-      nextParams.delete('status');
-      nextParams.delete('productId');
-      return nextParams;
-    }, { replace: true });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('status');
+    nextParams.delete('productId');
+    setSearchParams(nextParams, { replace: true });
 
     if (status === 'cancel') {
       toast.error(t('checkout.failed'));
@@ -39,34 +37,23 @@ export function CartPage() {
 
     if (status !== 'success') return;
 
-    let cancelled = false;
-
     const syncCartAfterSuccess = async () => {
-      const maxAttempts = 8;
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        if (cancelled) return;
-
+      try {
+        if (purchasedProductId) {
+          await removeFromCart(purchasedProductId);
+        } else {
+          await fetchCart();
+        }
+      } catch (error) {
+        console.error('Error syncing cart after checkout success:', error);
         await fetchCart();
-        const hasPurchasedItem = purchasedProductId
-          ? useCartStore.getState().items.some((item) => item.product_id === purchasedProductId)
-          : false;
-
-        if (!hasPurchasedItem) break;
-
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-      }
-
-      if (!cancelled) {
+      } finally {
         toast.success(t('checkout.success'));
       }
     };
 
     void syncCartAfterSuccess();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchCart, searchParams, setSearchParams, t]);
+  }, [fetchCart, removeFromCart, searchParams, setSearchParams, t]);
 
   const total = getTotal();
   const hasItems = items.length > 0;
