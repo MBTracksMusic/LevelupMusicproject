@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Music, ShoppingCart, Trash2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../lib/stores/cart';
 import { useTranslation } from '../lib/i18n';
 import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase/client';
-import toast from 'react-hot-toast';
 
 export function CartPage() {
   const { t } = useTranslation();
   const { items, isLoading, fetchCart, removeFromCart, getTotal } = useCartStore();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -19,41 +17,6 @@ export function CartPage() {
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);
-
-  useEffect(() => {
-    const status = searchParams.get('status');
-    if (!status) return;
-
-    const purchasedProductId = searchParams.get('productId');
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('status');
-    nextParams.delete('productId');
-    setSearchParams(nextParams, { replace: true });
-
-    if (status === 'cancel') {
-      toast.error(t('checkout.failed'));
-      return;
-    }
-
-    if (status !== 'success') return;
-
-    const syncCartAfterSuccess = async () => {
-      try {
-        if (purchasedProductId) {
-          await removeFromCart(purchasedProductId);
-        } else {
-          await fetchCart();
-        }
-      } catch (error) {
-        console.error('Error syncing cart after checkout success:', error);
-        await fetchCart();
-      } finally {
-        toast.success(t('checkout.success'));
-      }
-    };
-
-    void syncCartAfterSuccess();
-  }, [fetchCart, removeFromCart, searchParams, setSearchParams, t]);
 
   const total = getTotal();
   const hasItems = items.length > 0;
@@ -86,7 +49,7 @@ export function CartPage() {
         body: {
           productId: firstItem.product_id,
           licenseType: firstItem.license_type,
-          successUrl: `${window.location.origin}/cart?status=success&productId=${encodeURIComponent(firstItem.product_id)}`,
+          successUrl: `${window.location.origin}/cart?status=success`,
           cancelUrl: `${window.location.origin}/cart?status=cancel`,
         },
         headers: {

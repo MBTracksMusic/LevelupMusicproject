@@ -261,35 +261,6 @@ async function notifyContractService(purchaseId: string) {
   }
 }
 
-async function removePurchasedItemFromCart(
-  supabase: ReturnType<typeof createClient>,
-  params: { userId: string; productId: string; sessionId: string },
-) {
-  const { userId, productId, sessionId } = params;
-
-  const { error } = await supabase
-    .from("cart_items")
-    .delete()
-    .eq("user_id", userId)
-    .eq("product_id", productId);
-
-  if (error) {
-    console.error("[stripe-webhook] Failed to remove purchased item from cart", {
-      sessionId,
-      userId,
-      productId,
-      error,
-    });
-    return;
-  }
-
-  console.log("[stripe-webhook] Removed purchased item from cart", {
-    sessionId,
-    userId,
-    productId,
-  });
-}
-
 async function markStripeEvent(
   supabase: ReturnType<typeof createClient>,
   eventId: string,
@@ -691,12 +662,6 @@ async function handleCheckoutCompleted(
   if (!purchaseId) {
     throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
   }
-
-  await removePurchasedItemFromCart(supabase, {
-    userId,
-    productId,
-    sessionId,
-  });
 
   await notifyContractService(purchaseId);
 }
