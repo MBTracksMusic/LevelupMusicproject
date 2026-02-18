@@ -39,6 +39,16 @@ const asNonEmptyString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const DEFAULT_EVENT_PROCESSING_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+
+const getEventProcessingLockTimeoutMs = () => {
+  const raw = asNonEmptyString(Deno.env.get("STRIPE_EVENT_PROCESSING_LOCK_TIMEOUT_MS"));
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_EVENT_PROCESSING_LOCK_TIMEOUT_MS;
+};
+
 async function resolveLicenseIdForCheckout(
   supabase: ReturnType<typeof createClient>,
   params: {
@@ -324,28 +334,54 @@ async function hasProcessingStartedAtColumn(supabase: ReturnType<typeof createCl
 async function claimStripeEventProcessingLock(
   supabase: ReturnType<typeof createClient>,
   eventId: string,
+  lockTimeoutMs: number,
 ) {
   // CLAIM LOCK (atomic):
-  // Only one worker can set processing_started_at from NULL -> now()
-  const { data, error } = await supabase
+  // 1) normal path: processing_started_at is NULL
+  // 2) recovery path: stale lock older than lockTimeoutMs
+  const nowIso = new Date().toISOString();
+  const { data: freshClaim, error: freshClaimError } = await supabase
     .from("stripe_events")
-    .update({ processing_started_at: new Date().toISOString() })
+    .update({ processing_started_at: nowIso })
     .eq("id", eventId)
     .eq("processed", false)
     .is("processing_started_at", null)
     .select("id")
     .maybeSingle();
 
-  if (error) {
-    if (isMissingProcessingStartedColumnError(error)) {
+  if (freshClaimError) {
+    if (isMissingProcessingStartedColumnError(freshClaimError)) {
       throw new Error(
         "Missing column public.stripe_events.processing_started_at. Run migrations before enabling webhook.",
       );
     }
-    throw new Error(`Failed to claim processing lock: ${error.message}`);
+    throw new Error(`Failed to claim processing lock: ${freshClaimError.message}`);
   }
 
-  return data;
+  if (freshClaim) {
+    return freshClaim;
+  }
+
+  const staleBeforeIso = new Date(Date.now() - lockTimeoutMs).toISOString();
+  const { data: staleClaim, error: staleClaimError } = await supabase
+    .from("stripe_events")
+    .update({ processing_started_at: nowIso })
+    .eq("id", eventId)
+    .eq("processed", false)
+    .lt("processing_started_at", staleBeforeIso)
+    .select("id")
+    .maybeSingle();
+
+  if (staleClaimError) {
+    if (isMissingProcessingStartedColumnError(staleClaimError)) {
+      throw new Error(
+        "Missing column public.stripe_events.processing_started_at. Run migrations before enabling webhook.",
+      );
+    }
+    throw new Error(`Failed to recover stale processing lock: ${staleClaimError.message}`);
+  }
+
+  return staleClaim;
 }
 
 Deno.serve(async (req: Request) => {
@@ -447,12 +483,15 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Failed to upsert stripe_events: ${upsertError.message}`);
     }
 
+    const lockTimeoutMs = getEventProcessingLockTimeoutMs();
+
     // CLAIM LOCK (atomic idempotency gate)
-    const claimed = await claimStripeEventProcessingLock(supabase, event.id);
+    const claimed = await claimStripeEventProcessingLock(supabase, event.id, lockTimeoutMs);
     if (!claimed) {
       console.log("[stripe-webhook] Event already being processed", {
         eventId: event.id,
         eventType: event.type,
+        lockTimeoutMs,
       });
       return new Response(JSON.stringify({ received: true, status: "already_processing" }), {
         status: 200,
@@ -548,6 +587,10 @@ Deno.serve(async (req: Request) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unhandled webhook error";
+    await markStripeEvent(supabase, event.id, {
+      processed: false,
+      error: message,
+    });
     console.error("[stripe-webhook] Fatal webhook error", { message });
 
     return new Response(JSON.stringify({ error: "Webhook processing failed" }), {

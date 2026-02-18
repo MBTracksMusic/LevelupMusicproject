@@ -355,27 +355,33 @@ Deno.serve(async (req: Request) => {
     lineItems.append("line_items[0][price_data][currency]", "eur");
     lineItems.append("line_items[0][price_data][unit_amount]", checkoutAmount.toString());
     lineItems.append("line_items[0][price_data][product_data][name]", product.title);
-    if (product.description) {
-      lineItems.append("line_items[0][price_data][product_data][description]", product.description);
-    }
+    lineItems.append("line_items[0][price_data][product_data][description]", `Licence: ${selectedLicense.name}`);
     if (product.cover_image_url) {
       lineItems.append("line_items[0][price_data][product_data][images][0]", product.cover_image_url);
     }
     lineItems.append("line_items[0][quantity]", "1");
 
-    const sessionParams = new URLSearchParams({
+    const sessionParamsData: Record<string, string> = {
       mode: "payment",
-      customer: customerId,
       success_url: successUrl,
       cancel_url: cancelUrl,
       "metadata[user_id]": user.id,
       "metadata[product_id]": productId,
+      "metadata[product_title]": product.title,
       "metadata[is_exclusive]": product.is_exclusive.toString(),
       "metadata[license_id]": selectedLicense.id,
       "metadata[license_name]": selectedLicense.name,
       // Keep legacy metadata key for backward compatibility in any downstream consumer.
       "metadata[license_type]": selectedLicense.name,
-    });
+    };
+
+    if (customerId) {
+      sessionParamsData.customer = customerId;
+    } else {
+      sessionParamsData.customer_creation = "always";
+    }
+
+    const sessionParams = new URLSearchParams(sessionParamsData);
 
     const sessionResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",

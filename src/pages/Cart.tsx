@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Music, ShoppingCart, Trash2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../lib/stores/cart';
 import { useTranslation } from '../lib/i18n';
@@ -8,11 +8,30 @@ import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase/client';
 
 export function CartPage() {
+  const navigate = useNavigate();
   const { t } = useTranslation();
-  const { items, isLoading, fetchCart, removeFromCart, getTotal } = useCartStore();
+  const { items, isLoading, fetchCart, removeFromCart, clearCart, getTotal } = useCartStore();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+
+    if (status !== 'success') return;
+
+    void (async () => {
+      try {
+        await clearCart();
+      } catch (error) {
+        console.error('Error clearing cart after successful checkout:', error);
+      } finally {
+        localStorage.removeItem('cart');
+        navigate('/', { replace: true });
+      }
+    })();
+  }, [clearCart, navigate]);
 
   useEffect(() => {
     fetchCart();
@@ -20,6 +39,7 @@ export function CartPage() {
 
   const total = getTotal();
   const hasItems = items.length > 0;
+  const isSingleItemCheckout = items.length === 1;
   const firstItem = items[0];
 
   const handleRemove = async (productId: string) => {
@@ -32,6 +52,11 @@ export function CartPage() {
   };
 
   const handleCheckout = async () => {
+    if (!isSingleItemCheckout) {
+      setCheckoutError('Pour le moment, un seul beat peut etre achete par paiement.');
+      return;
+    }
+
     if (!firstItem) return;
 
     setCheckoutError(null);
@@ -199,6 +224,12 @@ export function CartPage() {
               </div>
             )}
 
+            {items.length > 1 && (
+              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                Pour le moment, un seul beat peut etre achete par paiement.
+              </div>
+            )}
+
             <div className="flex items-center justify-between text-sm text-zinc-400 mb-3">
               <span>{t('checkout.subtotal')}</span>
               <span className="text-white">{formatPrice(total)}</span>
@@ -213,7 +244,7 @@ export function CartPage() {
               className="w-full mt-6"
               size="lg"
               leftIcon={<ArrowRight className="w-4 h-4" />}
-              disabled={!hasItems || isCheckoutLoading}
+              disabled={!hasItems || isCheckoutLoading || !isSingleItemCheckout}
               isLoading={isCheckoutLoading}
               onClick={handleCheckout}
             >
