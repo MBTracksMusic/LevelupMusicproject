@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Music, ShoppingCart, Trash2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../lib/stores/cart';
 import { useTranslation } from '../lib/i18n';
 import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase/client';
+import toast from 'react-hot-toast';
 
 export function CartPage() {
   const { t } = useTranslation();
   const { items, isLoading, fetchCart, removeFromCart, getTotal } = useCartStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -17,6 +19,54 @@ export function CartPage() {
   useEffect(() => {
     fetchCart();
   }, [fetchCart]);
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (!status) return;
+
+    const purchasedProductId = searchParams.get('productId');
+    setSearchParams((currentParams) => {
+      const nextParams = new URLSearchParams(currentParams);
+      nextParams.delete('status');
+      nextParams.delete('productId');
+      return nextParams;
+    }, { replace: true });
+
+    if (status === 'cancel') {
+      toast.error(t('checkout.failed'));
+      return;
+    }
+
+    if (status !== 'success') return;
+
+    let cancelled = false;
+
+    const syncCartAfterSuccess = async () => {
+      const maxAttempts = 8;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (cancelled) return;
+
+        await fetchCart();
+        const hasPurchasedItem = purchasedProductId
+          ? useCartStore.getState().items.some((item) => item.product_id === purchasedProductId)
+          : false;
+
+        if (!hasPurchasedItem) break;
+
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
+
+      if (!cancelled) {
+        toast.success(t('checkout.success'));
+      }
+    };
+
+    void syncCartAfterSuccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCart, searchParams, setSearchParams, t]);
 
   const total = getTotal();
   const hasItems = items.length > 0;
@@ -49,7 +99,7 @@ export function CartPage() {
         body: {
           productId: firstItem.product_id,
           licenseType: firstItem.license_type,
-          successUrl: `${window.location.origin}/cart?status=success`,
+          successUrl: `${window.location.origin}/cart?status=success&productId=${encodeURIComponent(firstItem.product_id)}`,
           cancelUrl: `${window.location.origin}/cart?status=cancel`,
         },
         headers: {
