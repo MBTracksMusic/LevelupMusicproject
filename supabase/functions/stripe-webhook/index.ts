@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { Resend } from "npm:resend";
 import Stripe from "npm:stripe@17";
 
 const jsonHeaders = {
@@ -38,6 +39,30 @@ const asNonEmptyString = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+
+async function sendPurchaseEmail(email: string) {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendApiKey) {
+    throw new Error("Missing RESEND_API_KEY");
+  }
+
+  const resend = new Resend(resendApiKey);
+
+  return await resend.emails.send({
+    
+    from: "onboarding@resend.dev",
+    to: email,
+    subject: "Votre achat LevelUpMusic est confirmé",
+    text: "Merci pour votre achat. Votre commande a bien été validée.",
+    html: `
+      <div lang="fr" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#111">
+        <h1 style="margin:0 0 12px;">Merci pour votre achat</h1>
+        <p style="margin:0 0 16px;">Votre commande a bien été validée.</p>
+        <p style="margin:0;">Besoin d’aide ? Répondez à cet email.</p>
+      </div>
+    `,
+  });
+}
 
 const DEFAULT_EVENT_PROCESSING_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -621,6 +646,9 @@ async function handleCheckoutCompleted(
     typeof session.subscription === "string"
       ? session.subscription
       : session.subscription?.id ?? null;
+  const email =
+    asNonEmptyString(session.customer_details?.email) ||
+    asNonEmptyString(session.customer_email);
   const metadata = session.metadata ?? {};
 
   if (mode === "subscription") {
@@ -628,6 +656,16 @@ async function handleCheckoutCompleted(
       throw new WebhookError("Subscription checkout completed without subscription id", 400, true);
     }
     await upsertProducerSubscriptionFromStripe(supabase, stripe, subscriptionId);
+    if (email) {
+      try {
+        await sendPurchaseEmail(email);
+        console.log("EMAIL_SENT", { email, purchaseId: null });
+      } catch (error) {
+        console.error("EMAIL_ERROR", { error, purchaseId: null });
+      }
+    } else {
+      console.error("EMAIL_ERROR", { error: "Missing customer email", purchaseId: null });
+    }
     return;
   }
 
@@ -704,6 +742,37 @@ async function handleCheckoutCompleted(
 
   if (!purchaseId) {
     throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
+  }
+
+  if (email) {
+    const { data: purchaseRow, error: purchaseReadError } = await supabase
+      .from("purchases")
+      .select("contract_email_sent_at")
+      .eq("id", purchaseId)
+      .maybeSingle();
+
+    if (purchaseReadError) {
+      console.error("EMAIL_ERROR", { error: purchaseReadError, purchaseId });
+    } else if (!purchaseRow?.contract_email_sent_at) {
+      try {
+        await sendPurchaseEmail(email);
+        const { error: purchaseUpdateError } = await supabase
+          .from("purchases")
+          .update({ contract_email_sent_at: new Date().toISOString() })
+          .eq("id", purchaseId)
+          .is("contract_email_sent_at", null);
+
+        if (purchaseUpdateError) {
+          console.error("EMAIL_ERROR", { error: purchaseUpdateError, purchaseId });
+        } else {
+          console.log("EMAIL_SENT", { email, purchaseId });
+        }
+      } catch (error) {
+        console.error("EMAIL_ERROR", { error, purchaseId });
+      }
+    }
+  } else {
+    console.error("EMAIL_ERROR", { error: "Missing customer email", purchaseId });
   }
 
   await notifyContractService(purchaseId);
