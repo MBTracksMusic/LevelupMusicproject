@@ -79,6 +79,7 @@ export interface Product {
   duration_seconds: number | null;
   file_format: string;
   license_terms: Record<string, unknown>;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }

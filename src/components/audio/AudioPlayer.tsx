@@ -118,6 +118,8 @@ interface AudioPlayerProps {
 export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const hasCountedCurrentTrackRef = useRef(false);
+  const lastCountedTrackIdRef = useRef<string | null>(null);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -292,7 +294,31 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     onEnded?.();
   }, [onEnded, setGlobalPlaying]);
 
-  const handlePlayEvent = useCallback(() => setGlobalPlaying(true), [setGlobalPlaying]);
+  const handlePlayEvent = useCallback(() => {
+    setGlobalPlaying(true);
+
+    const productId = track?.id;
+    if (!productId) return;
+
+    if (lastCountedTrackIdRef.current !== productId) {
+      lastCountedTrackIdRef.current = productId;
+      hasCountedCurrentTrackRef.current = false;
+    }
+
+    if (hasCountedCurrentTrackRef.current) return;
+    hasCountedCurrentTrackRef.current = true;
+
+    void supabase
+      .rpc('increment_play_count', { p_product_id: productId })
+      .then(({ error }) => {
+        if (error) {
+          console.error('Play count increment error:', error);
+        }
+      })
+      .catch((err) => {
+        console.error('Play count increment error:', err);
+      });
+  }, [setGlobalPlaying, track?.id]);
   const handlePauseEvent = useCallback(() => setGlobalPlaying(false), [setGlobalPlaying]);
 
   const handleProgressClick = useCallback(

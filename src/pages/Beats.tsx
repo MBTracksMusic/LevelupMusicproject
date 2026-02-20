@@ -6,10 +6,18 @@ import { Select } from '../components/ui/Select';
 import { ProductCard } from '../components/products/ProductCard';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { useAuth } from '../lib/auth/hooks';
+import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations, Genre, Mood } from '../lib/supabase/types';
 
-export function BeatsPage() {
+interface BeatsPageProps {
+  mode?: 'beats' | 'exclusives' | 'kits';
+}
+
+export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   const { t, language } = useTranslation();
+  const { user } = useAuth();
+  const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   const [beats, setBeats] = useState<ProductWithRelations[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [moods, setMoods] = useState<Mood[]>([]);
@@ -40,6 +48,14 @@ export function BeatsPage() {
   }, []);
 
   useEffect(() => {
+    if (!user) {
+      clearWishlist();
+      return;
+    }
+    void fetchWishlist();
+  }, [user?.id, fetchWishlist, clearWishlist]);
+
+  useEffect(() => {
     async function fetchBeats() {
       setIsLoading(true);
       try {
@@ -51,8 +67,17 @@ export function BeatsPage() {
             genre:genres(*),
             mood:moods(*)
           `)
-          .eq('is_published', true)
-          .eq('product_type', 'beat');
+          .eq('is_published', true);
+
+        if (mode === 'exclusives') {
+          query = query
+            .eq('product_type', 'exclusive')
+            .eq('is_sold', false);
+        } else if (mode === 'kits') {
+          query = query.eq('product_type', 'kit');
+        } else {
+          query = query.eq('product_type', 'beat');
+        }
 
         if (filters.genre) {
           query = query.eq('genre_id', filters.genre);
@@ -102,7 +127,7 @@ export function BeatsPage() {
 
     const debounce = setTimeout(fetchBeats, 300);
     return () => clearTimeout(debounce);
-  }, [filters]);
+  }, [filters, mode]);
 
   const getLocalizedName = (item: Genre | Mood) => {
     switch (language) {
@@ -135,6 +160,14 @@ export function BeatsPage() {
     filters.bpmMax ||
     filters.priceMin ||
     filters.priceMax;
+
+  const handleWishlistToggle = async (productId: string) => {
+    try {
+      await toggleWishlist(productId);
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
@@ -273,7 +306,12 @@ export function BeatsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {beats.map((beat) => (
-              <ProductCard key={beat.id} product={beat} />
+              <ProductCard
+                key={beat.id}
+                product={beat}
+                isWishlisted={wishlistProductIds.includes(beat.id)}
+                onWishlistToggle={handleWishlistToggle}
+              />
             ))}
           </div>
         )}

@@ -14,14 +14,34 @@ import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/products/ProductCard';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { useAuth } from '../lib/auth/hooks';
+import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations, UserProfile } from '../lib/supabase/types';
 
 export function HomePage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   const [featuredBeats, setFeaturedBeats] = useState<ProductWithRelations[]>([]);
   const [exclusives, setExclusives] = useState<ProductWithRelations[]>([]);
   const [topProducers, setTopProducers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      clearWishlist();
+      return;
+    }
+    void fetchWishlist();
+  }, [user?.id, fetchWishlist, clearWishlist]);
+
+  const handleWishlistToggle = async (productId: string) => {
+    try {
+      await toggleWishlist(productId);
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+    }
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -154,7 +174,12 @@ export function HomePage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {featuredBeats.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isWishlisted={wishlistProductIds.includes(product.id)}
+                  onWishlistToggle={handleWishlistToggle}
+                />
               ))}
             </div>
           )}
@@ -185,7 +210,12 @@ export function HomePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {exclusives.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isWishlisted={wishlistProductIds.includes(product.id)}
+                  onWishlistToggle={handleWishlistToggle}
+                />
               ))}
             </div>
           </div>
@@ -212,31 +242,47 @@ export function HomePage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {topProducers.map((producer) => (
-              <Link
-                key={producer.id}
-                to={`/producers/${producer.username}`}
-                className="group text-center"
-              >
-                <div className="mb-3">
-                  {producer.avatar_url ? (
-                    <img
-                      src={producer.avatar_url}
-                      alt={producer.username || ''}
-                      className="w-24 h-24 mx-auto rounded-full object-cover border-2 border-zinc-800 group-hover:border-rose-500 transition-colors"
-                    />
-                  ) : (
-                    <div className="w-24 h-24 mx-auto rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700 group-hover:border-rose-500 transition-colors">
-                      <Users className="w-10 h-10 text-zinc-600" />
-                    </div>
-                  )}
-                </div>
-                <h3 className="font-semibold text-white group-hover:text-rose-400 transition-colors">
-                  {producer.username}
-                </h3>
-                <p className="text-sm text-zinc-500">Producteur</p>
-              </Link>
-            ))}
+            {topProducers.map((producer) => {
+              const producerCard = (
+                <>
+                  <div className="mb-3">
+                    {producer.avatar_url ? (
+                      <img
+                        src={producer.avatar_url}
+                        alt={producer.username || ''}
+                        className="w-24 h-24 mx-auto rounded-full object-cover border-2 border-zinc-800 group-hover:border-rose-500 transition-colors"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 mx-auto rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700 group-hover:border-rose-500 transition-colors">
+                        <Users className="w-10 h-10 text-zinc-600" />
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-white group-hover:text-rose-400 transition-colors">
+                    {producer.username || 'Producteur'}
+                  </h3>
+                  <p className="text-sm text-zinc-500">Producteur</p>
+                </>
+              );
+
+              if (!producer.username) {
+                return (
+                  <div key={producer.id} className="group text-center">
+                    {producerCard}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={producer.id}
+                  to={`/producers/${producer.username}`}
+                  className="group text-center"
+                >
+                  {producerCard}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>

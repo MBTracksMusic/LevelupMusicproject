@@ -17,7 +17,10 @@ import { SettingsPage } from './pages/Settings';
 import { ProducerDashboardPage } from './pages/ProducerDashboard';
 import { UploadBeatPage } from './pages/UploadBeat';
 import { CartPage } from './pages/Cart';
+import { WishlistPage } from './pages/Wishlist';
 import { ProductDetailsPage } from './pages/ProductDetails';
+import { ProducersPage } from './pages/Producers';
+import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
@@ -63,11 +66,11 @@ function AppContent() {
           <Layout>
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/beats" element={<BeatsPage />} />
+              <Route path="/beats" element={<BeatsPage mode="beats" />} />
               <Route path="/beats/:slug" element={<ProductDetailsPage />} />
-              <Route path="/exclusives" element={<BeatsPage />} />
+              <Route path="/exclusives" element={<BeatsPage mode="exclusives" />} />
               <Route path="/exclusives/:slug" element={<ProductDetailsPage />} />
-              <Route path="/kits" element={<BeatsPage />} />
+              <Route path="/kits" element={<BeatsPage mode="kits" />} />
               <Route path="/kits/:slug" element={<ProductDetailsPage />} />
               <Route path="/battles" element={<BattlesPage />} />
               <Route path="/pricing" element={<PricingPage />} />
@@ -79,7 +82,16 @@ function AppContent() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/producers" element={<div className="pt-20 text-center text-white">Producteurs</div>} />
+              <Route
+                path="/wishlist"
+                element={
+                  <ProtectedRoute>
+                    <WishlistPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/producers" element={<ProducersPage />} />
+              <Route path="/producers/:username" element={<ProducerPublicProfilePage />} />
               <Route
                 path="/dashboard"
                 element={

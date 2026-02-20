@@ -4,14 +4,23 @@ import { Music, BarChart3, ShoppingBag, UploadCloud, Trash2 } from 'lucide-react
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
-import type { Product } from '../lib/supabase/types';
+import type { Database, Product } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 import { extractStoragePathFromCandidate } from '../lib/utils/storage';
+
+interface ProducerStatsRow {
+  total_revenue: number | null;
+  total_plays: number | null;
+}
 
 export function ProducerDashboardPage() {
   const { t } = useTranslation();
   const { profile } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [productCount, setProductCount] = useState(0);
+  const [salesCount, setSalesCount] = useState(0);
+  const [revenueCents, setRevenueCents] = useState(0);
+  const [viewsCount, setViewsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -22,40 +31,155 @@ export function ProducerDashboardPage() {
   }, []);
 
   useEffect(() => {
-    async function loadProducts() {
+    let isCancelled = false;
+
+    async function loadDashboardData() {
       if (!profile?.id) {
-        setProducts([]);
-        setIsLoading(false);
+        if (!isCancelled) {
+          setProducts([]);
+          setProductCount(0);
+          setSalesCount(0);
+          setRevenueCents(0);
+          setViewsCount(0);
+          setIsLoading(false);
+        }
         return;
       }
-      setIsLoading(true);
-      setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('producer_id', profile.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
 
-      if (fetchError) {
-        console.error('Error loading producer products', fetchError);
-        setError(fetchError.message);
-      } else {
-        setProducts((data as Product[]) || []);
+      if (!isCancelled) {
+        setIsLoading(true);
+        setError(null);
       }
-      setIsLoading(false);
+
+      try {
+        const [
+          { count: totalProducts, error: productCountError },
+          { data: productsData, error: productsError },
+          { count: totalSales, error: salesError },
+        ] = await Promise.all([
+          supabase
+            .from('products')
+            .select('id', { count: 'exact', head: true })
+            .eq('producer_id', profile.id)
+            .is('deleted_at', null),
+          supabase
+            .from('products')
+            .select('*')
+            .eq('producer_id', profile.id)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('purchases')
+            .select('id', { count: 'exact', head: true })
+            .eq('producer_id', profile.id)
+            .eq('status', 'completed'),
+        ]);
+
+        if (productCountError) {
+          console.error('Error loading producer product count', productCountError);
+        }
+        if (!isCancelled) {
+          setProductCount(totalProducts ?? 0);
+        }
+
+        if (productsError) {
+          console.error('Error loading producer products', productsError);
+          if (!isCancelled) {
+            setProducts([]);
+            setError(productsError.message);
+          }
+        } else if (!isCancelled) {
+          setProducts((productsData as Product[]) || []);
+        }
+
+        if (salesError) {
+          console.error('Error loading producer sales count', salesError);
+        }
+        if (!isCancelled) {
+          setSalesCount(totalSales ?? 0);
+        }
+
+        let computedRevenueCents: number | null = null;
+        const producerStatsSource = 'producer_stats' as unknown as keyof Database['public']['Tables'];
+        const { data: producerStatsData, error: producerStatsError } = await supabase
+          .from(producerStatsSource)
+          .select('total_revenue, total_plays')
+          .eq('producer_id', profile.id)
+          .maybeSingle();
+
+        if (producerStatsError) {
+          console.error('Producer stats view unavailable, falling back to purchases sum', producerStatsError);
+          const fallbackViewsCount = ((productsData as Product[]) || []).reduce(
+            (total, product) => total + (product.play_count || 0),
+            0
+          );
+          if (!isCancelled) {
+            setViewsCount(Math.max(0, fallbackViewsCount));
+          }
+        } else {
+          const typedStats = producerStatsData as unknown as ProducerStatsRow | null;
+          computedRevenueCents = typedStats?.total_revenue ?? 0;
+          if (!isCancelled) {
+            setViewsCount(Math.max(0, typedStats?.total_plays ?? 0));
+          }
+        }
+
+        if (computedRevenueCents === null) {
+          const { data: purchaseAmounts, error: fallbackRevenueError } = await supabase
+            .from('purchases')
+            .select('amount')
+            .eq('producer_id', profile.id)
+            .eq('status', 'completed');
+
+          if (fallbackRevenueError) {
+            console.error('Error loading producer revenue fallback', fallbackRevenueError);
+          } else {
+            const typedPurchaseAmounts = ((purchaseAmounts as unknown as Array<{ amount: number }> | null) || []);
+            computedRevenueCents = typedPurchaseAmounts.reduce((total, purchase) => total + purchase.amount, 0);
+          }
+        }
+
+        if (!isCancelled) {
+          setRevenueCents(Math.max(0, computedRevenueCents ?? 0));
+        }
+      } catch (loadError) {
+        console.error('Unexpected error loading producer dashboard', loadError);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
     }
 
-    loadProducts();
+    void loadDashboardData();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [profile?.id]);
-
-  const productCount = products.length;
-
   const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
   const COVER_BUCKET = import.meta.env.VITE_SUPABASE_COVER_BUCKET || 'beats-covers';
 
   const deleteProduct = async (product: Product) => {
     if (!profile?.id) return;
+
+    const { count: purchaseCount, error: purchaseCheckError } = await supabase
+      .from('purchases')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', product.id)
+      .eq('producer_id', profile.id);
+
+    if (purchaseCheckError) {
+      console.error('Error checking product purchases before delete', purchaseCheckError);
+      setError("Impossible de verifier l'historique des ventes pour ce produit.");
+      return;
+    }
+
+    if ((purchaseCount ?? 0) > 0) {
+      window.alert('Ce produit a deja ete vendu et ne peut pas etre supprime.');
+      return;
+    }
+
     const confirm = window.confirm(
       `Supprimer définitivement "${product.title}" ? Cette action retire aussi les fichiers et les favoris associés.`
     );
@@ -99,10 +223,10 @@ export function ProducerDashboardPage() {
         }
       }
 
-      // Delete the product row (scoped to the producer for safety)
+      // Soft-delete the product row (scoped to the producer for safety)
       const { error: productError } = await supabase
         .from('products')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', product.id)
         .eq('producer_id', profile.id);
 
@@ -112,6 +236,8 @@ export function ProducerDashboardPage() {
 
       // Update local state
       setProducts((prev) => prev.filter((p) => p.id !== product.id));
+      setProductCount((prev) => Math.max(0, prev - 1));
+      setViewsCount((prev) => Math.max(0, prev - (product.play_count || 0)));
     } catch (e) {
       console.error('Error deleting product', e);
       setError(e instanceof Error ? e.message : 'Suppression impossible pour le moment.');
@@ -134,9 +260,9 @@ export function ProducerDashboardPage() {
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard icon={Music} label={t('producer.products')} value={productCount} />
-          <StatCard icon={ShoppingBag} label={t('producer.sales')} value="—" />
-          <StatCard icon={BarChart3} label={t('producer.analytics')} value="—" />
-          <StatCard icon={Music} label={t('producer.earnings')} value="—" />
+          <StatCard icon={ShoppingBag} label={t('producer.sales')} value={salesCount} />
+          <StatCard icon={BarChart3} label="Lectures" value={viewsCount} />
+          <StatCard icon={Music} label={t('producer.earnings')} value={formatPrice(revenueCents)} />
         </section>
 
         <section className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 shadow-xl">
@@ -148,12 +274,12 @@ export function ProducerDashboardPage() {
           {!isLoading && error && (
             <p className="text-red-400 text-sm">{error}</p>
           )}
-          {!isLoading && !error && productCount === 0 && (
+          {!isLoading && !error && products.length === 0 && (
             <p className="text-zinc-400 text-sm">
               {profile?.is_producer_active ? 'Aucun produit pour le moment.' : t('producer.subscriptionRequired')}
             </p>
           )}
-          {!isLoading && !error && productCount > 0 && (
+          {!isLoading && !error && products.length > 0 && (
             <ul className="divide-y divide-zinc-800">
               {products.map((product) => (
                 <li key={product.id} className="py-3 flex items-center justify-between text-sm gap-3">

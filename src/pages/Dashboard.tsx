@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { User, Mail, Shield, Music, ShoppingBag, Heart, Download, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
@@ -9,10 +10,16 @@ import { formatPrice } from '../lib/utils/format';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { ProductCard } from '../components/products/ProductCard';
+import { useWishlistStore } from '../lib/stores/wishlist';
 
 interface DashboardPurchase extends Purchase {
   product: ProductWithRelations | null;
   license: License | null;
+}
+
+interface WishlistProductRow {
+  product: ProductWithRelations | null;
 }
 
 const asNonEmptyString = (value: unknown) => {
@@ -81,7 +88,12 @@ const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio'
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { fetchWishlist, toggleWishlist } = useWishlistStore();
   const [purchases, setPurchases] = useState<DashboardPurchase[]>([]);
+  const [wishlistCount, setWishlistCount] = useState<number>(0);
+  const [recentWishlist, setRecentWishlist] = useState<ProductWithRelations[]>([]);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const [selectedLicensePurchase, setSelectedLicensePurchase] = useState<DashboardPurchase | null>(null);
   const [isPurchasesLoading, setIsPurchasesLoading] = useState(true);
   const [purchasesError, setPurchasesError] = useState<string | null>(null);
@@ -156,6 +168,78 @@ export function DashboardPage() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadWishlistData = async () => {
+      if (!user?.id) {
+        if (!isCancelled) {
+          setWishlistCount(0);
+          setRecentWishlist([]);
+          setIsWishlistLoading(false);
+        }
+        return;
+      }
+
+      setIsWishlistLoading(true);
+
+      try {
+        const [{ count, error: countError }, { data, error: recentError }] = await Promise.all([
+          supabase
+            .from('wishlists')
+            .select('product_id', { count: 'exact', head: true })
+            .eq('user_id', user.id),
+          supabase
+            .from('wishlists')
+            .select(`
+              product:products(
+                *,
+                producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
+                genre:genres(*),
+                mood:moods(*)
+              )
+            `)
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(3),
+        ]);
+
+        if (countError) {
+          console.error('Error loading wishlist count:', countError);
+        } else if (!isCancelled) {
+          setWishlistCount(count ?? 0);
+        }
+
+        if (recentError) {
+          console.error('Error loading recent wishlist products:', recentError);
+          if (!isCancelled) {
+            setRecentWishlist([]);
+          }
+        } else if (!isCancelled) {
+          const rows = (data as WishlistProductRow[] | null) ?? [];
+          const mappedProducts = rows
+            .map((row) => row.product)
+            .filter((product): product is ProductWithRelations => product !== null);
+          setRecentWishlist(mappedProducts);
+        }
+
+        await fetchWishlist();
+      } catch (error) {
+        console.error('Error loading wishlist data:', error);
+      } finally {
+        if (!isCancelled) {
+          setIsWishlistLoading(false);
+        }
+      }
+    };
+
+    void loadWishlistData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, fetchWishlist]);
+
   const purchaseCount = purchases.length;
 
   const stats = useMemo(
@@ -168,19 +252,34 @@ export function DashboardPage() {
       },
       {
         label: 'Favoris',
-        value: '0',
+        value: wishlistCount,
         icon: Heart,
         color: 'text-rose-400',
+        onClick: () => navigate('/wishlist'),
       },
-      {
-        label: 'Beats Crees',
-        value: profile?.is_producer_active ? 'Actif' : '0',
-        icon: Music,
-        color: 'text-orange-400',
-      },
+      ...(profile?.is_producer_active
+        ? [{
+            label: 'Statut producteur',
+            value: 'Actif',
+            icon: Music,
+            color: 'text-orange-400',
+          }]
+        : []),
     ],
-    [purchaseCount, profile?.is_producer_active]
+    [purchaseCount, wishlistCount, navigate, profile?.is_producer_active]
   );
+
+  const handleRecentWishlistToggle = async (productId: string) => {
+    if (!user?.id) return;
+
+    try {
+      await toggleWishlist(productId);
+      setRecentWishlist((prev) => prev.filter((product) => product.id !== productId));
+      setWishlistCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error toggling wishlist item from dashboard:', error);
+    }
+  };
 
   const getPurchaseFilePath = (purchase: DashboardPurchase) => {
     const metadata = purchase.metadata as Record<string, unknown> | null;
@@ -367,7 +466,12 @@ export function DashboardPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {stats.map((stat) => (
-            <Card key={stat.label} className="p-6">
+            <Card
+              key={stat.label}
+              className="p-6"
+              variant={stat.onClick ? 'interactive' : 'default'}
+              onClick={stat.onClick}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-zinc-400 mb-1">{stat.label}</p>
@@ -552,6 +656,37 @@ export function DashboardPage() {
                 );
               })}
             </ul>
+          )}
+        </Card>
+
+        <Card className="p-6 mt-6">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <Heart className="w-5 h-5 text-rose-400" />
+              Mes favoris récents
+            </h2>
+            <Badge className="bg-zinc-700">{wishlistCount}</Badge>
+          </div>
+
+          {isWishlistLoading && recentWishlist.length === 0 && (
+            <div className="py-6 text-zinc-500">Chargement de vos favoris...</div>
+          )}
+
+          {!isWishlistLoading && recentWishlist.length === 0 && (
+            <div className="py-6 text-zinc-500">Aucun favori pour le moment</div>
+          )}
+
+          {recentWishlist.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {recentWishlist.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isWishlisted={true}
+                  onWishlistToggle={handleRecentWishlistToggle}
+                />
+              ))}
+            </div>
           )}
         </Card>
 
