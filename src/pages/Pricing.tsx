@@ -102,12 +102,19 @@ export function PricingPage() {
     amount_cents: number;
     currency: string;
   } | null>(null);
+  const [stripePrice, setStripePrice] = useState<{
+    unit_amount: number;
+    currency: string;
+    interval: string | null;
+  } | null>(null);
+  const [isStripePriceLoading, setIsStripePriceLoading] = useState(true);
+  const [stripePriceError, setStripePriceError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<{ subscription_status: string } | null>(null);
 
-  const formatPrice = (cents: number) => {
+  const formatPrice = (cents: number, currencyCode = 'EUR') => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: 'EUR',
+      currency: currencyCode.toUpperCase(),
       minimumFractionDigits: 0,
     }).format(cents / 100);
   };
@@ -118,6 +125,13 @@ export function PricingPage() {
       return label.replace('{value}', feature.value);
     }
     return featureLabels[feature]?.[language as keyof typeof featureLabels['uploads']] || feature;
+  };
+
+  const formatInterval = (interval: string | null | undefined) => {
+    if (!interval || interval === 'month') {
+      return t('subscription.perMonth');
+    }
+    return `/${interval}`;
   };
 
   useEffect(() => {
@@ -144,6 +158,59 @@ export function PricingPage() {
     };
 
     fetchPlan();
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchStripePrice = async () => {
+      setIsStripePriceLoading(true);
+      setStripePriceError(null);
+
+      const { data, error: fnError } = await supabase.functions.invoke('get-producer-price', {
+        body: {},
+      });
+
+      if (fnError) {
+        console.error('get-producer-price error', fnError, data);
+        if (!isCancelled) {
+          setStripePrice(null);
+          setStripePriceError('Tarif Stripe indisponible. Affichage du tarif configuré.');
+          setIsStripePriceLoading(false);
+        }
+        return;
+      }
+
+      const stripeData = data as {
+        unit_amount?: number;
+        currency?: string;
+        interval?: string | null;
+      } | null;
+
+      if (!stripeData || typeof stripeData.unit_amount !== 'number' || !stripeData.currency) {
+        if (!isCancelled) {
+          setStripePrice(null);
+          setStripePriceError('Réponse Stripe invalide. Affichage du tarif configuré.');
+          setIsStripePriceLoading(false);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setStripePrice({
+          unit_amount: stripeData.unit_amount,
+          currency: stripeData.currency,
+          interval: stripeData.interval ?? null,
+        });
+        setIsStripePriceLoading(false);
+      }
+    };
+
+    void fetchStripePrice();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -250,6 +317,11 @@ export function PricingPage() {
     'server_first',
   ];
 
+  const displayedAmountCents = stripePrice?.unit_amount ?? plan?.amount_cents ?? null;
+  const displayedCurrency = stripePrice?.currency ?? plan?.currency ?? 'EUR';
+  const displayedInterval = stripePrice?.interval ?? 'month';
+  const isPriceLoading = isLoading || isStripePriceLoading;
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-7xl mx-auto px-4">
@@ -285,17 +357,20 @@ export function PricingPage() {
               </div>
 
               <div className="mb-6">
-                {isLoading ? (
+                {isPriceLoading ? (
                   <span className="text-zinc-400">Chargement du tarif...</span>
-                ) : plan ? (
+                ) : displayedAmountCents !== null ? (
                   <>
                     <span className="text-4xl font-bold text-white">
-                      {formatPrice(plan.amount_cents)}
+                      {formatPrice(displayedAmountCents, displayedCurrency)}
                     </span>
-                    <span className="text-zinc-400"> {t('subscription.perMonth')}</span>
+                    <span className="text-zinc-400"> {formatInterval(displayedInterval)}</span>
                   </>
                 ) : (
-                  <span className="text-red-400 text-sm">{error}</span>
+                  <span className="text-red-400 text-sm">{error || stripePriceError}</span>
+                )}
+                {stripePriceError && plan && (
+                  <p className="text-amber-400 text-xs mt-2">{stripePriceError}</p>
                 )}
               </div>
 

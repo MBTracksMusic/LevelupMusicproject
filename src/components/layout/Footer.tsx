@@ -108,12 +108,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/guide-producteur"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
                   Guide du producteur
-                </a>
+                </Link>
               </li>
               <li>
                 <a
@@ -130,12 +130,12 @@ export function Footer() {
             <h4 className="text-white font-semibold mb-4">{t('footer.support')}</h4>
             <ul className="space-y-2">
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/faq"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
                   {t('footer.faq')}
-                </a>
+                </Link>
               </li>
               <li>
                 <a
@@ -146,20 +146,20 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/terms"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
                   {t('footer.terms')}
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/privacy"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
                   {t('footer.privacy')}
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

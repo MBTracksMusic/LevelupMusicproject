@@ -26,15 +26,44 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
+
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error("ENV_ERROR", {
+        function: "producer-checkout",
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasSupabaseServiceRoleKey: Boolean(supabaseServiceRoleKey),
+      });
+      return new Response(JSON.stringify({
+        error: "Supabase not configured (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing)",
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!stripeSecret) {
+      console.error("ENV_ERROR", {
+        function: "producer-checkout",
+        hasStripeSecretKey: false,
+      });
+      return new Response(JSON.stringify({ error: "Stripe not configured (STRIPE_SECRET_KEY missing)" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const authHeader =
       req.headers.get("x-supabase-auth") ||
       req.headers.get("Authorization") ||
       "";
-    const jwt = authHeader.replace("Bearer ", "").trim();
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
 
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+      supabaseUrl,
+      supabaseServiceRoleKey,
     );
 
     if (!jwt) {
@@ -58,16 +87,28 @@ Deno.serve(async (req: Request) => {
     const cancelUrl = body.cancel_url || `${req.headers.get("origin")}/pricing?status=cancel`;
 
     if (!priceId) {
+      console.error("CONFIG_ERROR", {
+        function: "producer-checkout",
+        reason: "missing_price_id",
+      });
       return new Response(JSON.stringify({ error: "Missing Stripe price id" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeSecret) {
-      return new Response(JSON.stringify({ error: "Stripe not configured (STRIPE_SECRET_KEY missing)" }), {
-        status: 500,
+    try {
+      new URL(successUrl);
+      new URL(cancelUrl);
+    } catch {
+      console.error("CONFIG_ERROR", {
+        function: "producer-checkout",
+        reason: "invalid_redirect_urls",
+        successUrl,
+        cancelUrl,
+      });
+      return new Response(JSON.stringify({ error: "Invalid success_url or cancel_url" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -96,6 +137,13 @@ Deno.serve(async (req: Request) => {
 
       const customer = await createCustomerResp.json();
       if (customer.error) {
+        console.error("STRIPE_ERROR", {
+          function: "producer-checkout",
+          stage: "create_customer",
+          message: customer.error?.message,
+          type: customer.error?.type,
+          code: customer.error?.code,
+        });
         return new Response(JSON.stringify({ error: customer.error.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -132,7 +180,16 @@ Deno.serve(async (req: Request) => {
 
     const session = await sessionResp.json();
     if (!sessionResp.ok || session.error) {
-      console.error("Stripe session error", session);
+      console.error("STRIPE_ERROR", {
+        function: "producer-checkout",
+        stage: "create_checkout_session",
+        status: sessionResp.status,
+        message: session.error?.message,
+        type: session.error?.type,
+        code: session.error?.code,
+        param: session.error?.param,
+        priceId,
+      });
       const message = session.error?.message || session.error || "Stripe checkout failed";
       return new Response(JSON.stringify({ error: message }), {
         status: 400,
@@ -145,7 +202,10 @@ Deno.serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error(err);
+    console.error("UNEXPECTED_ERROR", {
+      function: "producer-checkout",
+      error: err instanceof Error ? err.message : String(err),
+    });
     return new Response(JSON.stringify({ error: "Failed to create checkout session" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

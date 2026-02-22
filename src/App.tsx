@@ -24,6 +24,10 @@ import { ProductDetailsPage } from './pages/ProductDetails';
 import { ProducersPage } from './pages/Producers';
 import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
 import { AdminBattlesPage } from './pages/AdminBattles';
+import { ProducerGuide } from './pages/support/ProducerGuide';
+import { Faq } from './pages/support/Faq';
+import { Terms } from './pages/legal/Terms';
+import { Privacy } from './pages/legal/Privacy';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
@@ -78,6 +82,10 @@ function AppContent() {
               <Route path="/battles" element={<BattlesPage />} />
               <Route path="/battles/:slug" element={<BattleDetailPage />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/guide-producteur" element={<ProducerGuide />} />
+              <Route path="/faq" element={<Faq />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route
                 path="/cart"
                 element={

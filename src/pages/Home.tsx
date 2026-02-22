@@ -21,11 +21,26 @@ import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations } from '../lib/supabase/types';
 
+interface HomeStatsPayload {
+  beats_published?: number;
+  active_producers?: number;
+}
+
+const statsNumberFormatter = new Intl.NumberFormat('fr-FR');
+
 export function HomePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   const [exclusives, setExclusives] = useState<ProductWithRelations[]>([]);
+  const [homeStats, setHomeStats] = useState<{
+    beatsPublished: number | null;
+    activeProducers: number | null;
+  }>({
+    beatsPublished: null,
+    activeProducers: null,
+  });
+  const [isHomeStatsLoading, setIsHomeStatsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -71,6 +86,38 @@ export function HomePage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function fetchHomeStats() {
+      setIsHomeStatsLoading(true);
+
+      const { data, error } = await supabase.rpc('get_home_stats');
+      if (!isCancelled) {
+        if (error) {
+          console.error('Error fetching home stats:', error);
+          setHomeStats({
+            beatsPublished: null,
+            activeProducers: null,
+          });
+        } else {
+          const stats = (data as HomeStatsPayload | null) ?? null;
+          setHomeStats({
+            beatsPublished: typeof stats?.beats_published === 'number' ? stats.beats_published : null,
+            activeProducers: typeof stats?.active_producers === 'number' ? stats.active_producers : null,
+          });
+        }
+        setIsHomeStatsLoading(false);
+      }
+    }
+
+    void fetchHomeStats();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen">
       <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden">
@@ -104,11 +151,23 @@ export function HomePage() {
           <div className="flex items-center justify-center gap-8 text-zinc-400">
             <div className="flex items-center gap-2">
               <Headphones className="w-5 h-5" />
-              <span>10K+ Beats</span>
+              <span>
+                {isHomeStatsLoading
+                  ? '... Beats'
+                  : homeStats.beatsPublished !== null
+                    ? `${statsNumberFormatter.format(homeStats.beatsPublished)} Beats`
+                    : 'Beats indisponibles'}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              <span>500+ Producteurs</span>
+              <span>
+                {isHomeStatsLoading
+                  ? '... Producteurs'
+                  : homeStats.activeProducers !== null
+                    ? `${statsNumberFormatter.format(homeStats.activeProducers)} Producteurs`
+                    : 'Producteurs indisponibles'}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5" />

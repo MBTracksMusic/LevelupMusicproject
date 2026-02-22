@@ -88,6 +88,8 @@ interface AdminContextState {
   error: string | null;
 }
 
+const BATTLES_DEFAULT_PAGE_SIZE = 200;
+
 const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'premium'> = {
   pending: 'warning',
   pending_acceptance: 'warning',
@@ -125,6 +127,7 @@ function toStatusLabel(status: BattleStatus) {
 
 function toAdminRpcError(message: string) {
   if (message.includes('admin_required')) return 'Action reservee a un administrateur.';
+  if (message.includes('rate_limit_exceeded')) return 'Trop de requetes admin. Reessaye dans une minute.';
   if (message.includes('battle_not_found')) return 'Battle introuvable.';
   if (message.includes('battle_not_waiting_admin_validation')) return 'Battle non eligible a la validation admin.';
   if (message.includes('cannot_cancel_completed_battle')) return 'Une battle terminee ne peut pas etre annulee.';
@@ -272,6 +275,10 @@ export function AdminBattlesPage() {
   const [comments, setComments] = useState<AdminCommentRow[]>([]);
   const [aiActions, setAiActions] = useState<AiActionRow[]>([]);
   const [notifications, setNotifications] = useState<AdminNotificationRow[]>([]);
+  const [battlesPage, setBattlesPage] = useState(0);
+  const [battlesPageSize] = useState(BATTLES_DEFAULT_PAGE_SIZE);
+  const [hasMoreBattles, setHasMoreBattles] = useState(false);
+  const [isLoadingMoreBattles, setIsLoadingMoreBattles] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<AdminFilter>('awaiting_admin');
@@ -294,6 +301,9 @@ export function AdminBattlesPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
+    const firstPageFrom = 0;
+    const firstPageTo = battlesPageSize - 1;
 
     const [battlesRes, commentsRes, aiActionsRes, notificationsRes] = await Promise.all([
       supabase
@@ -329,7 +339,8 @@ export function AdminBattlesPage() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(200),
+        .order('id', { ascending: false })
+        .range(firstPageFrom, firstPageTo),
       supabase
         .from('battle_comments')
         .select(`
@@ -382,8 +393,13 @@ export function AdminBattlesPage() {
       console.error('Error loading admin battles:', battlesRes.error);
       setError('Impossible de charger les battles admin.');
       setBattles([]);
+      setBattlesPage(0);
+      setHasMoreBattles(false);
     } else {
-      setBattles((battlesRes.data as AdminBattleRow[] | null) ?? []);
+      const firstPageRows = (battlesRes.data as AdminBattleRow[] | null) ?? [];
+      setBattles(firstPageRows);
+      setBattlesPage(0);
+      setHasMoreBattles(firstPageRows.length === battlesPageSize);
     }
 
     if (commentsRes.error) {
@@ -425,7 +441,67 @@ export function AdminBattlesPage() {
     }
 
     setIsLoading(false);
-  }, []);
+  }, [battlesPageSize]);
+
+  const loadMoreBattles = useCallback(async () => {
+    if (isLoading || isLoadingMoreBattles || !hasMoreBattles) return;
+
+    setError(null);
+    setIsLoadingMoreBattles(true);
+
+    const nextPage = battlesPage + 1;
+    const from = nextPage * battlesPageSize;
+    const to = from + battlesPageSize - 1;
+
+    const { data, error: battlesError } = await supabase
+      .from('battles')
+      .select(`
+        id,
+        title,
+        slug,
+        status,
+        rejection_reason,
+        rejected_at,
+        accepted_at,
+        admin_validated_at,
+        voting_ends_at,
+        custom_duration_days,
+        votes_producer1,
+        votes_producer2,
+        producer1:user_profiles!battles_producer1_id_fkey(
+          id,
+          username,
+          battle_refusal_count,
+          engagement_score,
+          battles_participated,
+          battles_completed
+        ),
+        producer2:user_profiles!battles_producer2_id_fkey(
+          id,
+          username,
+          battle_refusal_count,
+          engagement_score,
+          battles_participated,
+          battles_completed
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(from, to);
+
+    if (battlesError) {
+      console.error('Error loading more admin battles:', battlesError);
+      setError('Impossible de charger plus de battles admin.');
+      setIsLoadingMoreBattles(false);
+      return;
+    }
+
+    const pageRows = (data as AdminBattleRow[] | null) ?? [];
+    setBattles((prev) => [...prev, ...pageRows]);
+    setBattlesPage(nextPage);
+    setHasMoreBattles(pageRows.length === battlesPageSize);
+    setIsLoadingMoreBattles(false);
+  }, [battlesPage, battlesPageSize, hasMoreBattles, isLoading, isLoadingMoreBattles]);
 
   const loadAdminContext = useCallback(async () => {
     const projectRef = getProjectRef();
@@ -484,9 +560,14 @@ export function AdminBattlesPage() {
   }, []);
 
   useEffect(() => {
-    void loadData();
     void loadAdminContext();
-  }, [loadAdminContext, loadData]);
+  }, [loadAdminContext]);
+
+  useEffect(() => {
+    if (adminContext.isAdmin === true) {
+      void loadData();
+    }
+  }, [adminContext.isAdmin, loadData]);
 
   const visibleBattles = useMemo(() => {
     if (filter === 'all') return battles;
@@ -916,6 +997,28 @@ export function AdminBattlesPage() {
     return `${actionType}${confidenceLabel}`;
   };
 
+  if (adminContext.isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (adminContext.isAdmin === false) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-white">Acces interdit</h1>
+          <p className="text-zinc-400">Vous n'avez pas les droits administrateur.</p>
+          <Link to="/battles">
+            <Button>Retour</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-6xl mx-auto px-4 space-y-6">
@@ -935,12 +1038,6 @@ export function AdminBattlesPage() {
         {error && (
           <Card className="bg-red-900/20 border border-red-800 text-red-300">
             {error}
-          </Card>
-        )}
-
-        {adminContext.isAdmin === false && (
-          <Card className="bg-amber-900/20 border border-amber-800 text-amber-300">
-            Compte connecte non admin sur cette base. role={adminContext.dbRole || 'unknown'} uid={adminContext.userId || 'none'}
           </Card>
         )}
 
@@ -1387,6 +1484,19 @@ export function AdminBattlesPage() {
               );
               })}
             </ul>
+          )}
+
+          {!isLoading && hasMoreBattles && (
+            <div className="flex justify-center pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                isLoading={isLoadingMoreBattles}
+                onClick={() => void loadMoreBattles()}
+              >
+                Load more
+              </Button>
+            </div>
           )}
         </Card>
 
