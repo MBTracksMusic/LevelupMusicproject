@@ -13,6 +13,21 @@ export type BattleStatus =
   | 'voting'
   | 'completed'
   | 'cancelled';
+export type AiAdminActionType =
+  | 'battle_validate'
+  | 'battle_cancel'
+  | 'battle_finalize'
+  | 'comment_moderation'
+  | 'match_recommendation'
+  | 'battle_duration_set'
+  | 'battle_duration_extended';
+export type AiAdminEntityType = 'battle' | 'comment' | 'other';
+export type AiAdminActionStatus = 'proposed' | 'executed' | 'failed' | 'overridden';
+export type AdminBattleRpcName =
+  | 'admin_validate_battle'
+  | 'admin_cancel_battle'
+  | 'finalize_battle'
+  | 'admin_extend_battle_duration';
 
 export interface UserProfile {
   id: string;
@@ -188,6 +203,8 @@ export interface Battle {
   submission_deadline: string | null;
   starts_at: string | null;
   voting_ends_at: string | null;
+  custom_duration_days: number | null;
+  extension_count: number;
   winner_id: string | null;
   votes_producer1: number;
   votes_producer2: number;
@@ -227,6 +244,42 @@ export interface BattleComment {
 
 export interface BattleCommentWithUser extends BattleComment {
   user?: UserProfile;
+}
+
+export interface AiAdminAction {
+  id: string;
+  action_type: AiAdminActionType;
+  entity_type: AiAdminEntityType;
+  entity_id: string;
+  ai_decision: Record<string, unknown>;
+  confidence_score: number | null;
+  reason: string | null;
+  status: AiAdminActionStatus;
+  human_override: boolean;
+  reversible: boolean;
+  created_at: string;
+  executed_at: string | null;
+  executed_by: string | null;
+  error: string | null;
+}
+
+export interface AiTrainingFeedback {
+  id: string;
+  action_id: string;
+  ai_prediction: Record<string, unknown>;
+  human_decision: Record<string, unknown>;
+  delta: number | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface AdminNotification {
+  id: string;
+  user_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface CartItem {
@@ -309,6 +362,21 @@ export interface Database {
         Row: BattleComment;
         Insert: Partial<BattleComment> & { battle_id: string; user_id: string; content: string };
         Update: Partial<BattleComment>;
+      };
+      ai_admin_actions: {
+        Row: AiAdminAction;
+        Insert: Partial<AiAdminAction> & { action_type: AiAdminActionType; entity_type: AiAdminEntityType; entity_id: string };
+        Update: Partial<AiAdminAction>;
+      };
+      ai_training_feedback: {
+        Row: AiTrainingFeedback;
+        Insert: Partial<AiTrainingFeedback> & { action_id: string };
+        Update: Partial<AiTrainingFeedback>;
+      };
+      admin_notifications: {
+        Row: AdminNotification;
+        Insert: Partial<AdminNotification> & { user_id: string; type: string };
+        Update: Partial<AdminNotification>;
       };
       cart_items: {
         Row: CartItem;

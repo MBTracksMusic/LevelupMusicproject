@@ -177,6 +177,78 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
       return;
     }
 
+    if (user?.id) {
+      const { data: latestAiAction, error: aiActionError } = await supabase
+        .from('ai_admin_actions')
+        .select('id, ai_decision, status')
+        .eq('entity_type', 'comment')
+        .eq('entity_id', comment.id)
+        .eq('action_type', 'comment_moderation')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (aiActionError) {
+        console.error('Error loading latest AI action for comment moderation:', aiActionError);
+      } else if (latestAiAction) {
+        const aiDecision =
+          latestAiAction.ai_decision && typeof latestAiAction.ai_decision === 'object'
+            ? (latestAiAction.ai_decision as Record<string, unknown>)
+            : {};
+        const suggestedAction = typeof aiDecision.suggested_action === 'string' ? aiDecision.suggested_action : null;
+        const humanAction = nextHidden ? 'hide' : 'allow';
+        const isOverride = suggestedAction ? suggestedAction !== humanAction : true;
+        const nowIso = new Date().toISOString();
+
+        const { error: feedbackError } = await supabase.from('ai_training_feedback').insert({
+          action_id: latestAiAction.id,
+          ai_prediction: aiDecision,
+          human_decision: {
+            decision: humanAction,
+            source: 'battle_detail_comment_toggle',
+            comment_id: comment.id,
+            override: isOverride,
+          },
+          delta: isOverride ? 1 : 0,
+          created_by: user.id,
+        });
+
+        if (feedbackError) {
+          console.error('Error inserting AI training feedback for comment moderation:', feedbackError);
+        }
+
+        const actionUpdate: Record<string, unknown> = {
+          executed_at: nowIso,
+          executed_by: user.id,
+        };
+
+        if (isOverride) {
+          actionUpdate.status = 'overridden';
+          actionUpdate.human_override = true;
+        } else if (latestAiAction.status === 'proposed') {
+          actionUpdate.status = 'executed';
+        }
+
+        const { error: updateAiError } = await supabase
+          .from('ai_admin_actions')
+          .update(actionUpdate)
+          .eq('id', latestAiAction.id);
+
+        if (updateAiError) {
+          console.error('Error updating ai_admin_actions from comment moderation:', updateAiError);
+        }
+
+        const { error: markNotifError } = await supabase
+          .from('admin_notifications')
+          .update({ is_read: true })
+          .contains('payload', { action_id: latestAiAction.id });
+
+        if (markNotifError) {
+          console.error('Error marking AI notification as read after moderation:', markNotifError);
+        }
+      }
+    }
+
     await loadComments();
   };
 
