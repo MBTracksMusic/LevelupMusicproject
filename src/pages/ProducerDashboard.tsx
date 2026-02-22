@@ -255,7 +255,15 @@ export function ProducerDashboardPage() {
             <h1 className="text-3xl sm:text-4xl font-bold mt-1">{profile?.username || profile?.email}</h1>
             <p className="text-zinc-400 mt-1">{t('producer.overview')}</p>
           </div>
-          <UploadBeatButton label={t('producer.uploadBeat')} />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/producer/battles"
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-zinc-200 border border-zinc-700 hover:border-zinc-500 hover:text-white transition"
+            >
+              Mes battles
+            </Link>
+            <UploadBeatButton label={t('producer.uploadBeat')} />
+          </div>
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

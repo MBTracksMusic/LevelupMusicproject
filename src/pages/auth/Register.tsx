@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Music } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -22,6 +22,8 @@ export function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [cooldown, setCooldown] = useState(0);
+  const submitLockRef = useRef(false);
+  const lastSubmitAtRef = useRef(0);
 
   // Simple client-side throttle to avoid hitting Supabase email rate limits repeatedly
   useEffect(() => {
@@ -69,8 +71,15 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate() || cooldown > 0) return;
+    if (submitLockRef.current || isLoading) return;
+    if (cooldown > 0) return;
 
+    const now = Date.now();
+    if (now - lastSubmitAtRef.current < 2000) return;
+    if (!validate()) return;
+
+    lastSubmitAtRef.current = now;
+    submitLockRef.current = true;
     setIsLoading(true);
 
     try {
@@ -88,10 +97,17 @@ export function RegisterPage() {
       }
     } catch (err: unknown) {
       const error = err as { message?: string; code?: string; status?: number };
+      const errorMessage = error.message?.toLowerCase() || '';
+      const isRateLimited =
+        (error instanceof AuthApiError &&
+          (error.code === 'over_email_send_rate_limit' || error.status === 429)) ||
+        error.status === 429 ||
+        errorMessage.includes('too many requests') ||
+        errorMessage.includes('trop de demandes');
       console.error('Erreur inscription:', error);
-      if (error instanceof AuthApiError && (error.code === 'over_email_send_rate_limit' || error.status === 429)) {
+      if (isRateLimited) {
         setCooldown(60);
-        toast.error('Trop de demandes. Réessayez dans 60s.');
+        toast.error('Trop de tentatives. Réessaie dans 60 secondes.');
       } else if (error instanceof AuthApiError && error.code === 'user_already_exists') {
         setErrors({ email: t('auth.emailInUse') });
       } else if (error.message?.includes('duplicate key value') && error.message.includes('user_profiles_username_key')) {
@@ -103,6 +119,7 @@ export function RegisterPage() {
       }
     } finally {
       setIsLoading(false);
+      submitLockRef.current = false;
     }
   };
 
@@ -189,6 +206,7 @@ export function RegisterPage() {
               className="w-full"
               size="lg"
               isLoading={isLoading}
+              disabled={isLoading || cooldown > 0}
             >
               {t('auth.registerButton')}
             </Button>

@@ -6,29 +6,48 @@ import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
-import { useAuth, useCanVote } from '../lib/auth/hooks';
+import { useAuth, useIsEmailVerified } from '../lib/auth/hooks';
 import type { BattleWithRelations } from '../lib/supabase/types';
 
 export function BattlesPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const canVote = useCanVote();
+  const isEmailVerified = useIsEmailVerified();
   const [battles, setBattles] = useState<BattleWithRelations[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'active' | 'voting' | 'completed'>('voting');
+  const [filter, setFilter] = useState<'active' | 'voting' | 'completed'>('active');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchBattles() {
       setIsLoading(true);
+      setError(null);
       try {
         const { data, error } = await supabase
           .from('battles')
           .select(`
-            *,
+            id,
+            title,
+            slug,
+            description,
+            producer1_id,
+            producer2_id,
+            product1_id,
+            product2_id,
+            status,
+            starts_at,
+            voting_ends_at,
+            winner_id,
+            votes_producer1,
+            votes_producer2,
+            featured,
+            prize_description,
+            created_at,
+            updated_at,
             producer1:user_profiles!battles_producer1_id_fkey(id, username, avatar_url),
             producer2:user_profiles!battles_producer2_id_fkey(id, username, avatar_url),
-            product1:products!battles_product1_id_fkey(*),
-            product2:products!battles_product2_id_fkey(*),
+            product1:products!battles_product1_id_fkey(id, title, slug, product_type, cover_image_url, price),
+            product2:products!battles_product2_id_fkey(id, title, slug, product_type, cover_image_url, price),
             winner:user_profiles!battles_winner_id_fkey(id, username, avatar_url)
           `)
           .eq('status', filter)
@@ -38,6 +57,8 @@ export function BattlesPage() {
         setBattles((data || []) as BattleWithRelations[]);
       } catch (error) {
         console.error('Error fetching battles:', error);
+        setError('Impossible de charger les battles pour le moment.');
+        setBattles([]);
       } finally {
         setIsLoading(false);
       }
@@ -56,16 +77,10 @@ export function BattlesPage() {
 
         <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
           <Button
-            variant={filter === 'voting' ? 'primary' : 'outline'}
-            onClick={() => setFilter('voting')}
-          >
-            {t('battles.activeBattles')}
-          </Button>
-          <Button
             variant={filter === 'active' ? 'primary' : 'outline'}
             onClick={() => setFilter('active')}
           >
-            {t('battles.upcomingBattles')}
+            {t('battles.activeBattles')}
           </Button>
           <Button
             variant={filter === 'completed' ? 'primary' : 'outline'}
@@ -73,11 +88,23 @@ export function BattlesPage() {
           >
             {t('battles.completedBattles')}
           </Button>
+          <Button
+            variant={filter === 'voting' ? 'primary' : 'outline'}
+            onClick={() => setFilter('voting')}
+          >
+            Voting legacy
+          </Button>
         </div>
 
-        {!canVote && user && (
+        {error && (
+          <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-8">
+            <p className="text-red-300 text-sm">{error}</p>
+          </div>
+        )}
+
+        {!isEmailVerified && user && (
           <div className="bg-amber-900/20 border border-amber-800 rounded-lg p-4 mb-8">
-            <p className="text-amber-400 text-sm">{t('battles.mustBeConfirmed')}</p>
+            <p className="text-amber-400 text-sm">Confirmez votre email pour voter et commenter.</p>
           </div>
         )}
 
@@ -155,7 +182,7 @@ function BattleCard({ battle }: BattleCardProps) {
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-white">{battle.title}</h3>
           <div className="flex items-center gap-3">
-            {battle.status === 'voting' && battle.voting_ends_at && (
+            {(battle.status === 'active' || battle.status === 'voting') && battle.voting_ends_at && (
               <div className="flex items-center gap-2 text-sm text-amber-400">
                 <Clock className="w-4 h-4" />
                 {t('battles.endsIn')}: {getTimeRemaining(battle.voting_ends_at)}
@@ -163,14 +190,14 @@ function BattleCard({ battle }: BattleCardProps) {
             )}
             <Badge
               variant={
-                battle.status === 'voting'
+                battle.status === 'active' || battle.status === 'voting'
                   ? 'success'
                   : battle.status === 'completed'
                   ? 'info'
                   : 'warning'
               }
             >
-              {battle.status === 'voting'
+              {battle.status === 'active' || battle.status === 'voting'
                 ? 'En cours'
                 : battle.status === 'completed'
                 ? t('battles.ended')
@@ -241,7 +268,7 @@ function BattleCard({ battle }: BattleCardProps) {
           </div>
         </div>
 
-        {battle.status !== 'active' && totalVotes > 0 && (
+        {totalVotes > 0 && (
           <div className="mt-6">
             <div className="h-2 rounded-full overflow-hidden bg-zinc-800 flex">
               <div

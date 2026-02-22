@@ -6,6 +6,7 @@ import { Layout } from './components/layout/Layout';
 import { HomePage } from './pages/Home';
 import { BeatsPage } from './pages/Beats';
 import { BattlesPage } from './pages/Battles';
+import { BattleDetailPage } from './pages/BattleDetail';
 import { PricingPage } from './pages/Pricing';
 import { LoginPage } from './pages/auth/Login';
 import { RegisterPage } from './pages/auth/Register';
@@ -15,12 +16,14 @@ import { ResetPasswordPage } from './pages/auth/ResetPassword';
 import { DashboardPage } from './pages/Dashboard';
 import { SettingsPage } from './pages/Settings';
 import { ProducerDashboardPage } from './pages/ProducerDashboard';
+import { ProducerBattlesPage } from './pages/ProducerBattles';
 import { UploadBeatPage } from './pages/UploadBeat';
 import { CartPage } from './pages/Cart';
 import { WishlistPage } from './pages/Wishlist';
 import { ProductDetailsPage } from './pages/ProductDetails';
 import { ProducersPage } from './pages/Producers';
 import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
+import { AdminBattlesPage } from './pages/AdminBattles';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
@@ -73,6 +76,7 @@ function AppContent() {
               <Route path="/kits" element={<BeatsPage mode="kits" />} />
               <Route path="/kits/:slug" element={<ProductDetailsPage />} />
               <Route path="/battles" element={<BattlesPage />} />
+              <Route path="/battles/:slug" element={<BattleDetailPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route
                 path="/cart"
@@ -121,6 +125,22 @@ function AppContent() {
                 element={
                   <ProtectedRoute requireProducer>
                     <UploadBeatPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/producer/battles"
+                element={
+                  <ProtectedRoute requireProducer>
+                    <ProducerBattlesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/battles"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AdminBattlesPage />
                   </ProtectedRoute>
                 }
               />

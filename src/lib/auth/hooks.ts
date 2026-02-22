@@ -1,6 +1,12 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from './store';
-import type { UserRole } from '../supabase/types';
+import { supabase } from '../supabase/client';
+import type { UserProfile, UserRole } from '../supabase/types';
+
+const isConfirmedProfile = (profile: Pick<UserProfile, 'role' | 'is_confirmed'> | null | undefined) => {
+  if (!profile) return false;
+  return profile.is_confirmed === true || ['confirmed_user', 'producer', 'admin'].includes(profile.role);
+};
 
 export function useAuth() {
   const { user, session, profile, isLoading, isInitialized, signOut, fetchProfile } = useAuthStore();
@@ -29,8 +35,7 @@ export function useIsProducer(): boolean {
 
 export function useIsConfirmedUser(): boolean {
   const { profile } = useAuthStore();
-  if (!profile) return false;
-  return ['confirmed_user', 'producer', 'admin'].includes(profile.role);
+  return isConfirmedProfile(profile);
 }
 
 export function useIsAdmin(): boolean {
@@ -40,8 +45,47 @@ export function useIsAdmin(): boolean {
 
 export function useCanVote(): boolean {
   const { profile } = useAuthStore();
-  if (!profile) return false;
-  return ['confirmed_user', 'producer', 'admin'].includes(profile.role);
+  return isConfirmedProfile(profile);
+}
+
+export function useIsEmailVerified(): boolean {
+  const { user } = useAuthStore();
+  const [isVerified, setIsVerified] = useState(Boolean(user?.email_confirmed_at));
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function checkEmailVerification() {
+      if (!user) {
+        if (!isCancelled) {
+          setIsVerified(false);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setIsVerified(Boolean(user.email_confirmed_at));
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+      if (isCancelled) return;
+
+      if (error) {
+        console.error('Error checking email verification status:', error);
+        return;
+      }
+
+      setIsVerified(Boolean(data.user?.email_confirmed_at));
+    }
+
+    void checkEmailVerification();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, user?.email_confirmed_at]);
+
+  return isVerified;
 }
 
 export function useCanSell(): boolean {
@@ -51,8 +95,7 @@ export function useCanSell(): boolean {
 
 export function useCanAccessExclusivePreview(): boolean {
   const { profile } = useAuthStore();
-  if (!profile) return false;
-  return ['confirmed_user', 'producer', 'admin'].includes(profile.role);
+  return isConfirmedProfile(profile);
 }
 
 export function usePermissions() {
@@ -61,14 +104,15 @@ export function usePermissions() {
   return useMemo(() => {
     const role = profile?.role ?? 'visitor';
     const isProducerActive = profile?.is_producer_active ?? false;
+    const isConfirmed = isConfirmedProfile(profile);
 
     return {
       canViewPreview: true,
-      canViewExclusivePreview: ['confirmed_user', 'producer', 'admin'].includes(role),
+      canViewExclusivePreview: isConfirmed,
       canPurchaseNonExclusive: !!user,
-      canPurchaseExclusive: ['confirmed_user', 'producer', 'admin'].includes(role),
+      canPurchaseExclusive: isConfirmed,
       canPurchaseKit: true,
-      canVote: ['confirmed_user', 'producer', 'admin'].includes(role),
+      canVote: isConfirmed,
       canComment: !!user,
       canSell: isProducerActive,
       canCreateBattle: isProducerActive,

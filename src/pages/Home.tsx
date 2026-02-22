@@ -12,20 +12,20 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/products/ProductCard';
+import { HomeBattlesPreview } from '../components/home/HomeBattlesPreview';
+import { HomeFeaturedBeats } from '../components/home/HomeFeaturedBeats';
+import { HomeTopProducers } from '../components/home/HomeTopProducers';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
-import type { ProductWithRelations, UserProfile } from '../lib/supabase/types';
+import type { ProductWithRelations } from '../lib/supabase/types';
 
 export function HomePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
-  const [featuredBeats, setFeaturedBeats] = useState<ProductWithRelations[]>([]);
   const [exclusives, setExclusives] = useState<ProductWithRelations[]>([]);
-  const [topProducers, setTopProducers] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -46,46 +46,25 @@ export function HomePage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [beatsRes, exclusivesRes, producersRes] = await Promise.all([
-          supabase
-            .from('products')
-            .select(`
-              *,
-              producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
-              genre:genres(*),
-              mood:moods(*)
-            `)
-            .eq('is_published', true)
-            .eq('product_type', 'beat')
-            .order('play_count', { ascending: false })
-            .limit(8),
-          supabase
-            .from('products')
-            .select(`
-              *,
-              producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
-              genre:genres(*),
-              mood:moods(*)
-            `)
-            .eq('is_published', true)
-            .eq('is_exclusive', true)
-            .eq('is_sold', false)
-            .order('created_at', { ascending: false })
-            .limit(4),
-          supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('is_producer_active', true)
-            .limit(6),
-        ]);
+        const { data } = await supabase
+          .from('products')
+          .select(`
+            *,
+            producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
+            genre:genres(*),
+            mood:moods(*)
+          `)
+          .eq('is_published', true)
+          .eq('is_exclusive', true)
+          .eq('is_sold', false)
+          .order('created_at', { ascending: false })
+          .limit(4);
 
-        if (beatsRes.data) setFeaturedBeats(beatsRes.data as ProductWithRelations[]);
-        if (exclusivesRes.data) setExclusives(exclusivesRes.data as ProductWithRelations[]);
-        if (producersRes.data) setTopProducers(producersRes.data);
+        if (data) {
+          setExclusives(data as ProductWithRelations[]);
+        }
       } catch (error) {
         console.error('Error fetching home data:', error);
-      } finally {
-        setIsLoading(false);
       }
     }
 
@@ -139,52 +118,9 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="py-20 bg-zinc-950">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-3xl font-bold text-white mb-2">
-                {t('home.featuredBeats')}
-              </h2>
-              <p className="text-zinc-400">Les beats les plus ecoutes</p>
-            </div>
-            <Link to="/beats">
-              <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                {t('common.viewAll')}
-              </Button>
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[...Array(8)].map((_, i) => (
-                <div
-                  key={i}
-                  className="bg-zinc-900 rounded-xl overflow-hidden animate-pulse"
-                >
-                  <div className="aspect-square bg-zinc-800" />
-                  <div className="p-4 space-y-3">
-                    <div className="h-4 bg-zinc-800 rounded w-3/4" />
-                    <div className="h-3 bg-zinc-800 rounded w-1/2" />
-                    <div className="h-6 bg-zinc-800 rounded w-1/4" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {featuredBeats.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  isWishlisted={wishlistProductIds.includes(product.id)}
-                  onWishlistToggle={handleWishlistToggle}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      <HomeTopProducers />
+      <HomeBattlesPreview />
+      <HomeFeaturedBeats />
 
       {exclusives.length > 0 && (
         <section className="py-20 bg-gradient-to-b from-zinc-950 to-zinc-900">
@@ -221,71 +157,6 @@ export function HomePage() {
           </div>
         </section>
       )}
-
-      <section className="py-20 bg-zinc-900">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-5 h-5 text-emerald-400" />
-                <h2 className="text-3xl font-bold text-white">
-                  {t('home.topProducers')}
-                </h2>
-              </div>
-              <p className="text-zinc-400">Les producteurs les plus actifs</p>
-            </div>
-            <Link to="/producers">
-              <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                {t('common.viewAll')}
-              </Button>
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-            {topProducers.map((producer) => {
-              const producerCard = (
-                <>
-                  <div className="mb-3">
-                    {producer.avatar_url ? (
-                      <img
-                        src={producer.avatar_url}
-                        alt={producer.username || ''}
-                        className="w-24 h-24 mx-auto rounded-full object-cover border-2 border-zinc-800 group-hover:border-rose-500 transition-colors"
-                      />
-                    ) : (
-                      <div className="w-24 h-24 mx-auto rounded-full bg-zinc-800 flex items-center justify-center border-2 border-zinc-700 group-hover:border-rose-500 transition-colors">
-                        <Users className="w-10 h-10 text-zinc-600" />
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-white group-hover:text-rose-400 transition-colors">
-                    {producer.username || 'Producteur'}
-                  </h3>
-                  <p className="text-sm text-zinc-500">Producteur</p>
-                </>
-              );
-
-              if (!producer.username) {
-                return (
-                  <div key={producer.id} className="group text-center">
-                    {producerCard}
-                  </div>
-                );
-              }
-
-              return (
-                <Link
-                  key={producer.id}
-                  to={`/producers/${producer.username}`}
-                  className="group text-center"
-                >
-                  {producerCard}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
       <section className="py-20 bg-zinc-950">
         <div className="max-w-7xl mx-auto px-4">

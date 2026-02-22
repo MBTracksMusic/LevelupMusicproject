@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/Badge';
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
+import type { Database } from '../lib/supabase/types';
 
 const featureLabels: Record<string, { fr: string; en: string; de: string }> = {
   uploads: {
@@ -101,6 +102,7 @@ export function PricingPage() {
     amount_cents: number;
     currency: string;
   } | null>(null);
+  const [subscription, setSubscription] = useState<{ subscription_status: string } | null>(null);
 
   const formatPrice = (cents: number) => {
     return new Intl.NumberFormat('fr-FR', {
@@ -143,6 +145,40 @@ export function PricingPage() {
 
     fetchPlan();
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchSubscription = async () => {
+      if (!user?.id) {
+        if (!isCancelled) setSubscription(null);
+        return;
+      }
+
+      const producerSubscriptionsSource = 'producer_subscriptions' as unknown as keyof Database['public']['Tables'];
+      const { data, error: subscriptionError } = await supabase
+        .from(producerSubscriptionsSource)
+        .select('subscription_status')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (subscriptionError) {
+        console.error('Error loading producer subscription:', subscriptionError);
+        if (!isCancelled) setSubscription(null);
+        return;
+      }
+
+      if (!isCancelled) {
+        setSubscription((data as { subscription_status: string } | null) ?? null);
+      }
+    };
+
+    void fetchSubscription();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
 
   const startCheckout = async () => {
     if (!plan) return;
@@ -198,7 +234,9 @@ export function PricingPage() {
     }
   };
 
-  const isCurrentPlan = profile?.subscription_status === 'active' && profile?.is_producer_active;
+  const isCurrentPlan = subscription?.subscription_status === 'active' && profile?.is_producer_active;
+  const forceSubscribe = import.meta.env.DEV || new URLSearchParams(window.location.search).get('force_subscribe') === '1';
+  const lockCurrentPlanCta = isCurrentPlan && !forceSubscribe;
 
   const singlePlanFeatures: Array<string | { key: string; value: string }> = [
     { key: 'uploads', value: 'Illimité' },
@@ -283,10 +321,10 @@ export function PricingPage() {
                   className="w-full"
                   variant="primary"
                   size="lg"
-                  disabled={isCurrentPlan || isLoading || !plan}
+                  disabled={lockCurrentPlanCta || isLoading || !plan}
                   onClick={startCheckout}
                 >
-                  {isCurrentPlan
+                  {lockCurrentPlanCta
                     ? t('subscription.currentPlan')
                     : t('subscription.subscribe')}
                 </Button>

@@ -91,6 +91,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { fetchWishlist, toggleWishlist } = useWishlistStore();
   const [purchases, setPurchases] = useState<DashboardPurchase[]>([]);
+  const [awaitingAdminCount, setAwaitingAdminCount] = useState<number>(0);
   const [wishlistCount, setWishlistCount] = useState<number>(0);
   const [recentWishlist, setRecentWishlist] = useState<ProductWithRelations[]>([]);
   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
@@ -240,6 +241,42 @@ export function DashboardPage() {
     };
   }, [user?.id, fetchWishlist]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAwaitingAdminCount = async () => {
+      if (!user?.id || profile?.role !== 'admin') {
+        if (!isCancelled) {
+          setAwaitingAdminCount(0);
+        }
+        return;
+      }
+
+      const { count, error } = await supabase
+        .from('battles')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'awaiting_admin');
+
+      if (error) {
+        console.error('Error loading awaiting_admin battle count:', error);
+        if (!isCancelled) {
+          setAwaitingAdminCount(0);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setAwaitingAdminCount(count ?? 0);
+      }
+    };
+
+    void loadAwaitingAdminCount();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [profile?.role, user?.id]);
+
   const purchaseCount = purchases.length;
 
   const stats = useMemo(
@@ -257,6 +294,15 @@ export function DashboardPage() {
         color: 'text-rose-400',
         onClick: () => navigate('/wishlist'),
       },
+      ...(profile?.role === 'admin'
+        ? [{
+            label: 'Battles en attente',
+            value: awaitingAdminCount,
+            icon: Shield,
+            color: 'text-amber-400',
+            onClick: () => navigate('/admin/battles'),
+          }]
+        : []),
       ...(profile?.is_producer_active
         ? [{
             label: 'Statut producteur',
@@ -266,7 +312,7 @@ export function DashboardPage() {
           }]
         : []),
     ],
-    [purchaseCount, wishlistCount, navigate, profile?.is_producer_active]
+    [awaitingAdminCount, purchaseCount, wishlistCount, navigate, profile?.is_producer_active, profile?.role]
   );
 
   const handleRecentWishlistToggle = async (productId: string) => {

@@ -279,8 +279,20 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (product.is_exclusive) {
-      const canPurchaseExclusive = profile?.role &&
-        ["confirmed_user", "producer", "admin"].includes(profile.role);
+      let canPurchaseExclusive = false;
+      const { data: isConfirmedData, error: isConfirmedError } = await supabaseAdmin.rpc(
+        "is_confirmed_user",
+        { p_user_id: user.id },
+      );
+
+      if (isConfirmedError) {
+        // Backward compatibility fallback when helper function is unavailable.
+        canPurchaseExclusive = Boolean(
+          profile?.role && ["confirmed_user", "producer", "admin"].includes(profile.role),
+        );
+      } else {
+        canPurchaseExclusive = isConfirmedData === true;
+      }
 
       if (!canPurchaseExclusive) {
         return new Response(JSON.stringify({

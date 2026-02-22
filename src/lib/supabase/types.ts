@@ -3,7 +3,16 @@ export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing'
 export type ProductType = 'beat' | 'exclusive' | 'kit';
 export type PurchaseStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type EntitlementType = 'purchase' | 'subscription' | 'promo' | 'admin_grant';
-export type BattleStatus = 'pending' | 'active' | 'voting' | 'completed' | 'cancelled';
+export type BattleStatus =
+  | 'pending'
+  | 'pending_acceptance'
+  | 'awaiting_admin'
+  | 'approved'
+  | 'rejected'
+  | 'active'
+  | 'voting'
+  | 'completed'
+  | 'cancelled';
 
 export interface UserProfile {
   id: string;
@@ -12,6 +21,8 @@ export interface UserProfile {
   full_name: string | null;
   avatar_url: string | null;
   role: UserRole;
+  // Transitional IAM flag. May be undefined until the migration is applied everywhere.
+  is_confirmed?: boolean;
   is_producer_active: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
@@ -19,6 +30,10 @@ export interface UserProfile {
   total_purchases: number;
   confirmed_at: string | null;
   producer_verified_at: string | null;
+  battle_refusal_count: number;
+  battles_participated: number;
+  battles_completed: number;
+  engagement_score: number;
   language: 'fr' | 'en' | 'de';
   bio: string | null;
   website_url: string | null;
@@ -165,6 +180,12 @@ export interface Battle {
   product1_id: string | null;
   product2_id: string | null;
   status: BattleStatus;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  admin_validated_at: string | null;
+  rejection_reason: string | null;
+  response_deadline: string | null;
+  submission_deadline: string | null;
   starts_at: string | null;
   voting_ends_at: string | null;
   winner_id: string | null;
