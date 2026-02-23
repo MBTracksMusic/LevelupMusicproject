@@ -15,6 +15,7 @@ import { ProductCard } from '../components/products/ProductCard';
 import { HomeBattlesPreview } from '../components/home/HomeBattlesPreview';
 import { HomeFeaturedBeats } from '../components/home/HomeFeaturedBeats';
 import { HomeTopProducers } from '../components/home/HomeTopProducers';
+import { HomeNewsVideos } from '../components/home/HomeNewsVideos';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
@@ -177,6 +178,7 @@ export function HomePage() {
         </div>
       </section>
 
+      <HomeNewsVideos />
       <HomeTopProducers />
       <HomeBattlesPreview />
       <HomeFeaturedBeats />

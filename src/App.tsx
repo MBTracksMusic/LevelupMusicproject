@@ -23,15 +23,21 @@ import { WishlistPage } from './pages/Wishlist';
 import { ProductDetailsPage } from './pages/ProductDetails';
 import { ProducersPage } from './pages/Producers';
 import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
-import { AdminBattlesPage } from './pages/AdminBattles';
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { AdminDashboardPage } from './pages/admin/AdminDashboard';
+import { AdminNewsPage } from './pages/admin/AdminNews';
+import { AdminBattlesWrapper } from './pages/admin/AdminBattlesWrapper';
 import { ProducerGuide } from './pages/support/ProducerGuide';
 import { Faq } from './pages/support/Faq';
+import { ContactPage } from './pages/support/Contact';
 import { Terms } from './pages/legal/Terms';
 import { Privacy } from './pages/legal/Privacy';
+import { MyMessagesPage } from './pages/dashboard/MyMessages';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
 import { useAuth } from './lib/auth/hooks';
+import { AdminMessagesPage } from './pages/admin/AdminMessages';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,6 +90,7 @@ function AppContent() {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/guide-producteur" element={<ProducerGuide />} />
               <Route path="/faq" element={<Faq />} />
+              <Route path="/contact" element={<ContactPage />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route
@@ -121,6 +128,14 @@ function AppContent() {
                 }
               />
               <Route
+                path="/dashboard/messages"
+                element={
+                  <ProtectedRoute>
+                    <MyMessagesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/producer"
                 element={
                   <ProtectedRoute requireProducer>
@@ -145,13 +160,18 @@ function AppContent() {
                 }
               />
               <Route
-                path="/admin/battles"
+                path="/admin"
                 element={
                   <ProtectedRoute requireAdmin>
-                    <AdminBattlesPage />
+                    <AdminLayout />
                   </ProtectedRoute>
                 }
-              />
+              >
+                <Route index element={<AdminDashboardPage />} />
+                <Route path="news" element={<AdminNewsPage />} />
+                <Route path="battles" element={<AdminBattlesWrapper />} />
+                <Route path="messages" element={<AdminMessagesPage />} />
+              </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Layout>

@@ -153,40 +153,85 @@ ALTER TABLE download_logs ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for purchases
 
 -- Users can view their own purchases
-CREATE POLICY "Users can view own purchases"
-  ON purchases FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'purchases'
+    AND policyname = 'Users can view own purchases'
+  ) THEN
+    CREATE POLICY "Users can view own purchases"
+      ON purchases FOR SELECT
+      TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- Producers can view purchases of their products
-CREATE POLICY "Producers can view sales of their products"
-  ON purchases FOR SELECT
-  TO authenticated
-  USING (producer_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'purchases'
+    AND policyname = 'Producers can view sales of their products'
+  ) THEN
+    CREATE POLICY "Producers can view sales of their products"
+      ON purchases FOR SELECT
+      TO authenticated
+      USING (producer_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for entitlements
 
 -- Users can view their own entitlements
-CREATE POLICY "Users can view own entitlements"
-  ON entitlements FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'entitlements'
+    AND policyname = 'Users can view own entitlements'
+  ) THEN
+    CREATE POLICY "Users can view own entitlements"
+      ON entitlements FOR SELECT
+      TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for exclusive_locks
 
 -- Users can view locks they created
-CREATE POLICY "Users can view own locks"
-  ON exclusive_locks FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'exclusive_locks'
+    AND policyname = 'Users can view own locks'
+  ) THEN
+    CREATE POLICY "Users can view own locks"
+      ON exclusive_locks FOR SELECT
+      TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for download_logs
 
 -- Users can view their own download history
-CREATE POLICY "Users can view own download logs"
-  ON download_logs FOR SELECT
-  TO authenticated
-  USING (user_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'download_logs'
+    AND policyname = 'Users can view own download logs'
+  ) THEN
+    CREATE POLICY "Users can view own download logs"
+      ON download_logs FOR SELECT
+      TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- Function to clean up expired exclusive locks
 CREATE OR REPLACE FUNCTION cleanup_expired_exclusive_locks()

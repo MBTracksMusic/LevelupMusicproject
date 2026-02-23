@@ -11,7 +11,14 @@ BEGIN;
 
 DROP POLICY IF EXISTS "Producers can update own pending battles" ON public.battles;
 
-CREATE POLICY "Producers can update own pending battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Producers can update own pending battles'
+  ) THEN
+    CREATE POLICY "Producers can update own pending battles"
   ON public.battles
   FOR UPDATE
   TO authenticated
@@ -29,5 +36,7 @@ CREATE POLICY "Producers can update own pending battles"
     AND rejected_at IS NULL
     AND admin_validated_at IS NULL
   );
+  END IF;
+END $$;
 
 COMMIT;

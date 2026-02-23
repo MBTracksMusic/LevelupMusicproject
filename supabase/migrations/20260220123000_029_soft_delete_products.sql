@@ -16,7 +16,14 @@ CREATE INDEX IF NOT EXISTS idx_products_not_deleted
   WHERE deleted_at IS NULL;
 
 DROP POLICY IF EXISTS "Anyone can view published products" ON public.products;
-CREATE POLICY "Anyone can view published products"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'products'
+    AND policyname = 'Anyone can view published products'
+  ) THEN
+    CREATE POLICY "Anyone can view published products"
   ON public.products
   FOR SELECT
   USING (
@@ -24,9 +31,18 @@ CREATE POLICY "Anyone can view published products"
     AND is_published = true
     AND (is_exclusive = false OR (is_exclusive = true AND is_sold = false))
   );
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Producers can view own products" ON public.products;
-CREATE POLICY "Producers can view own products"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'products'
+    AND policyname = 'Producers can view own products'
+  ) THEN
+    CREATE POLICY "Producers can view own products"
   ON public.products
   FOR SELECT
   TO authenticated
@@ -34,5 +50,7 @@ CREATE POLICY "Producers can view own products"
     deleted_at IS NULL
     AND producer_id = auth.uid()
   );
+  END IF;
+END $$;
 
 COMMIT;

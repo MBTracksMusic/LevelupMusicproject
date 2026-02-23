@@ -21,24 +21,51 @@ DROP POLICY IF EXISTS "Anyone can read app settings" ON public.app_settings;
 DROP POLICY IF EXISTS "Admins can insert app settings" ON public.app_settings;
 DROP POLICY IF EXISTS "Admins can update app settings" ON public.app_settings;
 
-CREATE POLICY "Anyone can read app settings"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'app_settings'
+    AND policyname = 'Anyone can read app settings'
+  ) THEN
+    CREATE POLICY "Anyone can read app settings"
   ON public.app_settings
   FOR SELECT
   TO anon, authenticated
   USING (true);
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can insert app settings"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'app_settings'
+    AND policyname = 'Admins can insert app settings'
+  ) THEN
+    CREATE POLICY "Admins can insert app settings"
   ON public.app_settings
   FOR INSERT
   TO authenticated
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update app settings"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'app_settings'
+    AND policyname = 'Admins can update app settings'
+  ) THEN
+    CREATE POLICY "Admins can update app settings"
   ON public.app_settings
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 INSERT INTO public.app_settings (key, value)
 VALUES (

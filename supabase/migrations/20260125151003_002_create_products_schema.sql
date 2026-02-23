@@ -159,111 +159,242 @@ ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE product_files ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for genres (public read)
-CREATE POLICY "Anyone can view active genres"
-  ON genres FOR SELECT
-  USING (is_active = true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'genres'
+      AND policyname = 'Anyone can view active genres'
+  ) THEN
+    CREATE POLICY "Anyone can view active genres"
+      ON genres FOR SELECT
+      USING (is_active = true);
+  END IF;
+END
+$$;
 
 -- RLS Policies for moods (public read)
-CREATE POLICY "Anyone can view active moods"
-  ON moods FOR SELECT
-  USING (is_active = true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'moods'
+      AND policyname = 'Anyone can view active moods'
+  ) THEN
+    CREATE POLICY "Anyone can view active moods"
+      ON moods FOR SELECT
+      USING (is_active = true);
+  END IF;
+END
+$$;
 
 -- RLS Policies for products
 
 -- Anyone can view published non-sold products (without master_url)
-CREATE POLICY "Anyone can view published products"
-  ON products FOR SELECT
-  USING (
-    is_published = true AND 
-    (is_exclusive = false OR (is_exclusive = true AND is_sold = false))
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND policyname = 'Anyone can view published products'
+  ) THEN
+    CREATE POLICY "Anyone can view published products"
+      ON products FOR SELECT
+      USING (
+        is_published = true AND 
+        (is_exclusive = false OR (is_exclusive = true AND is_sold = false))
+      );
+  END IF;
+END
+$$;
 
 -- Producers can view all their own products
-CREATE POLICY "Producers can view own products"
-  ON products FOR SELECT
-  TO authenticated
-  USING (producer_id = auth.uid());
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND policyname = 'Producers can view own products'
+  ) THEN
+    CREATE POLICY "Producers can view own products"
+      ON products FOR SELECT
+      TO authenticated
+      USING (producer_id = auth.uid());
+  END IF;
+END
+$$;
 
 -- Producers can insert products if they have active subscription
-CREATE POLICY "Active producers can create products"
-  ON products FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    producer_id = auth.uid() AND
-    EXISTS (
-      SELECT 1 FROM user_profiles 
-      WHERE id = auth.uid() 
-      AND is_producer_active = true
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND policyname = 'Active producers can create products'
+  ) THEN
+    CREATE POLICY "Active producers can create products"
+      ON products FOR INSERT
+      TO authenticated
+      WITH CHECK (
+        producer_id = auth.uid() AND
+        EXISTS (
+          SELECT 1 FROM user_profiles 
+          WHERE id = auth.uid() 
+          AND is_producer_active = true
+        )
+      );
+  END IF;
+END
+$$;
 
 -- Producers can update their own unsold products
-CREATE POLICY "Producers can update own unsold products"
-  ON products FOR UPDATE
-  TO authenticated
-  USING (
-    producer_id = auth.uid() AND
-    is_sold = false
-  )
-  WITH CHECK (
-    producer_id = auth.uid()
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND policyname = 'Producers can update own unsold products'
+  ) THEN
+    CREATE POLICY "Producers can update own unsold products"
+      ON products FOR UPDATE
+      TO authenticated
+      USING (
+        producer_id = auth.uid() AND
+        is_sold = false
+      )
+      WITH CHECK (
+        producer_id = auth.uid()
+      );
+  END IF;
+END
+$$;
 
 -- Producers can delete their own unsold products
-CREATE POLICY "Producers can delete own unsold products"
-  ON products FOR DELETE
-  TO authenticated
-  USING (
-    producer_id = auth.uid() AND
-    is_sold = false
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'products'
+      AND policyname = 'Producers can delete own unsold products'
+  ) THEN
+    CREATE POLICY "Producers can delete own unsold products"
+      ON products FOR DELETE
+      TO authenticated
+      USING (
+        producer_id = auth.uid() AND
+        is_sold = false
+      );
+  END IF;
+END
+$$;
 
 -- RLS Policies for product_files
 
 -- Only product owner can view files
-CREATE POLICY "Producers can view own product files"
-  ON product_files FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM products 
-      WHERE products.id = product_files.product_id 
-      AND products.producer_id = auth.uid()
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'product_files'
+      AND policyname = 'Producers can view own product files'
+  ) THEN
+    CREATE POLICY "Producers can view own product files"
+      ON product_files FOR SELECT
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM products 
+          WHERE products.id = product_files.product_id 
+          AND products.producer_id = auth.uid()
+        )
+      );
+  END IF;
+END
+$$;
 
 -- Only active producers can insert files for their products
-CREATE POLICY "Active producers can add product files"
-  ON product_files FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM products p
-      JOIN user_profiles up ON up.id = p.producer_id
-      WHERE p.id = product_files.product_id 
-      AND p.producer_id = auth.uid()
-      AND up.is_producer_active = true
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'product_files'
+      AND policyname = 'Active producers can add product files'
+  ) THEN
+    CREATE POLICY "Active producers can add product files"
+      ON product_files FOR INSERT
+      TO authenticated
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM products p
+          JOIN user_profiles up ON up.id = p.producer_id
+          WHERE p.id = product_files.product_id 
+          AND p.producer_id = auth.uid()
+          AND up.is_producer_active = true
+        )
+      );
+  END IF;
+END
+$$;
 
 -- Producers can delete their own product files
-CREATE POLICY "Producers can delete own product files"
-  ON product_files FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM products 
-      WHERE products.id = product_files.product_id 
-      AND products.producer_id = auth.uid()
-      AND products.is_sold = false
-    )
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'product_files'
+      AND policyname = 'Producers can delete own product files'
+  ) THEN
+    CREATE POLICY "Producers can delete own product files"
+      ON product_files FOR DELETE
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM products 
+          WHERE products.id = product_files.product_id 
+          AND products.producer_id = auth.uid()
+          AND products.is_sold = false
+        )
+      );
+  END IF;
+END
+$$;
 
 -- Trigger for updated_at on products
-DROP TRIGGER IF EXISTS update_products_updated_at ON products;
-CREATE TRIGGER update_products_updated_at
-  BEFORE UPDATE ON products
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'update_products_updated_at'
+      AND tgrelid = 'public.products'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER update_products_updated_at
+      BEFORE UPDATE ON products
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  END IF;
+END
+$$;
 
 -- Function to generate slug from title
 CREATE OR REPLACE FUNCTION generate_product_slug()
@@ -297,11 +428,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-generate slug
-DROP TRIGGER IF EXISTS generate_product_slug_trigger ON products;
-CREATE TRIGGER generate_product_slug_trigger
-  BEFORE INSERT OR UPDATE ON products
-  FOR EACH ROW
-  EXECUTE FUNCTION generate_product_slug();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'generate_product_slug_trigger'
+      AND tgrelid = 'public.products'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER generate_product_slug_trigger
+      BEFORE INSERT OR UPDATE ON products
+      FOR EACH ROW
+      EXECUTE FUNCTION generate_product_slug();
+  END IF;
+END
+$$;
 
 -- Insert default genres
 INSERT INTO genres (name, name_en, name_de, slug, sort_order) VALUES

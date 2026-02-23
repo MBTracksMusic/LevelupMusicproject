@@ -138,12 +138,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                  to="/contact"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
                   {t('footer.contact')}
-                </a>
+                </Link>
               </li>
               <li>
                 <Link

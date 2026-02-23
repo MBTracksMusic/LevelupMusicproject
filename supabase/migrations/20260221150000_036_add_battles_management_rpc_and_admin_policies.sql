@@ -17,7 +17,14 @@ BEGIN;
 -- ---------------------------------------------------------------------------
 DROP POLICY IF EXISTS "Active producers can create battles" ON public.battles;
 
-CREATE POLICY "Active producers can create battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Active producers can create battles'
+  ) THEN
+    CREATE POLICY "Active producers can create battles"
   ON public.battles
   FOR INSERT
   TO authenticated
@@ -70,6 +77,8 @@ CREATE POLICY "Active producers can create battles"
       )
     )
   );
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 2) Admin policies on battles

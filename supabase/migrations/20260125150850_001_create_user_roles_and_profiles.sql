@@ -37,24 +37,36 @@
     - No client-side access to modify role or subscription status
 */
 
--- Create enum for user roles
-CREATE TYPE user_role AS ENUM ('visitor', 'user', 'confirmed_user', 'producer', 'admin');
+-- Create enum for user roles (idempotent)
+DO $$
+BEGIN
+  CREATE TYPE public.user_role AS ENUM ('visitor', 'user', 'confirmed_user', 'producer', 'admin');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
--- Create enum for subscription status
-CREATE TYPE subscription_status AS ENUM ('active', 'canceled', 'past_due', 'trialing', 'unpaid', 'incomplete', 'incomplete_expired', 'paused');
+-- Create enum for subscription status (idempotent)
+DO $$
+BEGIN
+  CREATE TYPE public.subscription_status AS ENUM ('active', 'canceled', 'past_due', 'trialing', 'unpaid', 'incomplete', 'incomplete_expired', 'paused');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
 -- Create user_profiles table
-CREATE TABLE IF NOT EXISTS user_profiles (
+CREATE TABLE IF NOT EXISTS public.user_profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email text NOT NULL,
   username text UNIQUE,
   full_name text,
   avatar_url text,
-  role user_role DEFAULT 'user' NOT NULL,
+  role public.user_role DEFAULT 'user' NOT NULL,
   is_producer_active boolean DEFAULT false NOT NULL,
   stripe_customer_id text UNIQUE,
   stripe_subscription_id text,
-  subscription_status subscription_status,
+  subscription_status public.subscription_status,
   total_purchases integer DEFAULT 0 NOT NULL,
   confirmed_at timestamptz,
   producer_verified_at timestamptz,
@@ -67,52 +79,92 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 
 -- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON user_profiles(role);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_stripe_customer ON user_profiles(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_username ON user_profiles(username);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_is_producer ON user_profiles(is_producer_active) WHERE is_producer_active = true;
+CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON public.user_profiles(role);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_stripe_customer ON public.user_profiles(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_username ON public.user_profiles(username);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_is_producer ON public.user_profiles(is_producer_active) WHERE is_producer_active = true;
 
 -- Enable RLS
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for user_profiles
+-- RLS Policies for user_profiles (idempotent)
 
 -- Users can view their own profile
-CREATE POLICY "Users can view own profile"
-  ON user_profiles FOR SELECT
-  TO authenticated
-  USING (auth.uid() = id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'user_profiles'
+      AND policyname = 'Users can view own profile'
+  ) THEN
+    EXECUTE $policy$
+      CREATE POLICY "Users can view own profile"
+        ON public.user_profiles FOR SELECT
+        TO authenticated
+        USING (auth.uid() = id)
+    $policy$;
+  END IF;
+END
+$$;
 
 -- Users can view public producer profiles
-CREATE POLICY "Anyone can view producer profiles"
-  ON user_profiles FOR SELECT
-  TO authenticated
-  USING (is_producer_active = true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'user_profiles'
+      AND policyname = 'Anyone can view producer profiles'
+  ) THEN
+    EXECUTE $policy$
+      CREATE POLICY "Anyone can view producer profiles"
+        ON public.user_profiles FOR SELECT
+        TO authenticated
+        USING (is_producer_active = true)
+    $policy$;
+  END IF;
+END
+$$;
 
 -- Users can update their own non-sensitive profile fields
-CREATE POLICY "Users can update own profile limited fields"
-  ON user_profiles FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = id)
-  WITH CHECK (
-    auth.uid() = id AND
-    -- Prevent users from modifying sensitive fields via client
-    -- These can only be modified server-side
-    role = (SELECT role FROM user_profiles WHERE id = auth.uid()) AND
-    is_producer_active = (SELECT is_producer_active FROM user_profiles WHERE id = auth.uid()) AND
-    stripe_customer_id = (SELECT stripe_customer_id FROM user_profiles WHERE id = auth.uid()) AND
-    stripe_subscription_id = (SELECT stripe_subscription_id FROM user_profiles WHERE id = auth.uid()) AND
-    subscription_status = (SELECT subscription_status FROM user_profiles WHERE id = auth.uid()) AND
-    total_purchases = (SELECT total_purchases FROM user_profiles WHERE id = auth.uid()) AND
-    confirmed_at = (SELECT confirmed_at FROM user_profiles WHERE id = auth.uid()) AND
-    producer_verified_at = (SELECT producer_verified_at FROM user_profiles WHERE id = auth.uid())
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'user_profiles'
+      AND policyname = 'Users can update own profile limited fields'
+  ) THEN
+    EXECUTE $policy$
+      CREATE POLICY "Users can update own profile limited fields"
+        ON public.user_profiles FOR UPDATE
+        TO authenticated
+        USING (auth.uid() = id)
+        WITH CHECK (
+          auth.uid() = id AND
+          role = (SELECT role FROM public.user_profiles WHERE id = auth.uid()) AND
+          is_producer_active = (SELECT is_producer_active FROM public.user_profiles WHERE id = auth.uid()) AND
+          stripe_customer_id = (SELECT stripe_customer_id FROM public.user_profiles WHERE id = auth.uid()) AND
+          stripe_subscription_id = (SELECT stripe_subscription_id FROM public.user_profiles WHERE id = auth.uid()) AND
+          subscription_status = (SELECT subscription_status FROM public.user_profiles WHERE id = auth.uid()) AND
+          total_purchases = (SELECT total_purchases FROM public.user_profiles WHERE id = auth.uid()) AND
+          confirmed_at = (SELECT confirmed_at FROM public.user_profiles WHERE id = auth.uid()) AND
+          producer_verified_at = (SELECT producer_verified_at FROM public.user_profiles WHERE id = auth.uid())
+        )
+    $policy$;
+  END IF;
+END
+$$;
 
 -- Function to handle new user registration
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_profiles (id, email, username, role)
+  INSERT INTO public.user_profiles (id, email, username, role)
   VALUES (
     NEW.id,
     NEW.email,
@@ -123,14 +175,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger on auth.users creation
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+-- Trigger on auth.users creation (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'on_auth_user_created'
+      AND tgrelid = 'auth.users'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+  END IF;
+END
+$$;
 
 -- Function to auto-update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = now();
@@ -138,13 +201,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger for updated_at on user_profiles
-CREATE TRIGGER update_user_profiles_updated_at
-  BEFORE UPDATE ON user_profiles
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Trigger for updated_at on user_profiles (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'update_user_profiles_updated_at'
+      AND tgrelid = 'public.user_profiles'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER update_user_profiles_updated_at
+      BEFORE UPDATE ON public.user_profiles
+      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+  END IF;
+END
+$$;
 
 -- Function to auto-promote user to confirmed_user when total_purchases >= 10
-CREATE OR REPLACE FUNCTION check_user_confirmation_status()
+CREATE OR REPLACE FUNCTION public.check_user_confirmation_status()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.total_purchases >= 10 AND OLD.total_purchases < 10 AND NEW.role = 'user' THEN
@@ -155,9 +230,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger to auto-promote users
-CREATE TRIGGER auto_promote_confirmed_user
-  BEFORE UPDATE ON user_profiles
-  FOR EACH ROW
-  WHEN (NEW.total_purchases >= 10 AND OLD.total_purchases < 10)
-  EXECUTE FUNCTION check_user_confirmation_status();
+-- Trigger to auto-promote users (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'auto_promote_confirmed_user'
+      AND tgrelid = 'public.user_profiles'::regclass
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER auto_promote_confirmed_user
+      BEFORE UPDATE ON public.user_profiles
+      FOR EACH ROW
+      WHEN (NEW.total_purchases >= 10 AND OLD.total_purchases < 10)
+      EXECUTE FUNCTION public.check_user_confirmation_status();
+  END IF;
+END
+$$;

@@ -14,7 +14,14 @@ BEGIN;
 
 DROP POLICY IF EXISTS "Authenticated users can comment" ON public.battle_comments;
 
-CREATE POLICY "Confirmed users can comment"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Confirmed users can comment'
+  ) THEN
+    CREATE POLICY "Confirmed users can comment"
   ON public.battle_comments
   FOR INSERT
   TO authenticated
@@ -28,18 +35,38 @@ CREATE POLICY "Confirmed users can comment"
         AND status IN ('active', 'voting')
     )
   );
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can view all battle comments"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Admins can view all battle comments'
+  ) THEN
+    CREATE POLICY "Admins can view all battle comments"
   ON public.battle_comments
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can moderate battle comments"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Admins can moderate battle comments'
+  ) THEN
+    CREATE POLICY "Admins can moderate battle comments"
   ON public.battle_comments
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 COMMIT;

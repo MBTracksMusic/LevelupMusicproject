@@ -10,7 +10,14 @@ BEGIN;
 
 DROP POLICY IF EXISTS "Producers can delete own unsold products" ON public.products;
 
-CREATE POLICY "Producers can delete own unsold products"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'products'
+    AND policyname = 'Producers can delete own unsold products'
+  ) THEN
+    CREATE POLICY "Producers can delete own unsold products"
   ON public.products
   FOR DELETE
   TO authenticated
@@ -23,5 +30,7 @@ CREATE POLICY "Producers can delete own unsold products"
       WHERE purchases.product_id = products.id
     )
   );
+  END IF;
+END $$;
 
 COMMIT;

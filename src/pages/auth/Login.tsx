@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
 import { signIn } from '../../lib/auth/service';
+import { supabase } from '../../lib/supabase/client';
 import toast from 'react-hot-toast';
 
 export function LoginPage() {
@@ -16,7 +17,7 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +34,31 @@ export function LoginPage() {
       }
 
       toast.success(t('auth.loginSuccess'));
-      navigate(from, { replace: true });
+      if (from !== '/' && from !== '/login') {
+        navigate(from, { replace: true });
+        return;
+      }
+
+      let destination = '/dashboard';
+
+      if (result.user?.id) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', result.user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error('Error loading profile role after login:', profileError);
+        } else {
+          const role = (profileData as { role?: string | null } | null)?.role;
+          if (role === 'admin') {
+            destination = '/admin';
+          }
+        }
+      }
+
+      navigate(destination, { replace: true });
     } catch (error) {
       console.error('Login error:', error);
       setError(t('auth.invalidCredentials'));

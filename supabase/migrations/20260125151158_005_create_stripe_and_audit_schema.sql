@@ -159,25 +159,59 @@ ALTER TABLE wishlists ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for audit_logs
 -- Users can view audit logs related to their own actions
-CREATE POLICY "Users can view own audit logs"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'audit_logs'
+    AND policyname = 'Users can view own audit logs'
+  ) THEN
+    CREATE POLICY "Users can view own audit logs"
   ON audit_logs FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for preview_access_logs
 -- Users can view their own access logs
-CREATE POLICY "Users can view own preview access logs"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'preview_access_logs'
+    AND policyname = 'Users can view own preview access logs'
+  ) THEN
+    CREATE POLICY "Users can view own preview access logs"
   ON preview_access_logs FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for cart_items
-CREATE POLICY "Users can view own cart"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'cart_items'
+    AND policyname = 'Users can view own cart'
+  ) THEN
+    CREATE POLICY "Users can view own cart"
   ON cart_items FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
-CREATE POLICY "Users can add to cart"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'cart_items'
+    AND policyname = 'Users can add to cart'
+  ) THEN
+    CREATE POLICY "Users can add to cart"
   ON cart_items FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -189,27 +223,65 @@ CREATE POLICY "Users can add to cart"
       AND (is_exclusive = false OR is_sold = false)
     )
   );
+  END IF;
+END $$;
 
-CREATE POLICY "Users can remove from cart"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'cart_items'
+    AND policyname = 'Users can remove from cart'
+  ) THEN
+    CREATE POLICY "Users can remove from cart"
   ON cart_items FOR DELETE
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- RLS Policies for wishlists
-CREATE POLICY "Users can view own wishlist"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'wishlists'
+    AND policyname = 'Users can view own wishlist'
+  ) THEN
+    CREATE POLICY "Users can view own wishlist"
   ON wishlists FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
-CREATE POLICY "Users can add to wishlist"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'wishlists'
+    AND policyname = 'Users can add to wishlist'
+  ) THEN
+    CREATE POLICY "Users can add to wishlist"
   ON wishlists FOR INSERT
   TO authenticated
   WITH CHECK (user_id = auth.uid());
+  END IF;
+END $$;
 
-CREATE POLICY "Users can remove from wishlist"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'wishlists'
+    AND policyname = 'Users can remove from wishlist'
+  ) THEN
+    CREATE POLICY "Users can remove from wishlist"
   ON wishlists FOR DELETE
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- Function to check stripe event idempotency
 CREATE OR REPLACE FUNCTION check_stripe_event_processed(p_event_id text)

@@ -25,23 +25,173 @@ BEGIN
   ) THEN
     ALTER TABLE public.battles
     ADD CONSTRAINT battles_custom_duration_positive
-    CHECK (custom_duration_days IS NULL OR custom_duration_days > 0);
+    CHECK (custom_duration_days IS NULL OR custom_duration_days > 0)
+    NOT VALID;
   END IF;
 END $$;
 
-ALTER TABLE public.ai_admin_actions
-DROP CONSTRAINT IF EXISTS ai_admin_actions_action_type_check;
+DO $$
+DECLARE
+  v_has_invalid_custom_duration boolean := false;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'battles_custom_duration_positive'
+      AND conrelid = 'public.battles'::regclass
+      AND convalidated = false
+  ) THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.battles
+      WHERE custom_duration_days IS NOT NULL
+        AND custom_duration_days <= 0
+    ) INTO v_has_invalid_custom_duration;
 
-ALTER TABLE public.ai_admin_actions
-ADD CONSTRAINT ai_admin_actions_action_type_check
-CHECK (action_type IN (
-  'battle_validate',
-  'battle_cancel',
-  'battle_finalize',
-  'comment_moderation',
-  'match_recommendation',
-  'battle_duration_set'
-));
+    IF v_has_invalid_custom_duration THEN
+      RAISE NOTICE '[049] battles_custom_duration_positive kept NOT VALID: invalid rows still exist';
+    ELSE
+      ALTER TABLE public.battles
+      VALIDATE CONSTRAINT battles_custom_duration_positive;
+      RAISE NOTICE '[049] battles_custom_duration_positive validated';
+    END IF;
+  END IF;
+END $$;
+
+-- Minimal conservative normalization for known legacy action_type values
+UPDATE public.ai_admin_actions
+SET action_type = 'comment_moderation'
+WHERE action_type IS NULL
+   OR btrim(action_type) = '';
+
+UPDATE public.ai_admin_actions
+SET action_type = 'battle_validate'
+WHERE action_type IS NOT NULL
+  AND action_type NOT IN (
+    'battle_validate',
+    'battle_cancel',
+    'battle_finalize',
+    'comment_moderation',
+    'match_recommendation',
+    'battle_duration_set'
+  )
+  AND lower(action_type) LIKE '%validate%';
+
+UPDATE public.ai_admin_actions
+SET action_type = 'battle_cancel'
+WHERE action_type IS NOT NULL
+  AND action_type NOT IN (
+    'battle_validate',
+    'battle_cancel',
+    'battle_finalize',
+    'comment_moderation',
+    'match_recommendation',
+    'battle_duration_set'
+  )
+  AND lower(action_type) LIKE '%cancel%';
+
+UPDATE public.ai_admin_actions
+SET action_type = 'battle_finalize'
+WHERE action_type IS NOT NULL
+  AND action_type NOT IN (
+    'battle_validate',
+    'battle_cancel',
+    'battle_finalize',
+    'comment_moderation',
+    'match_recommendation',
+    'battle_duration_set'
+  )
+  AND lower(action_type) LIKE '%final%';
+
+-- Diagnostic: report invalid legacy values before/while enforcing check
+DO $$
+DECLARE
+  v_invalid_distinct_count integer := 0;
+  v_invalid_values text := null;
+BEGIN
+  SELECT COUNT(*), string_agg(value_label, ', ' ORDER BY value_label)
+  INTO v_invalid_distinct_count, v_invalid_values
+  FROM (
+    SELECT DISTINCT COALESCE(NULLIF(btrim(action_type), ''), '<null_or_empty>') AS value_label
+    FROM public.ai_admin_actions
+    WHERE action_type IS NULL
+       OR btrim(action_type) = ''
+       OR action_type NOT IN (
+         'battle_validate',
+         'battle_cancel',
+         'battle_finalize',
+         'comment_moderation',
+         'match_recommendation',
+         'battle_duration_set'
+       )
+  ) invalid_values;
+
+  IF v_invalid_distinct_count > 0 THEN
+    RAISE NOTICE '[049] ai_admin_actions invalid action_type values detected (% distinct): %',
+      v_invalid_distinct_count,
+      v_invalid_values;
+  ELSE
+    RAISE NOTICE '[049] ai_admin_actions action_type values are compliant';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'ai_admin_actions_action_type_check'
+      AND conrelid = 'public.ai_admin_actions'::regclass
+  ) THEN
+    ALTER TABLE public.ai_admin_actions
+    ADD CONSTRAINT ai_admin_actions_action_type_check
+    CHECK (action_type IN (
+      'battle_validate',
+      'battle_cancel',
+      'battle_finalize',
+      'comment_moderation',
+      'match_recommendation',
+      'battle_duration_set'
+    ))
+    NOT VALID;
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  v_has_invalid_action_type boolean := false;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'ai_admin_actions_action_type_check'
+      AND conrelid = 'public.ai_admin_actions'::regclass
+      AND convalidated = false
+  ) THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.ai_admin_actions
+      WHERE action_type IS NULL
+         OR btrim(action_type) = ''
+         OR action_type NOT IN (
+           'battle_validate',
+           'battle_cancel',
+           'battle_finalize',
+           'comment_moderation',
+           'match_recommendation',
+           'battle_duration_set'
+         )
+    ) INTO v_has_invalid_action_type;
+
+    IF v_has_invalid_action_type THEN
+      RAISE NOTICE '[049] ai_admin_actions_action_type_check kept NOT VALID: invalid rows still exist';
+    ELSE
+      ALTER TABLE public.ai_admin_actions
+      VALIDATE CONSTRAINT ai_admin_actions_action_type_check;
+      RAISE NOTICE '[049] ai_admin_actions_action_type_check validated';
+    END IF;
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_validate_battle(p_battle_id uuid)
 RETURNS boolean

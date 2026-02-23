@@ -12,7 +12,14 @@ BEGIN;
 -- battle_votes INSERT policy: confirmed eligibility now goes through compatibility helper
 DROP POLICY IF EXISTS "Confirmed users can vote" ON public.battle_votes;
 
-CREATE POLICY "Confirmed users can vote"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_votes'
+    AND policyname = 'Confirmed users can vote'
+  ) THEN
+    CREATE POLICY "Confirmed users can vote"
   ON public.battle_votes
   FOR INSERT
   TO authenticated
@@ -30,6 +37,8 @@ CREATE POLICY "Confirmed users can vote"
       AND bv.user_id = auth.uid()
     )
   );
+  END IF;
+END $$;
 
 -- SQL vote recorder: use compatibility helper instead of legacy role enum checks
 CREATE OR REPLACE FUNCTION public.record_battle_vote(

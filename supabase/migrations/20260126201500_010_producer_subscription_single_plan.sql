@@ -68,11 +68,20 @@ CREATE TRIGGER trg_sync_user_profile_producer
 ALTER TABLE producer_subscriptions ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Producer subscriptions: owner can read" ON producer_subscriptions;
-CREATE POLICY "Producer subscriptions: owner can read"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'producer_subscriptions'
+    AND policyname = 'Producer subscriptions: owner can read'
+  ) THEN
+    CREATE POLICY "Producer subscriptions: owner can read"
   ON producer_subscriptions
   FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
+  END IF;
+END $$;
 
 -- No insert/update/delete policies for authenticated users (must be done server-side with service role key)
 

@@ -59,11 +59,20 @@ ALTER TABLE public.admin_action_audit_log ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Admins can read centralized admin action audit log" ON public.admin_action_audit_log;
 
-CREATE POLICY "Admins can read centralized admin action audit log"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'admin_action_audit_log'
+    AND policyname = 'Admins can read centralized admin action audit log'
+  ) THEN
+    CREATE POLICY "Admins can read centralized admin action audit log"
   ON public.admin_action_audit_log
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 2) RPC rate limit storage
@@ -112,36 +121,81 @@ DROP POLICY IF EXISTS "Admins can update rpc rate limit rules" ON public.rpc_rat
 DROP POLICY IF EXISTS "Admins can read rpc rate limit counters" ON public.rpc_rate_limit_counters;
 DROP POLICY IF EXISTS "Admins can read rpc rate limit hits" ON public.rpc_rate_limit_hits;
 
-CREATE POLICY "Admins can read rpc rate limit rules"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'rpc_rate_limit_rules'
+    AND policyname = 'Admins can read rpc rate limit rules'
+  ) THEN
+    CREATE POLICY "Admins can read rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can insert rpc rate limit rules"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'rpc_rate_limit_rules'
+    AND policyname = 'Admins can insert rpc rate limit rules'
+  ) THEN
+    CREATE POLICY "Admins can insert rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR INSERT
   TO authenticated
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update rpc rate limit rules"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'rpc_rate_limit_rules'
+    AND policyname = 'Admins can update rpc rate limit rules'
+  ) THEN
+    CREATE POLICY "Admins can update rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can read rpc rate limit counters"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'rpc_rate_limit_counters'
+    AND policyname = 'Admins can read rpc rate limit counters'
+  ) THEN
+    CREATE POLICY "Admins can read rpc rate limit counters"
   ON public.rpc_rate_limit_counters
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can read rpc rate limit hits"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'rpc_rate_limit_hits'
+    AND policyname = 'Admins can read rpc rate limit hits'
+  ) THEN
+    CREATE POLICY "Admins can read rpc rate limit hits"
   ON public.rpc_rate_limit_hits
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 INSERT INTO public.rpc_rate_limit_rules (rpc_name, scope, allowed_per_minute, is_enabled)
 VALUES
@@ -181,18 +235,36 @@ ALTER TABLE public.monitoring_alert_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Admins can read monitoring alert events" ON public.monitoring_alert_events;
 DROP POLICY IF EXISTS "Admins can update monitoring alert events" ON public.monitoring_alert_events;
 
-CREATE POLICY "Admins can read monitoring alert events"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'monitoring_alert_events'
+    AND policyname = 'Admins can read monitoring alert events'
+  ) THEN
+    CREATE POLICY "Admins can read monitoring alert events"
   ON public.monitoring_alert_events
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update monitoring alert events"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'monitoring_alert_events'
+    AND policyname = 'Admins can update monitoring alert events'
+  ) THEN
+    CREATE POLICY "Admins can update monitoring alert events"
   ON public.monitoring_alert_events
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 4) Helper functions (request context, audit logging, rate limiting, alerts)

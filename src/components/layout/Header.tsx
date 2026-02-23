@@ -10,7 +10,9 @@ import {
   User,
   LogOut,
   Settings,
+  Shield,
   LayoutDashboard,
+  MessageSquareText,
   Music,
   Globe,
 } from 'lucide-react';
@@ -204,6 +206,14 @@ export function Header() {
                           <ShoppingBag className="w-4 h-4" />
                           {t('nav.myPurchases')}
                         </Link>
+                        <Link
+                          to="/dashboard/messages"
+                          onClick={() => setIsUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        >
+                          <MessageSquareText className="w-4 h-4" />
+                          Mes messages
+                        </Link>
                         {profile?.is_producer_active && (
                           <Link
                             to="/producer"
@@ -224,6 +234,19 @@ export function Header() {
                         </Link>
                       </div>
                       <div className="border-t border-zinc-800 py-1">
+                        {profile?.role === 'admin' && (
+                          <>
+                            <Link
+                              to="/admin"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            >
+                              <Shield className="w-4 h-4" />
+                              Administration
+                            </Link>
+                            <div className="my-1 border-t border-zinc-800" />
+                          </>
+                        )}
                         <button
                           onClick={() => {
                             setIsUserMenuOpen(false);

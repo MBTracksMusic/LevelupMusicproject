@@ -73,63 +73,135 @@ DROP POLICY IF EXISTS "Admins can read ai admin actions" ON public.ai_admin_acti
 DROP POLICY IF EXISTS "Admins can insert ai admin actions" ON public.ai_admin_actions;
 DROP POLICY IF EXISTS "Admins can update ai admin actions" ON public.ai_admin_actions;
 
-CREATE POLICY "Admins can read ai admin actions"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_admin_actions'
+    AND policyname = 'Admins can read ai admin actions'
+  ) THEN
+    CREATE POLICY "Admins can read ai admin actions"
   ON public.ai_admin_actions
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can insert ai admin actions"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_admin_actions'
+    AND policyname = 'Admins can insert ai admin actions'
+  ) THEN
+    CREATE POLICY "Admins can insert ai admin actions"
   ON public.ai_admin_actions
   FOR INSERT
   TO authenticated
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update ai admin actions"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_admin_actions'
+    AND policyname = 'Admins can update ai admin actions'
+  ) THEN
+    CREATE POLICY "Admins can update ai admin actions"
   ON public.ai_admin_actions
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Admins can read ai training feedback" ON public.ai_training_feedback;
 DROP POLICY IF EXISTS "Admins can insert ai training feedback" ON public.ai_training_feedback;
 DROP POLICY IF EXISTS "Admins can update ai training feedback" ON public.ai_training_feedback;
 
-CREATE POLICY "Admins can read ai training feedback"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_training_feedback'
+    AND policyname = 'Admins can read ai training feedback'
+  ) THEN
+    CREATE POLICY "Admins can read ai training feedback"
   ON public.ai_training_feedback
   FOR SELECT
   TO authenticated
   USING (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can insert ai training feedback"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_training_feedback'
+    AND policyname = 'Admins can insert ai training feedback'
+  ) THEN
+    CREATE POLICY "Admins can insert ai training feedback"
   ON public.ai_training_feedback
   FOR INSERT
   TO authenticated
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update ai training feedback"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'ai_training_feedback'
+    AND policyname = 'Admins can update ai training feedback'
+  ) THEN
+    CREATE POLICY "Admins can update ai training feedback"
   ON public.ai_training_feedback
   FOR UPDATE
   TO authenticated
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Admins can read own notifications" ON public.admin_notifications;
 DROP POLICY IF EXISTS "Admins can update own notifications" ON public.admin_notifications;
 
-CREATE POLICY "Admins can read own notifications"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'admin_notifications'
+    AND policyname = 'Admins can read own notifications'
+  ) THEN
+    CREATE POLICY "Admins can read own notifications"
   ON public.admin_notifications
   FOR SELECT
   TO authenticated
   USING (user_id = auth.uid() AND public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
-CREATE POLICY "Admins can update own notifications"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'admin_notifications'
+    AND policyname = 'Admins can update own notifications'
+  ) THEN
+    CREATE POLICY "Admins can update own notifications"
   ON public.admin_notifications
   FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid() AND public.is_admin(auth.uid()))
   WITH CHECK (user_id = auth.uid() AND public.is_admin(auth.uid()));
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.enqueue_admin_notifications_for_ai_action()
 RETURNS trigger

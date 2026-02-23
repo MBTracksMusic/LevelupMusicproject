@@ -40,6 +40,21 @@ const asNonEmptyString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const DEFAULT_EMAIL_RATE_LIMIT_SECONDS = 15 * 60;
+
+const getEmailRateLimitSeconds = () => {
+  const raw = asNonEmptyString(Deno.env.get("NOTIFICATION_EMAIL_RATE_LIMIT_SECONDS"));
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_EMAIL_RATE_LIMIT_SECONDS;
+};
+
+interface EmailClaimDecision {
+  allowed: boolean;
+  reason: string;
+}
+
 async function sendPurchaseEmail(email: string) {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   if (!resendApiKey) {
@@ -49,7 +64,6 @@ async function sendPurchaseEmail(email: string) {
   const resend = new Resend(resendApiKey);
 
   return await resend.emails.send({
-    
     from: "onboarding@resend.dev",
     to: email,
     subject: "Votre achat LevelUpMusic est confirmé",
@@ -62,6 +76,67 @@ async function sendPurchaseEmail(email: string) {
       </div>
     `,
   });
+}
+
+async function claimNotificationEmailSend(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    category: string;
+    recipientEmail: string;
+    dedupeKey: string;
+    metadata?: Record<string, unknown>;
+    rateLimitSeconds: number;
+  },
+): Promise<EmailClaimDecision> {
+  const {
+    category,
+    recipientEmail,
+    dedupeKey,
+    metadata = {},
+    rateLimitSeconds,
+  } = params;
+
+  const { data, error } = await supabase.rpc("claim_notification_email_send", {
+    p_category: category,
+    p_recipient_email: recipientEmail,
+    p_dedupe_key: dedupeKey,
+    p_rate_limit_seconds: rateLimitSeconds,
+    p_metadata: metadata,
+  });
+
+  if (error) {
+    console.error("EMAIL_CLAIM_ERROR", {
+      category,
+      recipientEmail,
+      dedupeKey,
+      rateLimitSeconds,
+      error,
+    });
+    return { allowed: false, reason: "claim_error" };
+  }
+
+  const decision = data && typeof data === "object"
+    ? data as { allowed?: unknown; reason?: unknown }
+    : null;
+
+  return {
+    allowed: decision?.allowed === true,
+    reason: typeof decision?.reason === "string" ? decision.reason : "unknown",
+  };
+}
+
+async function releaseNotificationEmailClaim(
+  supabase: ReturnType<typeof createClient>,
+  dedupeKey: string,
+) {
+  const { error } = await supabase
+    .from("notification_email_log")
+    .delete()
+    .eq("dedupe_key", dedupeKey);
+
+  if (error) {
+    console.error("EMAIL_CLAIM_RELEASE_ERROR", { dedupeKey, error });
+  }
 }
 
 const DEFAULT_EVENT_PROCESSING_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
@@ -530,7 +605,7 @@ Deno.serve(async (req: Request) => {
           if (!isCheckoutSession(event.data.object)) {
             throw new WebhookError("Invalid payload for checkout.session.completed", 400, true);
           }
-          await handleCheckoutCompleted(supabase, stripe, event.data.object);
+          await handleCheckoutCompleted(supabase, stripe, event.data.object, event.id);
           break;
         }
         case "customer.subscription.created":
@@ -629,6 +704,7 @@ async function handleCheckoutCompleted(
   supabase: ReturnType<typeof createClient>,
   stripe: Stripe,
   eventSession: Stripe.Checkout.Session,
+  eventId: string,
 ) {
   const sessionId = asNonEmptyString(eventSession.id);
   if (!sessionId) {
@@ -650,6 +726,7 @@ async function handleCheckoutCompleted(
     asNonEmptyString(session.customer_details?.email) ||
     asNonEmptyString(session.customer_email);
   const metadata = session.metadata ?? {};
+  const emailRateLimitSeconds = getEmailRateLimitSeconds();
 
   if (mode === "subscription") {
     if (!subscriptionId) {
@@ -657,11 +734,35 @@ async function handleCheckoutCompleted(
     }
     await upsertProducerSubscriptionFromStripe(supabase, stripe, subscriptionId);
     if (email) {
-      try {
-        await sendPurchaseEmail(email);
-        console.log("EMAIL_SENT", { email, purchaseId: null });
-      } catch (error) {
-        console.error("EMAIL_ERROR", { error, purchaseId: null });
+      const dedupeKey = `subscription_checkout:${subscriptionId}:${email.toLowerCase()}`;
+      const claim = await claimNotificationEmailSend(supabase, {
+        category: "subscription_checkout_completed",
+        recipientEmail: email,
+        dedupeKey,
+        rateLimitSeconds: emailRateLimitSeconds,
+        metadata: {
+          event_id: eventId,
+          session_id: sessionId,
+          subscription_id: subscriptionId,
+          mode,
+        },
+      });
+
+      if (!claim.allowed) {
+        console.log("EMAIL_SKIPPED", {
+          email,
+          purchaseId: null,
+          dedupeKey,
+          reason: claim.reason,
+        });
+      } else {
+        try {
+          await sendPurchaseEmail(email);
+          console.log("EMAIL_SENT", { email, purchaseId: null });
+        } catch (error) {
+          await releaseNotificationEmailClaim(supabase, dedupeKey);
+          console.error("EMAIL_ERROR", { error, purchaseId: null, dedupeKey });
+        }
       }
     } else {
       console.error("EMAIL_ERROR", { error: "Missing customer email", purchaseId: null });
@@ -754,21 +855,46 @@ async function handleCheckoutCompleted(
     if (purchaseReadError) {
       console.error("EMAIL_ERROR", { error: purchaseReadError, purchaseId });
     } else if (!purchaseRow?.contract_email_sent_at) {
-      try {
-        await sendPurchaseEmail(email);
-        const { error: purchaseUpdateError } = await supabase
-          .from("purchases")
-          .update({ contract_email_sent_at: new Date().toISOString() })
-          .eq("id", purchaseId)
-          .is("contract_email_sent_at", null);
+      const dedupeKey = `purchase_contract:${purchaseId}:${email.toLowerCase()}`;
+      const claim = await claimNotificationEmailSend(supabase, {
+        category: "purchase_checkout_completed",
+        recipientEmail: email,
+        dedupeKey,
+        rateLimitSeconds: emailRateLimitSeconds,
+        metadata: {
+          event_id: eventId,
+          session_id: sessionId,
+          purchase_id: purchaseId,
+          product_id: productId,
+          user_id: userId,
+        },
+      });
 
-        if (purchaseUpdateError) {
-          console.error("EMAIL_ERROR", { error: purchaseUpdateError, purchaseId });
-        } else {
-          console.log("EMAIL_SENT", { email, purchaseId });
+      if (!claim.allowed) {
+        console.log("EMAIL_SKIPPED", {
+          email,
+          purchaseId,
+          dedupeKey,
+          reason: claim.reason,
+        });
+      } else {
+        try {
+          await sendPurchaseEmail(email);
+          const { error: purchaseUpdateError } = await supabase
+            .from("purchases")
+            .update({ contract_email_sent_at: new Date().toISOString() })
+            .eq("id", purchaseId)
+            .is("contract_email_sent_at", null);
+
+          if (purchaseUpdateError) {
+            console.error("EMAIL_ERROR", { error: purchaseUpdateError, purchaseId });
+          } else {
+            console.log("EMAIL_SENT", { email, purchaseId });
+          }
+        } catch (error) {
+          await releaseNotificationEmailClaim(supabase, dedupeKey);
+          console.error("EMAIL_ERROR", { error, purchaseId, dedupeKey });
         }
-      } catch (error) {
-        console.error("EMAIL_ERROR", { error, purchaseId });
       }
     }
   } else {

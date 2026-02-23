@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { AdminPriorityCards } from '../components/admin/AdminPriorityCards';
 import { supabase } from '../lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
 
@@ -86,6 +87,10 @@ interface AdminContextState {
   isAdmin: boolean | null;
   projectRef: string | null;
   error: string | null;
+}
+
+interface AdminBattlesPageProps {
+  onAwaitingAdminCountChange?: (count: number) => void;
 }
 
 const BATTLES_DEFAULT_PAGE_SIZE = 200;
@@ -270,7 +275,7 @@ function formatTimeRemaining(value: string | null) {
   return `${minutes}m`;
 }
 
-export function AdminBattlesPage() {
+export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPageProps = {}) {
   const [battles, setBattles] = useState<AdminBattleRow[]>([]);
   const [comments, setComments] = useState<AdminCommentRow[]>([]);
   const [aiActions, setAiActions] = useState<AiActionRow[]>([]);
@@ -574,6 +579,11 @@ export function AdminBattlesPage() {
     return battles.filter((battle) => battle.status === filter);
   }, [battles, filter]);
 
+  const awaitingAdminCount = useMemo(
+    () => battles.reduce((count, battle) => count + (battle.status === 'awaiting_admin' ? 1 : 0), 0),
+    [battles]
+  );
+
   const rejectionHistory = useMemo(
     () => battles.filter((battle) => battle.status === 'rejected' && !!battle.rejection_reason),
     [battles]
@@ -645,6 +655,10 @@ export function AdminBattlesPage() {
     () => notifications.reduce((count, notification) => count + (notification.is_read ? 0 : 1), 0),
     [notifications]
   );
+
+  useEffect(() => {
+    onAwaitingAdminCountChange?.(awaitingAdminCount);
+  }, [awaitingAdminCount, onAwaitingAdminCountChange]);
 
   const battleSlugById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1052,80 +1066,14 @@ export function AdminBattlesPage() {
           </Card>
         )}
 
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-white">Notifications IA</h2>
-            <Badge variant={unreadNotificationsCount > 0 ? 'warning' : 'default'}>
-              {unreadNotificationsCount} non lues
-            </Badge>
-          </div>
-
-          {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
-          ) : notifications.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune notification admin.</p>
-          ) : (
-            <ul className="space-y-2">
-              {notifications.slice(0, 8).map((notification) => {
-                const targetUrl = getNotificationTargetUrl(notification);
-                const linkedActionId = getNotificationActionId(notification);
-
-                return (
-                  <li key={notification.id} className="border border-zinc-800 rounded bg-zinc-900/60 p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div>
-                        <p className="text-zinc-200 font-medium">
-                          {getNotificationLabel(notification)}
-                          {!notification.is_read && <span className="text-amber-300"> • NEW</span>}
-                        </p>
-                        <p className="text-zinc-500 text-xs">{new Date(notification.created_at).toLocaleString()}</p>
-                        {targetUrl && (
-                          <Link to={targetUrl} className="text-xs text-sky-300 hover:text-sky-200 inline-block mt-1">
-                            Ouvrir la cible
-                          </Link>
-                        )}
-                        {linkedActionId && (
-                          <p className="text-zinc-500 text-xs mt-1">Action: {linkedActionId}</p>
-                        )}
-                      </div>
-                      {!notification.is_read && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => markNotificationRead(notification.id)}
-                        >
-                          Marquer lu
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">AI Inbox</h2>
-          {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
-          ) : proposedAiActions.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune action IA en attente.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {proposedAiActions.slice(0, 10).map((action) => (
-                <li key={action.id} className="border border-zinc-800 rounded p-2 bg-zinc-900/40">
-                  <p className="text-zinc-200">
-                    {action.action_type} • {action.entity_type}:{action.entity_id}
-                  </p>
-                  <p className="text-zinc-500 text-xs">
-                    {action.confidence_score !== null ? `Confiance ${Math.round(action.confidence_score * 100)}%` : 'Confiance n/a'} • {new Date(action.created_at).toLocaleString()}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <section className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Urgences</p>
+          <AdminPriorityCards
+            awaitingAdminCount={awaitingAdminCount}
+            expiringCount={expiringSoonBattles.length}
+            notificationCount={unreadNotificationsCount}
+          />
+        </section>
 
         <Card className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1500,54 +1448,78 @@ export function AdminBattlesPage() {
           )}
         </Card>
 
+        <section className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Moderation</p>
+        </section>
+
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Historique des refus</h2>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-lg font-semibold text-white">Notifications IA</h2>
+            <Badge variant={unreadNotificationsCount > 0 ? 'warning' : 'default'}>
+              {unreadNotificationsCount} non lues
+            </Badge>
+          </div>
 
           {isLoading ? (
             <p className="text-zinc-400 text-sm">Chargement...</p>
-          ) : rejectionHistory.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucun refus enregistre.</p>
+          ) : notifications.length === 0 ? (
+            <p className="text-zinc-500 text-sm">Aucune notification admin.</p>
           ) : (
-            <ul className="space-y-3">
-              {rejectionHistory
-                .filter((battle) => !selectedProducerId || battle.producer2?.id === selectedProducerId)
-                .map((battle) => (
-                  <li key={`rejection-${battle.id}`} className="border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
-                    <p className="text-sm text-white font-medium">{battle.title}</p>
-                    <p className="text-xs text-zinc-400">
-                      {battle.producer2?.username || 'Producteur'} - {battle.rejected_at ? new Date(battle.rejected_at).toLocaleString() : 'date inconnue'}
-                    </p>
-                    <p className="text-sm text-red-300 mt-1">{battle.rejection_reason}</p>
+            <ul className="space-y-2">
+              {notifications.slice(0, 8).map((notification) => {
+                const targetUrl = getNotificationTargetUrl(notification);
+                const linkedActionId = getNotificationActionId(notification);
+
+                return (
+                  <li key={notification.id} className="border border-zinc-800 rounded bg-zinc-900/60 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-zinc-200 font-medium">
+                          {getNotificationLabel(notification)}
+                          {!notification.is_read && <span className="text-amber-300"> • NEW</span>}
+                        </p>
+                        <p className="text-zinc-500 text-xs">{new Date(notification.created_at).toLocaleString()}</p>
+                        {targetUrl && (
+                          <Link to={targetUrl} className="text-xs text-sky-300 hover:text-sky-200 inline-block mt-1">
+                            Ouvrir la cible
+                          </Link>
+                        )}
+                        {linkedActionId && (
+                          <p className="text-zinc-500 text-xs mt-1">Action: {linkedActionId}</p>
+                        )}
+                      </div>
+                      {!notification.is_read && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => markNotificationRead(notification.id)}
+                        >
+                          Marquer lu
+                        </Button>
+                      )}
+                    </div>
                   </li>
-                ))}
+                );
+              })}
             </ul>
           )}
         </Card>
 
-        <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Scores engagement producteurs</h2>
-
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">AI Inbox</h2>
           {isLoading ? (
             <p className="text-zinc-400 text-sm">Chargement...</p>
-          ) : engagementRows.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucun score disponible.</p>
+          ) : proposedAiActions.length === 0 ? (
+            <p className="text-zinc-500 text-sm">Aucune action IA en attente.</p>
           ) : (
-            <ul className="space-y-2">
-              {engagementRows.map((producer) => (
-                <li
-                  key={producer.id}
-                  className={`border rounded-lg p-3 text-sm ${
-                    selectedProducerId === producer.id
-                      ? 'border-rose-500 bg-rose-500/10'
-                      : 'border-zinc-800 bg-zinc-900/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-white font-medium">{producer.username || producer.id}</p>
-                    <p className="text-zinc-300">Score: {producer.engagement_score}</p>
-                  </div>
-                  <p className="text-zinc-500 mt-1">
-                    Refus: {producer.battle_refusal_count} | Participations: {producer.battles_participated} | Completees: {producer.battles_completed}
+            <ul className="space-y-2 text-sm">
+              {proposedAiActions.slice(0, 10).map((action) => (
+                <li key={action.id} className="border border-zinc-800 rounded p-2 bg-zinc-900/40">
+                  <p className="text-zinc-200">
+                    {action.action_type} • {action.entity_type}:{action.entity_id}
+                  </p>
+                  <p className="text-zinc-500 text-xs">
+                    {action.confidence_score !== null ? `Confiance ${Math.round(action.confidence_score * 100)}%` : 'Confiance n/a'} • {new Date(action.created_at).toLocaleString()}
                   </p>
                 </li>
               ))}
@@ -1608,6 +1580,66 @@ export function AdminBattlesPage() {
             </ul>
           )}
         </Card>
+
+        <section className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Analyse</p>
+        </section>
+
+        <Card className="space-y-4">
+          <h2 className="text-lg font-semibold text-white">Historique des refus</h2>
+
+          {isLoading ? (
+            <p className="text-zinc-400 text-sm">Chargement...</p>
+          ) : rejectionHistory.length === 0 ? (
+            <p className="text-zinc-500 text-sm">Aucun refus enregistre.</p>
+          ) : (
+            <ul className="space-y-3">
+              {rejectionHistory
+                .filter((battle) => !selectedProducerId || battle.producer2?.id === selectedProducerId)
+                .map((battle) => (
+                  <li key={`rejection-${battle.id}`} className="border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
+                    <p className="text-sm text-white font-medium">{battle.title}</p>
+                    <p className="text-xs text-zinc-400">
+                      {battle.producer2?.username || 'Producteur'} - {battle.rejected_at ? new Date(battle.rejected_at).toLocaleString() : 'date inconnue'}
+                    </p>
+                    <p className="text-sm text-red-300 mt-1">{battle.rejection_reason}</p>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="space-y-4">
+          <h2 className="text-lg font-semibold text-white">Scores engagement producteurs</h2>
+
+          {isLoading ? (
+            <p className="text-zinc-400 text-sm">Chargement...</p>
+          ) : engagementRows.length === 0 ? (
+            <p className="text-zinc-500 text-sm">Aucun score disponible.</p>
+          ) : (
+            <ul className="space-y-2">
+              {engagementRows.map((producer) => (
+                <li
+                  key={producer.id}
+                  className={`border rounded-lg p-3 text-sm ${
+                    selectedProducerId === producer.id
+                      ? 'border-rose-500 bg-rose-500/10'
+                      : 'border-zinc-800 bg-zinc-900/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-white font-medium">{producer.username || producer.id}</p>
+                    <p className="text-zinc-300">Score: {producer.engagement_score}</p>
+                  </div>
+                  <p className="text-zinc-500 mt-1">
+                    Refus: {producer.battle_refusal_count} | Participations: {producer.battles_participated} | Completees: {producer.battles_completed}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
       </div>
     </div>
   );

@@ -131,18 +131,43 @@ ALTER TABLE battle_comments ENABLE ROW LEVEL SECURITY;
 -- RLS Policies for battles
 
 -- Anyone can view active/voting/completed battles
-CREATE POLICY "Anyone can view public battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Anyone can view public battles'
+  ) THEN
+    CREATE POLICY "Anyone can view public battles"
   ON battles FOR SELECT
   USING (status IN ('active', 'voting', 'completed'));
+  END IF;
+END $$;
 
 -- Producers can view their own pending battles
-CREATE POLICY "Producers can view own battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Producers can view own battles'
+  ) THEN
+    CREATE POLICY "Producers can view own battles"
   ON battles FOR SELECT
   TO authenticated
   USING (producer1_id = auth.uid() OR producer2_id = auth.uid());
+  END IF;
+END $$;
 
 -- Active producers can create battles
-CREATE POLICY "Active producers can create battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Active producers can create battles'
+  ) THEN
+    CREATE POLICY "Active producers can create battles"
   ON battles FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -153,9 +178,18 @@ CREATE POLICY "Active producers can create battles"
       AND is_producer_active = true
     )
   );
+  END IF;
+END $$;
 
 -- Producers can update their own pending battles
-CREATE POLICY "Producers can update own pending battles"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battles'
+    AND policyname = 'Producers can update own pending battles'
+  ) THEN
+    CREATE POLICY "Producers can update own pending battles"
   ON battles FOR UPDATE
   TO authenticated
   USING (
@@ -165,16 +199,34 @@ CREATE POLICY "Producers can update own pending battles"
   WITH CHECK (
     (producer1_id = auth.uid() OR producer2_id = auth.uid())
   );
+  END IF;
+END $$;
 
 -- RLS Policies for battle_votes
 
 -- Anyone can view vote counts (not who voted)
-CREATE POLICY "Anyone can view votes"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_votes'
+    AND policyname = 'Anyone can view votes'
+  ) THEN
+    CREATE POLICY "Anyone can view votes"
   ON battle_votes FOR SELECT
   USING (true);
+  END IF;
+END $$;
 
 -- Only confirmed users, producers, and admins can vote
-CREATE POLICY "Confirmed users can vote"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_votes'
+    AND policyname = 'Confirmed users can vote'
+  ) THEN
+    CREATE POLICY "Confirmed users can vote"
   ON battle_votes FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -195,16 +247,34 @@ CREATE POLICY "Confirmed users can vote"
       AND bv.user_id = auth.uid()
     )
   );
+  END IF;
+END $$;
 
 -- RLS Policies for battle_comments
 
 -- Anyone can view non-hidden comments
-CREATE POLICY "Anyone can view visible comments"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Anyone can view visible comments'
+  ) THEN
+    CREATE POLICY "Anyone can view visible comments"
   ON battle_comments FOR SELECT
   USING (is_hidden = false);
+  END IF;
+END $$;
 
 -- Authenticated users can create comments
-CREATE POLICY "Authenticated users can comment"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Authenticated users can comment'
+  ) THEN
+    CREATE POLICY "Authenticated users can comment"
   ON battle_comments FOR INSERT
   TO authenticated
   WITH CHECK (
@@ -215,19 +285,39 @@ CREATE POLICY "Authenticated users can comment"
       AND status IN ('active', 'voting')
     )
   );
+  END IF;
+END $$;
 
 -- Users can update their own comments
-CREATE POLICY "Users can update own comments"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Users can update own comments'
+  ) THEN
+    CREATE POLICY "Users can update own comments"
   ON battle_comments FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid() AND is_hidden = false);
+  END IF;
+END $$;
 
 -- Users can delete their own comments
-CREATE POLICY "Users can delete own comments"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Users can delete own comments'
+  ) THEN
+    CREATE POLICY "Users can delete own comments"
   ON battle_comments FOR DELETE
   TO authenticated
   USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- Trigger for updated_at on battles
 DROP TRIGGER IF EXISTS update_battles_updated_at ON battles;

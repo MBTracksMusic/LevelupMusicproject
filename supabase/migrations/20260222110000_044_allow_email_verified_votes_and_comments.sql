@@ -40,7 +40,14 @@ GRANT EXECUTE ON FUNCTION public.is_email_verified_user(uuid) TO service_role;
 
 DROP POLICY IF EXISTS "Confirmed users can vote" ON public.battle_votes;
 
-CREATE POLICY "Confirmed users can vote"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_votes'
+    AND policyname = 'Confirmed users can vote'
+  ) THEN
+    CREATE POLICY "Confirmed users can vote"
   ON public.battle_votes
   FOR INSERT
   TO authenticated
@@ -69,11 +76,20 @@ CREATE POLICY "Confirmed users can vote"
         AND bv.user_id = auth.uid()
     )
   );
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Confirmed users can comment" ON public.battle_comments;
 DROP POLICY IF EXISTS "Authenticated users can comment" ON public.battle_comments;
 
-CREATE POLICY "Confirmed users can comment"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'battle_comments'
+    AND policyname = 'Confirmed users can comment'
+  ) THEN
+    CREATE POLICY "Confirmed users can comment"
   ON public.battle_comments
   FOR INSERT
   TO authenticated
@@ -87,6 +103,8 @@ CREATE POLICY "Confirmed users can comment"
         AND status IN ('active', 'voting')
     )
   );
+  END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.record_battle_vote(
   p_battle_id uuid,

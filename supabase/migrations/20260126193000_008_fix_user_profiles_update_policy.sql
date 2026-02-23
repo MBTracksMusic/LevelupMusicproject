@@ -13,7 +13,14 @@
 DROP POLICY IF EXISTS "Users can update own profile limited fields" ON user_profiles;
 
 -- Recreate the update policy with NULL-safe comparisons
-CREATE POLICY "Users can update own profile limited fields"
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'user_profiles'
+    AND policyname = 'Users can update own profile limited fields'
+  ) THEN
+    CREATE POLICY "Users can update own profile limited fields"
   ON user_profiles
   FOR UPDATE
   TO authenticated
@@ -29,3 +36,5 @@ CREATE POLICY "Users can update own profile limited fields"
     confirmed_at IS NOT DISTINCT FROM (SELECT confirmed_at FROM user_profiles WHERE id = auth.uid()) AND
     producer_verified_at IS NOT DISTINCT FROM (SELECT producer_verified_at FROM user_profiles WHERE id = auth.uid())
   );
+  END IF;
+END $$;
