@@ -25,6 +25,9 @@ const EMPTY_METRICS: AdminPilotageMetrics = {
   subscription_mrr_estimate_cents: 0,
   confirmed_signup_rate_pct: 0,
   user_growth_30d_pct: null,
+  new_subscriptions_30d: 0,
+  churned_subscriptions_30d: 0,
+  net_subscriptions_growth_30d: 0,
 };
 
 const EMPTY_DELTAS: AdminPilotageDeltas = {
@@ -84,7 +87,7 @@ function LoadingState() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {Array.from({ length: 8 }).map((_, index) => (
+        {Array.from({ length: 11 }).map((_, index) => (
           <Card key={`pilotage-loading-kpi-${index}`} className="p-4 sm:p-5 border-zinc-800 animate-pulse">
             <div className="h-3 w-28 rounded bg-zinc-800" />
             <div className="h-8 w-24 rounded bg-zinc-800 mt-3" />

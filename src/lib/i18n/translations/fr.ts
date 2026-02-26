@@ -291,4 +291,9 @@ export const fr = {
   },
 } as const;
 
-export type TranslationKeys = typeof fr;
+type DeepStringify<T> = {
+  [K in keyof T]: T[K] extends Record<string, unknown> ? DeepStringify<T[K]> : string;
+};
+
+export type TranslationSchema = DeepStringify<typeof fr>;
+export type TranslationKeys = TranslationSchema;

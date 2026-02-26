@@ -1,6 +1,6 @@
-import type { TranslationKeys } from './fr';
+import type { TranslationSchema } from './fr';
 
-export const en: TranslationKeys = {
+export const en: TranslationSchema = {
   common: {
     loading: 'Loading...',
     error: 'An error occurred',

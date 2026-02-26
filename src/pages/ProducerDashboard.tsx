@@ -21,9 +21,65 @@ interface AdvancedProducerStatsRow {
   sales_per_published_beat: number;
 }
 
+interface ProducerSubscriptionSummary {
+  subscription_status: string;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  stripe_subscription_id: string | null;
+}
+
 const toProducerTier = (value: unknown): ProducerTier => {
   if (value === 'starter' || value === 'pro' || value === 'elite') return value;
   return 'starter';
+};
+
+const EXPIRED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled', 'incomplete_expired']);
+
+const getSubscriptionDateLabel = (
+  subscriptionStatus: string | null | undefined,
+  cancelAtPeriodEnd: boolean | null | undefined,
+) => {
+  const normalizedStatus = (subscriptionStatus ?? '').toLowerCase();
+
+  if (normalizedStatus === 'active') {
+    return cancelAtPeriodEnd ? 'Fin d’accès' : 'Prochain prélèvement';
+  }
+
+  if (EXPIRED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+    return 'Abonnement expiré le';
+  }
+
+  return 'Prochaine échéance';
+};
+
+const formatSubscriptionDate = (value: string | number | Date | null | undefined) => {
+  if (value === null || value === undefined) return 'N/A';
+
+  let parsedDate: Date | null = null;
+
+  if (value instanceof Date) {
+    parsedDate = value;
+  } else if (typeof value === 'number' && Number.isFinite(value)) {
+    const timestampMs = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+    parsedDate = new Date(timestampMs);
+  } else if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return 'N/A';
+
+    if (/^-?\d+$/.test(trimmedValue)) {
+      const numericTimestamp = Number(trimmedValue);
+      if (!Number.isFinite(numericTimestamp)) return 'N/A';
+      const timestampMs = Math.abs(numericTimestamp) < 1_000_000_000_000
+        ? numericTimestamp * 1000
+        : numericTimestamp;
+      parsedDate = new Date(timestampMs);
+    } else {
+      parsedDate = new Date(trimmedValue);
+    }
+  }
+
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return 'N/A';
+  return parsedDate.toLocaleDateString('fr-FR');
 };
 
 export function ProducerDashboardPage() {
@@ -42,6 +98,10 @@ export function ProducerDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [producerSubscription, setProducerSubscription] = useState<ProducerSubscriptionSummary | null>(null);
+  const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(false);
+  const [isPortalLoading, setIsPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
 
   useEffect(() => {
     // Scroll to top when arriving on dashboard
@@ -202,8 +262,146 @@ export function ProducerDashboardPage() {
       isCancelled = true;
     };
   }, [hasAdvancedAccess, profile?.id]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadProducerSubscription() {
+      if (!profile?.id) {
+        if (!isCancelled) {
+          setProducerSubscription(null);
+          setIsSubscriptionLoading(false);
+        }
+        return;
+      }
+
+      setIsSubscriptionLoading(true);
+      try {
+        const { data, error: subscriptionError } = await supabase
+          .from('producer_subscriptions')
+          .select('subscription_status, current_period_end, cancel_at_period_end, stripe_subscription_id')
+          .eq('user_id', profile.id)
+          .maybeSingle();
+
+        if (subscriptionError) throw subscriptionError;
+
+        if (!isCancelled) {
+          setProducerSubscription((data as ProducerSubscriptionSummary | null) ?? null);
+        }
+      } catch (subscriptionError) {
+        console.error('Error loading producer subscription', subscriptionError);
+        if (!isCancelled) {
+          setProducerSubscription(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsSubscriptionLoading(false);
+        }
+      }
+    }
+
+    void loadProducerSubscription();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [profile?.id]);
   const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
   const COVER_BUCKET = import.meta.env.VITE_SUPABASE_COVER_BUCKET || 'beats-covers';
+  const producerSubscriptionStatus = producerSubscription?.subscription_status ?? 'Aucun abonnement';
+  const nextBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end);
+  const subscriptionDateLabel = getSubscriptionDateLabel(
+    producerSubscription?.subscription_status,
+    producerSubscription?.cancel_at_period_end,
+  );
+  const autoRenewLabel = producerSubscription
+    ? (producerSubscription.cancel_at_period_end ? 'Non' : 'Oui')
+    : '-';
+  const hasStripePortalAccess = Boolean(producerSubscription?.stripe_subscription_id);
+  const cancellationTimingMessage = producerSubscription
+    ? (producerSubscription.cancel_at_period_end
+      ? `Annulation programmée. Accès actif jusqu’au ${nextBillingDate}.`
+      : `Vous pouvez annuler à tout moment. L’annulation sera effective le ${nextBillingDate}.`)
+    : 'Aucun abonnement Stripe lié.';
+
+  const handleManageSubscription = async () => {
+    if (!hasStripePortalAccess) {
+      setPortalError('Aucun abonnement Stripe lié.');
+      return;
+    }
+
+    setPortalError(null);
+    setIsPortalLoading(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error('Session expirée. Merci de vous reconnecter.');
+      }
+
+      const returnUrl = `${window.location.origin}/producer`;
+      const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>(
+        'create-portal-session',
+        {
+          body: { returnUrl },
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+            Authorization: `Bearer ${accessToken}`,
+            'x-supabase-auth': `Bearer ${accessToken}`,
+          },
+          jwt: accessToken,
+        }
+      );
+
+      if (error) {
+        const apiError = (data as { error?: string } | null)?.error;
+        let contextError: string | null = null;
+        const context = (error as { context?: unknown })?.context;
+        if (context instanceof Response) {
+          try {
+            const payload = await context.clone().json() as { error?: string; message?: string };
+            contextError = payload.error || payload.message || null;
+          } catch {
+            try {
+              const rawText = await context.clone().text();
+              contextError = rawText || null;
+            } catch {
+              contextError = null;
+            }
+          }
+        }
+
+        const rawError = apiError || contextError || error.message || "Impossible d'ouvrir le portail Stripe.";
+        if (rawError.includes('no_stripe_customer')) {
+          setPortalError('Aucun abonnement Stripe lié.');
+          return;
+        }
+        throw new Error(rawError);
+      }
+
+      const portalUrl = (data as { url?: string } | null)?.url;
+      if (!portalUrl) {
+        throw new Error('URL du portail de facturation introuvable.');
+      }
+
+      window.location.assign(portalUrl);
+    } catch (error) {
+      console.error('Error opening Stripe billing portal', error);
+      const rawMessage = error instanceof Error ? error.message : '';
+      const isFunctionNetworkError = rawMessage.includes('Failed to send a request to the Edge Function');
+      setPortalError(
+        isFunctionNetworkError
+          ? "Impossible de joindre la fonction Stripe Portal. Vérifiez que 'create-portal-session' est déployée."
+          : error instanceof Error
+            ? error.message
+            : "Impossible d'ouvrir le portail d'abonnement."
+      );
+    } finally {
+      setIsPortalLoading(false);
+    }
+  };
 
   const deleteProduct = async (product: Product) => {
     if (!profile?.id) return;
@@ -316,6 +514,40 @@ export function ProducerDashboardPage() {
           <StatCard icon={ShoppingBag} label={t('producer.sales')} value={salesCount} />
           <StatCard icon={BarChart3} label="Lectures" value={viewsCount} />
           <StatCard icon={Music} label={t('producer.earnings')} value={formatPrice(revenueCents)} />
+        </section>
+
+        <section className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Abonnement producteur</h2>
+            <span className="text-xs text-zinc-400 uppercase tracking-wide">Stripe</span>
+          </div>
+          {isSubscriptionLoading ? (
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <StatCard icon={Music} label="Statut" value={producerSubscriptionStatus} />
+                <StatCard icon={ShoppingBag} label={subscriptionDateLabel} value={nextBillingDate} />
+                <StatCard icon={BarChart3} label="Renouvellement auto" value={autoRenewLabel} />
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-zinc-400">{cancellationTimingMessage}</p>
+                <button
+                  type="button"
+                  onClick={handleManageSubscription}
+                  disabled={isPortalLoading || !hasStripePortalAccess}
+                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-rose-500 to-orange-500 shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isPortalLoading ? 'Ouverture...' : 'Gérer mon abonnement'}
+                </button>
+              </div>
+
+              {portalError && (
+                <p className="text-sm text-red-400">{portalError}</p>
+              )}
+            </div>
+          )}
         </section>
 
         {hasAdvancedAccess && (

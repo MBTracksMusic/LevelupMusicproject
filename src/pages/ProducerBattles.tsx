@@ -199,10 +199,9 @@ export function ProducerBattlesPage() {
 
       const [producersRes, productsRes] = await Promise.all([
         supabase
-          .from('user_profiles')
-          .select('id, username')
-          .eq('is_producer_active', true)
-          .neq('id', profile.id)
+          .from('public_producer_profiles')
+          .select('user_id, username')
+          .neq('user_id', profile.id)
           .order('username', { ascending: true }),
         supabase
           .from('products')
@@ -220,7 +219,9 @@ export function ProducerBattlesPage() {
           console.error('Error loading producer products:', productsRes.error);
         }
 
-        setProducers((producersRes.data as ProducerOption[] | null) ?? []);
+        const producerRows = ((producersRes.data as Array<{ user_id: string; username: string | null }> | null) ?? [])
+          .map((row) => ({ id: row.user_id, username: row.username }));
+        setProducers(producerRows);
         setMyProducts((productsRes.data as ProductOption[] | null) ?? []);
 
         await loadBattles();

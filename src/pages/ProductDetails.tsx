@@ -4,6 +4,7 @@ import { ArrowLeft, Pause, Play, ShoppingCart } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 import { usePlayerStore } from '../lib/stores/player';
@@ -43,7 +44,6 @@ export function ProductDetailsPage() {
           .from('products')
           .select(`
             *,
-            producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
             genre:genres(*),
             mood:moods(*)
           `)
@@ -65,7 +65,23 @@ export function ProductDetailsPage() {
         }
 
         if (!isCancelled) {
-          setProduct((data as ProductWithRelations | null) ?? null);
+          const row = (data as ProductWithRelations | null) ?? null;
+          if (!row) {
+            setProduct(null);
+          } else {
+            const producerProfilesMap = await fetchPublicProducerProfilesMap([row.producer_id]);
+            const producer = producerProfilesMap.get(row.producer_id);
+            setProduct({
+              ...row,
+              producer: producer
+                ? {
+                    id: producer.user_id,
+                    username: producer.username,
+                    avatar_url: producer.avatar_url,
+                  }
+                : undefined,
+            } as ProductWithRelations);
+          }
         }
       } catch (e) {
         if (!isCancelled) {

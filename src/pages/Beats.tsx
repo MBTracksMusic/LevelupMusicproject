@@ -6,6 +6,7 @@ import { Select } from '../components/ui/Select';
 import { ProductCard } from '../components/products/ProductCard';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations, Genre, Mood } from '../lib/supabase/types';
@@ -63,7 +64,6 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
           .from('products')
           .select(`
             *,
-            producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
             genre:genres(*),
             mood:moods(*)
           `)
@@ -117,7 +117,24 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
         const { data, error } = await query.limit(50);
         if (error) throw error;
-        setBeats((data || []) as ProductWithRelations[]);
+        const rows = ((data as ProductWithRelations[] | null) ?? []);
+        const producerProfilesMap = await fetchPublicProducerProfilesMap(
+          rows.map((row) => row.producer_id)
+        );
+        const withProducer = rows.map((row) => {
+          const producer = producerProfilesMap.get(row.producer_id);
+          return {
+            ...row,
+            producer: producer
+              ? {
+                  id: producer.user_id,
+                  username: producer.username,
+                  avatar_url: producer.avatar_url,
+                }
+              : undefined,
+          };
+        });
+        setBeats(withProducer as ProductWithRelations[]);
       } catch (error) {
         console.error('Error fetching beats:', error);
       } finally {

@@ -7,6 +7,9 @@ export type AdminPilotageMetrics = {
   subscription_mrr_estimate_cents: number;
   confirmed_signup_rate_pct: number;
   user_growth_30d_pct: number | null;
+  new_subscriptions_30d: number;
+  churned_subscriptions_30d: number;
+  net_subscriptions_growth_30d: number;
 };
 
 export type AdminPilotageDeltas = {
@@ -42,6 +45,9 @@ const DEFAULT_METRICS: AdminPilotageMetrics = {
   subscription_mrr_estimate_cents: 0,
   confirmed_signup_rate_pct: 0,
   user_growth_30d_pct: null,
+  new_subscriptions_30d: 0,
+  churned_subscriptions_30d: 0,
+  net_subscriptions_growth_30d: 0,
 };
 
 const DEFAULT_DELTAS: AdminPilotageDeltas = {
@@ -109,6 +115,18 @@ export function parsePilotageMetrics(data: unknown): AdminPilotageMetrics {
       DEFAULT_METRICS.confirmed_signup_rate_pct,
     ),
     user_growth_30d_pct: asNullableNumber(source.user_growth_30d_pct),
+    new_subscriptions_30d: asNumber(
+      source.new_subscriptions_30d,
+      DEFAULT_METRICS.new_subscriptions_30d,
+    ),
+    churned_subscriptions_30d: asNumber(
+      source.churned_subscriptions_30d,
+      DEFAULT_METRICS.churned_subscriptions_30d,
+    ),
+    net_subscriptions_growth_30d: asNumber(
+      source.net_subscriptions_growth_30d,
+      DEFAULT_METRICS.net_subscriptions_growth_30d,
+    ),
   };
 }
 

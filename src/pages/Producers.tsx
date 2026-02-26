@@ -4,11 +4,14 @@ import { Users } from 'lucide-react';
 import { supabase } from '../lib/supabase/client';
 
 interface ProducerListItem {
-  id: string;
+  user_id: string;
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
-  is_producer_active: boolean;
+  producer_tier: string | null;
+  social_links: Record<string, string> | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export function ProducersPage() {
@@ -22,9 +25,8 @@ export function ProducersPage() {
       setIsLoading(true);
       try {
         const { data, error } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, bio, is_producer_active')
-          .eq('is_producer_active', true)
+          .from('public_producer_profiles')
+          .select('user_id, username, avatar_url, producer_tier, bio, social_links, created_at, updated_at')
           .order('updated_at', { ascending: false });
 
         if (error) throw error;
@@ -101,11 +103,11 @@ export function ProducersPage() {
               );
 
               if (!producer.username) {
-                return <div key={producer.id}>{cardContent}</div>;
+                return <div key={producer.user_id}>{cardContent}</div>;
               }
 
               return (
-                <Link key={producer.id} to={`/producers/${producer.username}`}>
+                <Link key={producer.user_id} to={`/producers/${producer.username}`}>
                   {cardContent}
                 </Link>
               );

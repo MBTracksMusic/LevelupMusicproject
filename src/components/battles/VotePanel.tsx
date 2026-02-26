@@ -3,7 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth, useIsEmailVerified } from '../../lib/auth/hooks';
-import { useTranslation } from '../../lib/i18n';
+import { useTranslation, type TranslateFn } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { BattleWithRelations } from '../../lib/supabase/types';
 
@@ -17,7 +17,7 @@ interface VotePanelProps {
 
 const isVotingOpen = (status: BattleWithRelations['status']) => status === 'active';
 
-function toVoteMessage(message: string, t: (key: string) => string) {
+function toVoteMessage(message: string, t: TranslateFn) {
   if (message.includes('already_voted')) return t('battles.alreadyVoted');
   if (message.includes('vote_not_allowed_unverified_email')) return 'Votre email doit etre confirme pour voter.';
   if (message.includes('vote_not_allowed_unconfirmed_user')) return t('battles.mustBeConfirmed');

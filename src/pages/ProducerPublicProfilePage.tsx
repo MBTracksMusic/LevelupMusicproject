@@ -6,14 +6,13 @@ import type { ProducerTier } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 
 interface PublicProducerProfile {
-  id: string;
+  user_id: string;
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
   social_links: Record<string, string> | null;
   producer_tier: ProducerTier | null;
   created_at: string;
-  is_producer_active: boolean;
 }
 
 interface PublicProducerBeat {
@@ -95,10 +94,9 @@ export function ProducerPublicProfilePage() {
 
       try {
         const { data, error: profileFetchError } = await supabase
-          .from('user_profiles')
-          .select('id, username, avatar_url, bio, social_links, producer_tier, created_at, is_producer_active')
+          .from('public_producer_profiles')
+          .select('user_id, username, avatar_url, bio, social_links, producer_tier, created_at')
           .eq('username', username)
-          .eq('is_producer_active', true)
           .single();
 
         if (profileFetchError || !data) {
@@ -110,8 +108,10 @@ export function ProducerPublicProfilePage() {
           return;
         }
 
+        const producerRow = data as unknown as PublicProducerProfile;
+
         if (!isCancelled) {
-          setProducer(data as PublicProducerProfile);
+          setProducer(producerRow);
         }
 
         if (!isCancelled) {
@@ -123,7 +123,7 @@ export function ProducerPublicProfilePage() {
           supabase
             .from('products')
             .select('id, title, slug, cover_image_url, price, bpm, key_signature, created_at')
-            .eq('producer_id', data.id)
+            .eq('producer_id', producerRow.user_id)
             .eq('product_type', 'beat')
             .eq('is_published', true)
             .is('deleted_at', null)
@@ -132,7 +132,7 @@ export function ProducerPublicProfilePage() {
           supabase
             .from('battles')
             .select('id, title, slug, status, winner_id, producer1_id, producer2_id, created_at')
-            .or(`producer1_id.eq.${data.id},producer2_id.eq.${data.id}`)
+            .or(`producer1_id.eq.${producerRow.user_id},producer2_id.eq.${producerRow.user_id}`)
             .in('status', ['active', 'voting', 'completed'])
             .order('created_at', { ascending: false })
             .limit(10),
@@ -247,7 +247,7 @@ export function ProducerPublicProfilePage() {
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
               <p className="text-[11px] uppercase tracking-wide text-zinc-500">Victoires</p>
               <p className="text-base font-semibold text-white">
-                {battles.filter((battle) => battle.winner_id === producer.id).length}
+                {battles.filter((battle) => battle.winner_id === producer.user_id).length}
               </p>
             </div>
           </div>
@@ -369,7 +369,7 @@ export function ProducerPublicProfilePage() {
                         Statut: {battle.status}
                       </p>
                     </div>
-                    {battle.winner_id === producer.id && (
+                    {battle.winner_id === producer.user_id && (
                       <span className="shrink-0 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
                         🏆 Gagnant
                       </span>

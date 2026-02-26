@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../lib/auth/hooks';
 import { supabase } from '../../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import { useCartStore } from '../../lib/stores/cart';
 import { formatPrice } from '../../lib/utils/format';
 
@@ -17,6 +18,7 @@ interface HomeBeatRow {
   play_count: number;
   cover_image_url: string | null;
   is_sold: boolean;
+  producer_id: string;
   producer?: {
     id: string;
     username: string | null;
@@ -48,7 +50,7 @@ export function HomeFeaturedBeats() {
           play_count,
           cover_image_url,
           is_sold,
-          producer:user_profiles!products_producer_id_fkey(id, username)
+          producer_id
         `)
         .eq('product_type', 'beat')
         .eq('is_published', true)
@@ -61,7 +63,23 @@ export function HomeFeaturedBeats() {
           console.error('Error fetching featured beats for home:', error);
           setBeats([]);
         } else {
-          setBeats((data as HomeBeatRow[] | null) ?? []);
+          const rows = ((data as HomeBeatRow[] | null) ?? []);
+          const producerProfilesMap = await fetchPublicProducerProfilesMap(
+            rows.map((row) => row.producer_id)
+          );
+          const withProducer = rows.map((row) => {
+            const producer = producerProfilesMap.get(row.producer_id);
+            return {
+              ...row,
+              producer: producer
+                ? {
+                    id: producer.user_id,
+                    username: producer.username,
+                  }
+                : undefined,
+            };
+          });
+          setBeats(withProducer);
         }
         setIsLoading(false);
       }

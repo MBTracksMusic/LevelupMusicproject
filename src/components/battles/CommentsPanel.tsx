@@ -5,6 +5,7 @@ import { Card } from '../ui/Card';
 import { useAuth, useIsAdmin, useIsEmailVerified } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 
 interface BattleCommentItem {
   id: string;
@@ -55,8 +56,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
         is_hidden,
         hidden_reason,
         created_at,
-        updated_at,
-        user:user_profiles(id, username, avatar_url)
+        updated_at
       `)
       .eq('battle_id', battleId)
       .order('created_at', { ascending: true });
@@ -69,7 +69,23 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
       return;
     }
 
-    setComments((data as BattleCommentItem[] | null) ?? []);
+    const rows = ((data as BattleCommentItem[] | null) ?? []);
+    const producerProfilesMap = await fetchPublicProducerProfilesMap(rows.map((row) => row.user_id));
+    const hydrated = rows.map((row) => {
+      const profile = producerProfilesMap.get(row.user_id);
+      return {
+        ...row,
+        user: profile
+          ? {
+              id: profile.user_id,
+              username: profile.username,
+              avatar_url: profile.avatar_url,
+            }
+          : undefined,
+      };
+    });
+
+    setComments(hydrated);
     setIsLoading(false);
   }, [battleId]);
 

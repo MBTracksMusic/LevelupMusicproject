@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { useAuth, useIsEmailVerified } from '../lib/auth/hooks';
 import type { BattleWithRelations } from '../lib/supabase/types';
 
@@ -44,17 +45,49 @@ export function BattlesPage() {
             prize_description,
             created_at,
             updated_at,
-            producer1:user_profiles!battles_producer1_id_fkey(id, username, avatar_url),
-            producer2:user_profiles!battles_producer2_id_fkey(id, username, avatar_url),
             product1:products!battles_product1_id_fkey(id, title, slug, product_type, cover_image_url, price),
-            product2:products!battles_product2_id_fkey(id, title, slug, product_type, cover_image_url, price),
-            winner:user_profiles!battles_winner_id_fkey(id, username, avatar_url)
+            product2:products!battles_product2_id_fkey(id, title, slug, product_type, cover_image_url, price)
           `)
           .eq('status', filter)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setBattles((data || []) as BattleWithRelations[]);
+        const rows = ((data as BattleWithRelations[] | null) ?? []);
+        const producerProfilesMap = await fetchPublicProducerProfilesMap(
+          rows.flatMap((row) => [row.producer1_id, row.producer2_id, row.winner_id])
+        );
+        const withProducers = rows.map((row) => {
+          const producer1 = producerProfilesMap.get(row.producer1_id);
+          const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
+          const winner = row.winner_id ? producerProfilesMap.get(row.winner_id) : undefined;
+
+          return {
+            ...row,
+            producer1: producer1
+              ? {
+                  id: producer1.user_id,
+                  username: producer1.username,
+                  avatar_url: producer1.avatar_url,
+                }
+              : undefined,
+            producer2: producer2
+              ? {
+                  id: producer2.user_id,
+                  username: producer2.username,
+                  avatar_url: producer2.avatar_url,
+                }
+              : undefined,
+            winner: winner
+              ? {
+                  id: winner.user_id,
+                  username: winner.username,
+                  avatar_url: winner.avatar_url,
+                }
+              : undefined,
+          };
+        });
+
+        setBattles(withProducers as BattleWithRelations[]);
       } catch (error) {
         console.error('Error fetching battles:', error);
         setError('Impossible de charger les battles pour le moment.');
@@ -221,7 +254,7 @@ function BattleCard({ battle }: BattleCardProps) {
             )}
             <div>
               <p className="font-semibold text-white text-lg">
-                {battle.producer1?.username}
+                {battle.producer1?.username || 'Producteur 1'}
               </p>
               {battle.product1 && (
                 <p className="text-zinc-400 text-sm">{battle.product1.title}</p>
@@ -237,7 +270,7 @@ function BattleCard({ battle }: BattleCardProps) {
             {battle.status === 'completed' && battle.winner && (
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-4 h-4" />
-                <span className="text-sm">{battle.winner.username}</span>
+                <span className="text-sm">{battle.winner.username || 'Gagnant'}</span>
               </div>
             )}
           </div>
@@ -245,7 +278,7 @@ function BattleCard({ battle }: BattleCardProps) {
           <div className="flex-1 flex items-center justify-end gap-4">
             <div className="text-right">
               <p className="font-semibold text-white text-lg">
-                {battle.producer2?.username}
+                {battle.producer2?.username || 'Producteur 2'}
               </p>
               {battle.product2 && (
                 <p className="text-zinc-400 text-sm">{battle.product2.title}</p>

@@ -75,22 +75,17 @@ export async function updateProfile(updates: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data: currentProfile, error: fetchError } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (fetchError) throw fetchError;
-  if (!currentProfile) throw new Error('Profile not found');
+  const sanitizedUpdates = Object.fromEntries(
+    Object.entries(updates).filter(([, value]) => value !== undefined)
+  );
+  const updatePayload = {
+    ...sanitizedUpdates,
+    updated_at: new Date().toISOString(),
+  };
 
   const { error } = await supabase
     .from('user_profiles')
-    .update({
-      ...currentProfile,
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload as never)
     .eq('id', user.id);
 
   if (error) throw error;

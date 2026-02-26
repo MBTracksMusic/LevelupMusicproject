@@ -5,6 +5,7 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { supabase } from '../../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import type { BattleStatus } from '../../lib/supabase/types';
 
 interface HomeBattleRow {
@@ -56,9 +57,7 @@ export function HomeBattlesPreview() {
           slug,
           status,
           producer1_id,
-          producer2_id,
-          producer1:user_profiles!battles_producer1_id_fkey(id, username),
-          producer2:user_profiles!battles_producer2_id_fkey(id, username)
+          producer2_id
         `)
         .in('status', visibleStatuses)
         .order('created_at', { ascending: false })
@@ -69,7 +68,30 @@ export function HomeBattlesPreview() {
           console.error('Error fetching home battles preview:', error);
           setBattles([]);
         } else {
-          setBattles((data as HomeBattleRow[] | null) ?? []);
+          const rows = ((data as HomeBattleRow[] | null) ?? []);
+          const producerProfilesMap = await fetchPublicProducerProfilesMap(
+            rows.flatMap((row) => [row.producer1_id, row.producer2_id])
+          );
+          const withProducers = rows.map((row) => {
+            const producer1 = producerProfilesMap.get(row.producer1_id);
+            const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
+            return {
+              ...row,
+              producer1: producer1
+                ? {
+                    id: producer1.user_id,
+                    username: producer1.username,
+                  }
+                : undefined,
+              producer2: producer2
+                ? {
+                    id: producer2.user_id,
+                    username: producer2.username,
+                  }
+                : undefined,
+            };
+          });
+          setBattles(withProducers);
         }
         setIsLoading(false);
       }

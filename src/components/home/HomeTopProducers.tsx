@@ -5,14 +5,10 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { supabase } from '../../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 
 interface BattleWinnerRow {
   winner_id: string | null;
-  winner: {
-    id: string;
-    username: string | null;
-    avatar_url: string | null;
-  } | null;
 }
 
 interface RankedProducer {
@@ -38,10 +34,7 @@ export function HomeTopProducers() {
 
       const { data, error } = await supabase
         .from('battles')
-        .select(`
-          winner_id,
-          winner:user_profiles!battles_winner_id_fkey(id, username, avatar_url)
-        `)
+        .select('winner_id')
         .eq('status', 'completed')
         .not('winner_id', 'is', null);
 
@@ -65,13 +58,23 @@ export function HomeTopProducers() {
 
           winsByProducer.set(row.winner_id, {
             id: row.winner_id,
-            username: row.winner?.username ?? null,
-            avatar_url: row.winner?.avatar_url ?? null,
+            username: null,
+            avatar_url: null,
             wins: 1,
           });
         }
 
+        const producerProfilesMap = await fetchPublicProducerProfilesMap([...winsByProducer.keys()]);
+
         const ranking = [...winsByProducer.values()]
+          .map((producer) => {
+            const profile = producerProfilesMap.get(producer.id);
+            return {
+              ...producer,
+              username: profile?.username ?? producer.username,
+              avatar_url: profile?.avatar_url ?? producer.avatar_url,
+            };
+          })
           .sort((a, b) => {
             if (b.wins !== a.wins) return b.wins - a.wins;
             return (a.username || '').localeCompare(b.username || '', 'fr');

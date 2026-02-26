@@ -148,7 +148,7 @@ function AppContent() {
         <Route
           path="producer/upload"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireProducer>
               <UploadBeatPage />
             </ProtectedRoute>
           }

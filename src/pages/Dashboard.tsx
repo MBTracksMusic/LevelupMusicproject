@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
 import type { License, ProductWithRelations, Purchase } from '../lib/supabase/types';
+import { fetchPublicProducerProfilesMap, type PublicProducerProfileRow } from '../lib/supabase/publicProfiles';
 import { buildAudioStoragePathCandidates, extractStoragePathFromCandidate } from '../lib/utils/storage';
 import { formatPrice } from '../lib/utils/format';
 import { Card } from '../components/ui/Card';
@@ -21,6 +22,73 @@ interface DashboardPurchase extends Purchase {
 interface WishlistProductRow {
   product: ProductWithRelations | null;
 }
+
+interface ProducerSubscriptionSummary {
+  subscription_status: string;
+  current_period_end: string;
+  cancel_at_period_end: boolean;
+  stripe_subscription_id: string | null;
+}
+
+const toProducerPreview = (
+  publicProfile: PublicProducerProfileRow | undefined
+): ProductWithRelations['producer'] | undefined => {
+  if (!publicProfile) return undefined;
+  return {
+    id: publicProfile.user_id,
+    username: publicProfile.username,
+    avatar_url: publicProfile.avatar_url,
+  } as ProductWithRelations['producer'];
+};
+
+const EXPIRED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled', 'incomplete_expired']);
+
+const getSubscriptionDateLabel = (
+  subscriptionStatus: string | null | undefined,
+  cancelAtPeriodEnd: boolean | null | undefined,
+) => {
+  const normalizedStatus = (subscriptionStatus ?? '').toLowerCase();
+
+  if (normalizedStatus === 'active') {
+    return cancelAtPeriodEnd ? 'Fin d’accès' : 'Prochain prélèvement';
+  }
+
+  if (EXPIRED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
+    return 'Abonnement expiré le';
+  }
+
+  return 'Prochaine échéance';
+};
+
+const formatSubscriptionDate = (value: string | number | Date | null | undefined) => {
+  if (value === null || value === undefined) return 'N/A';
+
+  let parsedDate: Date | null = null;
+
+  if (value instanceof Date) {
+    parsedDate = value;
+  } else if (typeof value === 'number' && Number.isFinite(value)) {
+    const timestampMs = Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+    parsedDate = new Date(timestampMs);
+  } else if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return 'N/A';
+
+    if (/^-?\d+$/.test(trimmedValue)) {
+      const numericTimestamp = Number(trimmedValue);
+      if (!Number.isFinite(numericTimestamp)) return 'N/A';
+      const timestampMs = Math.abs(numericTimestamp) < 1_000_000_000_000
+        ? numericTimestamp * 1000
+        : numericTimestamp;
+      parsedDate = new Date(timestampMs);
+    } else {
+      parsedDate = new Date(trimmedValue);
+    }
+  }
+
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return 'N/A';
+  return parsedDate.toLocaleDateString('fr-FR');
+};
 
 const asNonEmptyString = (value: unknown) => {
   if (typeof value !== 'string') return null;
@@ -98,6 +166,8 @@ export function DashboardPage() {
   const [selectedLicensePurchase, setSelectedLicensePurchase] = useState<DashboardPurchase | null>(null);
   const [isPurchasesLoading, setIsPurchasesLoading] = useState(true);
   const [purchasesError, setPurchasesError] = useState<string | null>(null);
+  const [producerSubscription, setProducerSubscription] = useState<ProducerSubscriptionSummary | null>(null);
+  const [isProducerSubscriptionLoading, setIsProducerSubscriptionLoading] = useState(false);
 
   useEffect(() => {
     let isCancelled = false;
@@ -120,8 +190,7 @@ export function DashboardPage() {
           .select(`
             *,
             product:products!purchases_product_id_fkey(
-              *,
-              producer:user_profiles!products_producer_id_fkey(id, username, avatar_url)
+              *
             ),
             license:licenses!purchases_license_id_fkey(
               id,
@@ -148,7 +217,38 @@ export function DashboardPage() {
         }
 
         if (!isCancelled) {
-          setPurchases((data as DashboardPurchase[]) || []);
+          const rows = (data as DashboardPurchase[] | null) ?? [];
+          const producerIds = [...new Set(
+            rows
+              .map((purchase) => purchase.product?.producer_id)
+              .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          )];
+
+          let producerProfilesMap = new Map<string, PublicProducerProfileRow>();
+          if (producerIds.length > 0) {
+            try {
+              producerProfilesMap = await fetchPublicProducerProfilesMap(producerIds);
+            } catch (profilesError) {
+              console.error('Error loading public producer profiles for purchases:', profilesError);
+            }
+          }
+
+          const hydratedRows = rows.map((purchase) => {
+            if (!purchase.product) return purchase;
+
+            const producerProfile = toProducerPreview(producerProfilesMap.get(purchase.product.producer_id));
+            if (!producerProfile) return purchase;
+
+            return {
+              ...purchase,
+              product: {
+                ...purchase.product,
+                producer: producerProfile,
+              },
+            };
+          });
+
+          setPurchases(hydratedRows);
         }
       } catch (error) {
         console.error('Error loading purchases:', error);
@@ -195,7 +295,6 @@ export function DashboardPage() {
             .select(`
               product:products(
                 *,
-                producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
                 genre:genres(*),
                 mood:moods(*)
               )
@@ -221,7 +320,33 @@ export function DashboardPage() {
           const mappedProducts = rows
             .map((row) => row.product)
             .filter((product): product is ProductWithRelations => product !== null);
-          setRecentWishlist(mappedProducts);
+
+          const producerIds = [...new Set(
+            mappedProducts
+              .map((product) => product.producer_id)
+              .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          )];
+
+          let producerProfilesMap = new Map<string, PublicProducerProfileRow>();
+          if (producerIds.length > 0) {
+            try {
+              producerProfilesMap = await fetchPublicProducerProfilesMap(producerIds);
+            } catch (profilesError) {
+              console.error('Error loading public producer profiles for wishlist:', profilesError);
+            }
+          }
+
+          const hydratedProducts = mappedProducts.map((product) => {
+            const producerProfile = toProducerPreview(producerProfilesMap.get(product.producer_id));
+            if (!producerProfile) return product;
+
+            return {
+              ...product,
+              producer: producerProfile,
+            };
+          });
+
+          setRecentWishlist(hydratedProducts);
         }
 
         await fetchWishlist();
@@ -240,6 +365,50 @@ export function DashboardPage() {
       isCancelled = true;
     };
   }, [user?.id, fetchWishlist]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadProducerSubscription = async () => {
+      if (!user?.id) {
+        if (!isCancelled) {
+          setProducerSubscription(null);
+          setIsProducerSubscriptionLoading(false);
+        }
+        return;
+      }
+
+      setIsProducerSubscriptionLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('producer_subscriptions')
+          .select('subscription_status, current_period_end, cancel_at_period_end, stripe_subscription_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (!isCancelled) {
+          setProducerSubscription((data as ProducerSubscriptionSummary | null) ?? null);
+        }
+      } catch (error) {
+        console.error('Error loading producer subscription:', error);
+        if (!isCancelled) {
+          setProducerSubscription(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsProducerSubscriptionLoading(false);
+        }
+      }
+    };
+
+    void loadProducerSubscription();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -278,6 +447,15 @@ export function DashboardPage() {
   }, [profile?.role, user?.id]);
 
   const purchaseCount = purchases.length;
+  const producerSubscriptionStatus = producerSubscription?.subscription_status ?? null;
+  const nextProducerBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end);
+  const producerSubscriptionDateLabel = getSubscriptionDateLabel(
+    producerSubscription?.subscription_status,
+    producerSubscription?.cancel_at_period_end,
+  );
+  const producerAutoRenewLabel = producerSubscription
+    ? (producerSubscription.cancel_at_period_end ? 'Non' : 'Oui')
+    : '-';
 
   const stats = useMemo(
     () => [
@@ -303,16 +481,18 @@ export function DashboardPage() {
             onClick: () => navigate('/admin/battles'),
           }]
         : []),
-      ...(profile?.is_producer_active
+      ...((profile?.is_producer_active || profile?.role === 'producer' || producerSubscriptionStatus)
         ? [{
             label: 'Statut producteur',
-            value: 'Actif',
+            value: producerSubscriptionStatus || 'Aucun abonnement',
             icon: Music,
-            color: 'text-orange-400',
+            color: producerSubscriptionStatus === 'active' || producerSubscriptionStatus === 'trialing'
+              ? 'text-green-400'
+              : 'text-orange-400',
           }]
         : []),
     ],
-    [awaitingAdminCount, purchaseCount, wishlistCount, navigate, profile?.is_producer_active, profile?.role]
+    [awaitingAdminCount, purchaseCount, wishlistCount, navigate, producerSubscriptionStatus, profile?.is_producer_active, profile?.role]
   );
 
   const handleRecentWishlistToggle = async (productId: string) => {
@@ -552,12 +732,34 @@ export function DashboardPage() {
                   {roleLabels[profile?.role || 'visitor']}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between py-2">
+              <div className="flex items-center justify-between py-2 border-b border-zinc-800">
                 <span className="text-zinc-400">Producteur actif</span>
                 <Badge className={profile?.is_producer_active ? 'bg-green-600' : 'bg-zinc-700'}>
                   {profile?.is_producer_active ? 'Oui' : 'Non'}
                 </Badge>
               </div>
+              {(profile?.role === 'producer' || producerSubscription || isProducerSubscriptionLoading) && (
+                <>
+                  <div className="flex items-center justify-between py-2 border-b border-zinc-800">
+                    <span className="text-zinc-400">Statut abonnement</span>
+                    <span className="text-white font-medium">
+                      {isProducerSubscriptionLoading ? 'Chargement...' : (producerSubscriptionStatus || 'Aucun abonnement')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b border-zinc-800">
+                    <span className="text-zinc-400">{producerSubscriptionDateLabel}</span>
+                    <span className="text-white font-medium">
+                      {isProducerSubscriptionLoading ? '...' : nextProducerBillingDate}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-zinc-400">Renouvellement auto</span>
+                    <Badge className={producerSubscription && !producerSubscription.cancel_at_period_end ? 'bg-green-600' : 'bg-zinc-700'}>
+                      {isProducerSubscriptionLoading ? '...' : producerAutoRenewLabel}
+                    </Badge>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 

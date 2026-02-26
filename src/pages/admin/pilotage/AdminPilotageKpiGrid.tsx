@@ -67,14 +67,22 @@ interface KpiCardProps {
   label: string;
   value: string;
   delta?: number | null;
+  badge?: string;
 }
 
-function KpiCard({ label, value, delta }: KpiCardProps) {
+function KpiCard({ label, value, delta, badge }: KpiCardProps) {
   return (
     <Card className="p-4 sm:p-5 border-zinc-800">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.08em] text-zinc-500">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.08em] text-zinc-500">{label}</p>
+            {badge && (
+              <span className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                {badge}
+              </span>
+            )}
+          </div>
           <p className="text-2xl font-bold text-white mt-2">{value}</p>
         </div>
         {typeof delta !== 'undefined' && <DeltaBadge delta={delta} />}
@@ -97,6 +105,13 @@ export function AdminPilotageKpiGrid({
   deltas,
   businessMetrics,
 }: AdminPilotageKpiGridProps) {
+  const netSubscriptionsGrowth = numberFormatter.format(Math.abs(metrics.net_subscriptions_growth_30d));
+  const netSubscriptionsGrowthLabel = metrics.net_subscriptions_growth_30d > 0
+    ? `+${netSubscriptionsGrowth}`
+    : metrics.net_subscriptions_growth_30d < 0
+      ? `-${netSubscriptionsGrowth}`
+      : '0';
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -126,6 +141,21 @@ export function AdminPilotageKpiGrid({
         <KpiCard
           label="MRR abonnements estime"
           value={formatCents(metrics.subscription_mrr_estimate_cents)}
+        />
+        <KpiCard
+          label="Nouveaux abonnements"
+          value={numberFormatter.format(metrics.new_subscriptions_30d)}
+          badge="30j"
+        />
+        <KpiCard
+          label="Desabonnements"
+          value={numberFormatter.format(metrics.churned_subscriptions_30d)}
+          badge="30j"
+        />
+        <KpiCard
+          label="Croissance nette abonnements"
+          value={netSubscriptionsGrowthLabel}
+          badge="30j"
         />
         <KpiCard
           label="Taux inscriptions confirmees"

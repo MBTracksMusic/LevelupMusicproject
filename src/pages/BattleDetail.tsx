@@ -8,6 +8,7 @@ import { CommentsPanel } from '../components/battles/CommentsPanel';
 import { BattleAudioPlayer } from '../components/audio/BattleAudioPlayer';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
+import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import type { BattleWithRelations, ProductWithRelations } from '../lib/supabase/types';
 
 function getStatusVariant(status: BattleWithRelations['status']) {
@@ -84,11 +85,8 @@ export function BattleDetailPage() {
           prize_description,
           created_at,
           updated_at,
-          producer1:user_profiles!battles_producer1_id_fkey(id, username, avatar_url),
-          producer2:user_profiles!battles_producer2_id_fkey(id, username, avatar_url),
           product1:products!battles_product1_id_fkey(id, title, slug, product_type, preview_url, cover_image_url, price),
-          product2:products!battles_product2_id_fkey(id, title, slug, product_type, preview_url, cover_image_url, price),
-          winner:user_profiles!battles_winner_id_fkey(id, username, avatar_url)
+          product2:products!battles_product2_id_fkey(id, title, slug, product_type, preview_url, cover_image_url, price)
         `)
         .eq('slug', slug)
         .maybeSingle();
@@ -97,7 +95,44 @@ export function BattleDetailPage() {
         throw fetchError;
       }
 
-      setBattle((data as BattleWithRelations | null) ?? null);
+      const row = (data as BattleWithRelations | null) ?? null;
+      if (!row) {
+        setBattle(null);
+      } else {
+        const producerProfilesMap = await fetchPublicProducerProfilesMap([
+          row.producer1_id,
+          row.producer2_id,
+          row.winner_id,
+        ]);
+        const producer1 = producerProfilesMap.get(row.producer1_id);
+        const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
+        const winner = row.winner_id ? producerProfilesMap.get(row.winner_id) : undefined;
+
+        setBattle({
+          ...row,
+          producer1: producer1
+            ? {
+                id: producer1.user_id,
+                username: producer1.username,
+                avatar_url: producer1.avatar_url,
+              }
+            : undefined,
+          producer2: producer2
+            ? {
+                id: producer2.user_id,
+                username: producer2.username,
+                avatar_url: producer2.avatar_url,
+              }
+            : undefined,
+          winner: winner
+            ? {
+                id: winner.user_id,
+                username: winner.username,
+                avatar_url: winner.avatar_url,
+              }
+            : undefined,
+        } as BattleWithRelations);
+      }
     } catch (fetchErr) {
       console.error('Error fetching battle detail:', fetchErr);
       setBattle(null);

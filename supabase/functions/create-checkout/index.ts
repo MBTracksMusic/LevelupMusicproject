@@ -28,40 +28,6 @@ const asNonEmptyString = (value: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const getProjectRefFromSupabaseUrl = (supabaseUrl: string | null | undefined) => {
-  if (!supabaseUrl) return null;
-  try {
-    const host = new URL(supabaseUrl).hostname;
-    return host.split(".")[0] || null;
-  } catch {
-    return null;
-  }
-};
-
-const getSupabaseHost = (supabaseUrl: string | null | undefined) => {
-  if (!supabaseUrl) return null;
-  try {
-    return new URL(supabaseUrl).hostname;
-  } catch {
-    return null;
-  }
-};
-
-const decodeJwtPayload = (jwt: string | undefined) => {
-  if (!jwt) return null;
-  const payload = jwt.split(".")[1];
-  if (!payload) return null;
-
-  try {
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const decoded = atob(padded);
-    return JSON.parse(decoded) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-};
-
 async function resolveCheckoutLicense(
   supabaseAdmin: ReturnType<typeof createClient>,
   params: {
@@ -161,20 +127,6 @@ Deno.serve(async (req: Request) => {
     const relayAuthHeader = req.headers.get("x-supabase-auth");
     const rawJwtHeader = relayAuthHeader || authorizationHeader;
     const jwt = rawJwtHeader?.replace(/^Bearer\s+/i, "").trim();
-    const runtimeSupabaseUrl = Deno.env.get("SUPABASE_URL");
-    const jwtPayload = decodeJwtPayload(jwt);
-
-    console.log("create-checkout jwt debug", {
-      supabaseUrlHost: getSupabaseHost(runtimeSupabaseUrl),
-      supabaseProjectRef: getProjectRefFromSupabaseUrl(runtimeSupabaseUrl),
-      serviceRoleKeyDefined: Boolean(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")),
-      jwtReceivedType: typeof jwt,
-      jwtSampleStart: jwt?.slice(0, 20) ?? null,
-      jwtRef: typeof jwtPayload?.ref === "string" ? jwtPayload.ref : null,
-      jwtRole: typeof jwtPayload?.role === "string" ? jwtPayload.role : null,
-      jwtAud: typeof jwtPayload?.aud === "string" ? jwtPayload.aud : null,
-      jwtExp: typeof jwtPayload?.exp === "number" ? jwtPayload.exp : null,
-    });
 
     if (!jwt) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

@@ -1,6 +1,6 @@
-import type { TranslationKeys } from './fr';
+import type { TranslationSchema } from './fr';
 
-export const de: TranslationKeys = {
+export const de: TranslationSchema = {
   common: {
     loading: 'Laden...',
     error: 'Ein Fehler ist aufgetreten',
@@ -185,6 +185,17 @@ export const de: TranslationKeys = {
     draft: 'Entwurf',
     subscriptionRequired: 'Produzenten-Abonnement erforderlich',
     subscribeNow: 'Jetzt abonnieren',
+    chooseAudioFile: 'Audiodatei auswahlen',
+    chooseCoverFile: 'Coverbild auswahlen',
+    replaceFile: 'Datei ersetzen',
+    audioRequirements: 'WAV oder MP3 · max 50 MB · max 10 min',
+    coverRequirements: 'JPG oder PNG · max 5 MB · min 500x500 px',
+    fileMissing: 'Keine Datei',
+    fileError: 'Dateifehler',
+    fileReady: 'Datei bereit',
+    uploading: 'Upload lauft',
+    duration: 'Dauer',
+    audioRequired: 'Fugen Sie vor der Veroffentlichung eine Audiodatei hinzu',
   },
   user: {
     dashboard: 'Mein Konto',

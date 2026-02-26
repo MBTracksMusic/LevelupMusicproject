@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { fr, type TranslationKeys } from './translations/fr';
+import { fr, type TranslationSchema } from './translations/fr';
 import { en } from './translations/en';
 import { de } from './translations/de';
 
 export type Language = 'fr' | 'en' | 'de';
 
-const translations: Record<Language, TranslationKeys> = {
+const translations: Record<Language, TranslationSchema> = {
   fr,
   en,
   de,
@@ -37,7 +37,8 @@ type NestedKeyOf<T> = T extends object
     }[keyof T & string]
   : never;
 
-type TranslationKey = NestedKeyOf<TranslationKeys>;
+export type TranslationKey = NestedKeyOf<typeof fr>;
+export type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 function getNestedValue(obj: unknown, path: string): string {
   const keys = path.split('.');
@@ -56,7 +57,7 @@ export function useTranslation() {
   const { language, setLanguage } = useI18nStore();
   const t = translations[language];
 
-  const translate = (key: TranslationKey, params?: Record<string, string | number>): string => {
+  const translate: TranslateFn = (key, params) => {
     let text = getNestedValue(t, key);
 
     if (params) {

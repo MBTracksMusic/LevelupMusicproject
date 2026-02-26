@@ -1,3 +1,5 @@
+import type { Database as GeneratedDatabase } from './database.types';
+
 export type UserRole = 'visitor' | 'user' | 'confirmed_user' | 'producer' | 'admin';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused';
 export type ProductType = 'beat' | 'exclusive' | 'kit';
@@ -85,36 +87,7 @@ export interface Mood {
   created_at: string;
 }
 
-export interface Product {
-  id: string;
-  producer_id: string;
-  title: string;
-  slug: string;
-  description: string | null;
-  product_type: ProductType;
-  genre_id: string | null;
-  mood_id: string | null;
-  bpm: number | null;
-  key_signature: string | null;
-  price: number;
-  preview_url: string | null;
-  master_url: string | null;
-  exclusive_preview_url: string | null;
-  cover_image_url: string | null;
-  is_exclusive: boolean;
-  is_sold: boolean;
-  sold_at: string | null;
-  sold_to_user_id: string | null;
-  is_published: boolean;
-  play_count: number;
-  tags: string[];
-  duration_seconds: number | null;
-  file_format: string;
-  license_terms: Record<string, unknown>;
-  deleted_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type Product = GeneratedDatabase['public']['Tables']['products']['Row'];
 
 export interface ProductWithRelations extends Product {
   producer?: UserProfile;
@@ -313,94 +286,4 @@ export interface AppSetting {
   updated_at: string;
 }
 
-export interface Database {
-  public: {
-    Tables: {
-      user_profiles: {
-        Row: UserProfile;
-        Insert: Partial<UserProfile> & { id: string; email: string };
-        Update: Partial<UserProfile>;
-      };
-      genres: {
-        Row: Genre;
-        Insert: Partial<Genre>;
-        Update: Partial<Genre>;
-      };
-      moods: {
-        Row: Mood;
-        Insert: Partial<Mood>;
-        Update: Partial<Mood>;
-      };
-      products: {
-        Row: Product;
-        Insert: Partial<Product> & { producer_id: string; title: string; product_type: ProductType; price: number };
-        Update: Partial<Product>;
-      };
-      licenses: {
-        Row: License;
-        Insert: Partial<License> & { name: string; price: number };
-        Update: Partial<License>;
-      };
-      product_files: {
-        Row: ProductFile;
-        Insert: Partial<ProductFile> & { product_id: string; file_name: string; file_url: string };
-        Update: Partial<ProductFile>;
-      };
-      purchases: {
-        Row: Purchase;
-        Insert: Partial<Purchase>;
-        Update: Partial<Purchase>;
-      };
-      entitlements: {
-        Row: Entitlement;
-        Insert: Partial<Entitlement>;
-        Update: Partial<Entitlement>;
-      };
-      battles: {
-        Row: Battle;
-        Insert: Partial<Battle> & { title: string; producer1_id: string };
-        Update: Partial<Battle>;
-      };
-      battle_votes: {
-        Row: BattleVote;
-        Insert: Partial<BattleVote> & { battle_id: string; user_id: string; voted_for_producer_id: string };
-        Update: Partial<BattleVote>;
-      };
-      battle_comments: {
-        Row: BattleComment;
-        Insert: Partial<BattleComment> & { battle_id: string; user_id: string; content: string };
-        Update: Partial<BattleComment>;
-      };
-      ai_admin_actions: {
-        Row: AiAdminAction;
-        Insert: Partial<AiAdminAction> & { action_type: AiAdminActionType; entity_type: AiAdminEntityType; entity_id: string };
-        Update: Partial<AiAdminAction>;
-      };
-      ai_training_feedback: {
-        Row: AiTrainingFeedback;
-        Insert: Partial<AiTrainingFeedback> & { action_id: string };
-        Update: Partial<AiTrainingFeedback>;
-      };
-      admin_notifications: {
-        Row: AdminNotification;
-        Insert: Partial<AdminNotification> & { user_id: string; type: string };
-        Update: Partial<AdminNotification>;
-      };
-      cart_items: {
-        Row: CartItem;
-        Insert: Partial<CartItem> & { user_id: string; product_id: string };
-        Update: Partial<CartItem>;
-      };
-      wishlists: {
-        Row: WishlistItem;
-        Insert: Partial<WishlistItem> & { user_id: string; product_id: string };
-        Update: Partial<WishlistItem>;
-      };
-      app_settings: {
-        Row: AppSetting;
-        Insert: Partial<AppSetting> & { key: string; value: Record<string, unknown> };
-        Update: Partial<AppSetting>;
-      };
-    };
-  };
-}
+export type { Database, Json } from './database.types';
