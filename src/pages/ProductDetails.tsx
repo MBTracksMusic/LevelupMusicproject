@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 import { usePlayerStore } from '../lib/stores/player';
@@ -43,9 +44,9 @@ export function ProductDetailsPage() {
         let query = supabase
           .from('products')
           .select(`
-            *,
-            genre:genres(*),
-            mood:moods(*)
+            ${PRODUCT_SAFE_COLUMNS},
+            genre:genres(${GENRE_SAFE_COLUMNS}),
+            mood:moods(${MOOD_SAFE_COLUMNS})
           `)
           .eq('slug', slug)
           .eq('is_published', true);
@@ -103,10 +104,11 @@ export function ProductDetailsPage() {
   }, [slug, routePrefix]);
 
   const isCurrentTrack = currentTrack?.id === product?.id;
-  const isPlayingCurrent = isCurrentTrack && isPlaying;
+  const hasPreview = Boolean(product?.preview_url?.trim());
+  const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
 
   const handlePlay = () => {
-    if (!product) return;
+    if (!product || !hasPreview) return;
 
     if (isCurrentTrack) {
       setIsPlaying(!isPlaying);
@@ -199,8 +201,9 @@ export function ProductDetailsPage() {
             <div className="flex items-center gap-3 mb-6">
               <button
                 onClick={handlePlay}
-                className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform"
-                aria-label={isPlayingCurrent ? 'Pause' : 'Play'}
+                disabled={!hasPreview}
+                className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={hasPreview ? (isPlayingCurrent ? 'Pause' : 'Play') : 'Preview unavailable'}
               >
                 {isPlayingCurrent ? (
                   <Pause className="w-5 h-5 text-zinc-900" fill="currentColor" />
@@ -211,6 +214,10 @@ export function ProductDetailsPage() {
 
               <span className="text-3xl font-bold text-white">{formatPrice(product.price)}</span>
             </div>
+
+            {!hasPreview && (
+              <p className="mb-6 text-sm text-zinc-500">Preview unavailable</p>
+            )}
 
             {!product.is_sold && isAuthenticated && (
               <Button

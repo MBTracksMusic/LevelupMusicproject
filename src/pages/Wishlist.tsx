@@ -6,6 +6,7 @@ import { ProductCard } from '../components/products/ProductCard';
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations } from '../lib/supabase/types';
 
@@ -42,10 +43,10 @@ export function WishlistPage() {
           .from('wishlists')
           .select(`
             product:products(
-              *,
+              ${PRODUCT_SAFE_COLUMNS},
               producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
-              genre:genres(*),
-              mood:moods(*)
+              genre:genres(${GENRE_SAFE_COLUMNS}),
+              mood:moods(${MOOD_SAFE_COLUMNS})
             )
           `)
           .eq('user_id', user.id)
@@ -194,4 +195,3 @@ export function WishlistPage() {
     </div>
   );
 }
-

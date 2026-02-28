@@ -27,6 +27,7 @@ export const PRODUCT_SAFE_COLUMNS = [
   'watermark_profile_id',
   'created_at',
   'updated_at',
+  'deleted_at',
 ].join(', ');
 
 export const PRODUCT_RELATIONS_COLUMNS = [

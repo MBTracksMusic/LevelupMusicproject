@@ -28,15 +28,8 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_AUDIO_DURATION = 10 * 60; // 10 minutes in seconds
 const MIN_IMAGE_DIMENSION = 500; // px
 
-const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
-const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
+const MASTER_BUCKET = import.meta.env.VITE_SUPABASE_MASTER_BUCKET || 'beats-masters';
 const COVER_BUCKET = import.meta.env.VITE_SUPABASE_COVER_BUCKET || 'beats-covers';
-const AUDIO_BUCKET_CANDIDATES = [
-  AUDIO_BUCKET,
-  WATERMARKED_BUCKET,
-  'beats-audio',
-  'beats-watermarked',
-].filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
@@ -52,16 +45,6 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   }
 
   return fallback;
-};
-
-const isBucketFallbackCandidateError = (error: unknown) => {
-  const message = getErrorMessage(error, '').toLowerCase();
-  return (
-    (message.includes('bucket') && message.includes('not found')) ||
-    message.includes('row-level security') ||
-    message.includes('permission denied') ||
-    message.includes('not authorized')
-  );
 };
 
 const isProductSchemaMismatchError = (error: unknown) => {
@@ -99,6 +82,7 @@ export function UploadBeatPage() {
   const [description, setDescription] = useState('');
   const [bpm, setBpm] = useState('');
   const [keySignature, setKeySignature] = useState('');
+  const [isWatermarkProcessing, setIsWatermarkProcessing] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -329,12 +313,12 @@ export function UploadBeatPage() {
       image: imageFile ? 'uploading' : 'idle',
     });
     setUploadProgress({ audio: 0, image: 0 });
+    setIsWatermarkProcessing(false);
 
     const timestamp = Date.now();
     const slug = `${slugify(trimmedTitle)}-${timestamp}`;
     const priceCents = Math.round(priceValue * 100);
     let audioPath = '';
-    let audioBucketUsed = AUDIO_BUCKET;
     let coverPath = '';
 
     try {
@@ -346,32 +330,22 @@ export function UploadBeatPage() {
 
       audioPath = `${producerId}/audio/${timestamp}-${audioFile.name.replace(/\s+/g, '-')}`;
       setUploadProgress((prev) => ({ ...prev, audio: 15 }));
-      let audioStoragePath: string | null = null;
-      let lastAudioError: unknown = null;
+      const { data: audioData, error: audioError } = await supabase.storage
+        .from(MASTER_BUCKET)
+        .upload(audioPath, audioFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
 
-      for (const candidateBucket of AUDIO_BUCKET_CANDIDATES) {
-        const { data: audioData, error: audioError } = await supabase.storage
-          .from(candidateBucket)
-          .upload(audioPath, audioFile, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-        if (!audioError) {
-          audioBucketUsed = candidateBucket;
-          audioStoragePath = normalizeStoragePath(audioData?.path || audioPath, candidateBucket);
-          break;
-        }
-
-        lastAudioError = audioError;
-        if (!isBucketFallbackCandidateError(audioError)) {
-          break;
-        }
+      if (audioError) {
+        throw audioError;
       }
 
-      if (!audioStoragePath) {
-        throw lastAudioError ?? new Error('Echec upload audio');
+      const normalizedMasterPath = normalizeStoragePath(audioData?.path || audioPath, MASTER_BUCKET);
+      if (!normalizedMasterPath) {
+        throw new Error('Echec upload master: chemin invalide.');
       }
+      const masterStorageReference = `${MASTER_BUCKET}/${normalizedMasterPath}`;
 
       setUploadStatus((prev) => ({ ...prev, audio: 'success' }));
       setUploadProgress((prev) => ({ ...prev, audio: 100 }));
@@ -412,20 +386,19 @@ export function UploadBeatPage() {
 
       const legacyPayload = {
         ...basePayload,
-        preview_url: audioStoragePath,
-        master_url: audioStoragePath,
+        preview_url: null,
+        master_url: masterStorageReference,
       };
 
       const modernPayload = {
         ...basePayload,
-        preview_url: audioStoragePath,
-        watermarked_path: audioStoragePath,
-        master_path: audioStoragePath,
+        preview_url: null,
+        watermarked_path: null,
+        master_path: masterStorageReference,
+        master_url: masterStorageReference,
       };
 
-      const payloads = audioBucketUsed === 'beats-watermarked'
-        ? [modernPayload, legacyPayload]
-        : [legacyPayload, modernPayload];
+      const payloads = [modernPayload, legacyPayload];
 
       let productError: unknown = null;
       for (const payload of payloads) {
@@ -445,7 +418,8 @@ export function UploadBeatPage() {
         throw productError;
       }
 
-      toast.success('Beat publié avec succès !');
+      setIsWatermarkProcessing(true);
+      toast.success('Beat publié. Traitement watermark en cours.');
       setErrors({});
       setTitle('');
       setPrice('');
@@ -752,6 +726,12 @@ export function UploadBeatPage() {
             <div className="flex items-start gap-2 rounded-lg border border-red-800/60 bg-red-900/10 px-3 py-2 text-sm text-red-200">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>{errors.form}</span>
+            </div>
+          )}
+
+          {isWatermarkProcessing && (
+            <div className="rounded-lg border border-amber-700/60 bg-amber-900/15 px-3 py-2 text-sm text-amber-200">
+              Traitement en cours: la preview watermarked n'est pas encore disponible.
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../supabase/client';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../supabase/selects';
 import type { CartItemWithProduct, ProductWithRelations } from '../supabase/types';
 
 interface CartState {
@@ -31,10 +32,10 @@ export const useCartStore = create<CartState>((set, get) => ({
         .select(`
           *,
           product:products(
-            *,
+            ${PRODUCT_SAFE_COLUMNS},
             producer:user_profiles!products_producer_id_fkey(id, username, avatar_url),
-            genre:genres(*),
-            mood:moods(*)
+            genre:genres(${GENRE_SAFE_COLUMNS}),
+            mood:moods(${MOOD_SAFE_COLUMNS})
           )
         `)
         .eq('user_id', user.id);

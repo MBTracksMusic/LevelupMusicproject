@@ -4,15 +4,6 @@ import type { ProductWithRelations } from '../../lib/supabase/types';
 import { supabase } from '../../lib/supabase/client';
 import { usePlayerStore } from '../../lib/stores/player';
 
-const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
-const LEGACY_AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
-const KNOWN_AUDIO_BUCKETS = [
-  WATERMARKED_BUCKET,
-  LEGACY_AUDIO_BUCKET,
-  'beats-watermarked',
-  'beats-audio',
-].filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
-
 const describeMediaError = (error: MediaError | null) => {
   if (!error) return 'Playback error';
   switch (error.code) {
@@ -29,83 +20,9 @@ const describeMediaError = (error: MediaError | null) => {
   }
 };
 
-const extractBucketAndPathFromStorageUrl = (value: string) => {
-  try {
-    const parsedUrl = new URL(value);
-    const segments = parsedUrl.pathname.split('/').filter(Boolean);
-
-    const objectIndex = segments.findIndex((segment) => segment === 'object');
-    if (objectIndex >= 0 && objectIndex + 2 < segments.length) {
-      const bucket = segments[objectIndex + 2];
-      const path = decodeURIComponent(segments.slice(objectIndex + 3).join('/'));
-      if (bucket && path) {
-        return { bucket, path };
-      }
-    }
-
-    const bucketIndex = segments.findIndex((segment) => KNOWN_AUDIO_BUCKETS.includes(segment));
-    if (bucketIndex >= 0) {
-      const bucket = segments[bucketIndex];
-      const path = decodeURIComponent(segments.slice(bucketIndex + 1).join('/'));
-      if (bucket && path) {
-        return { bucket, path };
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-};
-
-const normalizeAudioPath = (value: string) => {
-  const trimmed = value.trim().replace(/^\/+/, '');
-  if (!trimmed) return null;
-
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    if (trimmed === bucket) return null;
-    if (trimmed.startsWith(`${bucket}/`)) {
-      return trimmed.slice(bucket.length + 1);
-    }
-  }
-
-  return trimmed;
-};
-
-const resolveWatermarkedUrls = async (candidate: string | null) => {
-  if (!candidate) return [];
-
-  const candidates: string[] = [];
-  let normalizedPath: string | null = null;
-
-  if (/^https?:\/\//i.test(candidate)) {
-    candidates.push(candidate);
-    const parsed = extractBucketAndPathFromStorageUrl(candidate);
-    normalizedPath = parsed?.path ?? null;
-  } else {
-    normalizedPath = normalizeAudioPath(candidate);
-  }
-
-  if (!normalizedPath) {
-    return [...new Set(candidates)];
-  }
-
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    const publicUrl = supabase.storage.from(bucket).getPublicUrl(normalizedPath).data.publicUrl;
-    if (publicUrl) {
-      candidates.push(publicUrl);
-    }
-  }
-
-  // Some deployments still keep preview files in private legacy bucket.
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(normalizedPath, 120);
-    if (data?.signedUrl) {
-      candidates.push(data.signedUrl);
-    }
-  }
-
-  return [...new Set(candidates)];
+const resolvePreviewUrls = async (candidate: string | null | undefined) => {
+  const trimmed = candidate?.trim() ?? '';
+  return trimmed ? [trimmed] : [];
 };
 
 interface AudioPlayerProps {
@@ -148,32 +65,15 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
       setSourceCandidateIndex(0);
       setGlobalPlaying(false);
 
-      const watermarkedCandidate =
-        track?.watermarked_path ?? track?.preview_url ?? track?.exclusive_preview_url ?? null;
-      const watermarkedUrls = await resolveWatermarkedUrls(watermarkedCandidate);
-      if (watermarkedUrls.length === 0) {
+      const previewUrls = await resolvePreviewUrls(track?.preview_url);
+      if (previewUrls.length === 0) {
         setLoadingUrl(false);
-        setErrorMessage('Source audio indisponible');
+        setErrorMessage('Preview unavailable');
         return;
       }
 
-      let playbackUrls = [...watermarkedUrls];
-
-      if (track?.id) {
-        const { data: masterData, error: masterError } = await supabase.functions.invoke<{
-          url: string;
-          expires_in: number;
-        }>('get-master-url', {
-          body: { product_id: track.id, expires_in: 120 },
-        });
-
-        if (!isCancelled && !masterError && masterData?.url) {
-          playbackUrls = [masterData.url, ...playbackUrls];
-        }
-      }
-
       if (!isCancelled) {
-        const uniqueUrls = [...new Set(playbackUrls)];
+        const uniqueUrls = [...new Set(previewUrls)];
         setResolvedSourceCandidates(uniqueUrls);
         setSourceCandidateIndex(0);
         setResolvedSource(uniqueUrls[0] ?? null);
@@ -186,7 +86,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     return () => {
       isCancelled = true;
     };
-  }, [track?.id, track?.watermarked_path, track?.preview_url, track?.exclusive_preview_url, setGlobalPlaying]);
+  }, [track?.id, track?.preview_url, setGlobalPlaying]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -308,16 +208,16 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     if (hasCountedCurrentTrackRef.current) return;
     hasCountedCurrentTrackRef.current = true;
 
-    void supabase
-      .rpc('increment_play_count', { p_product_id: productId })
-      .then(({ error }) => {
+    void (async () => {
+      try {
+        const { error } = await supabase.rpc('increment_play_count', { p_product_id: productId });
         if (error) {
           console.error('Play count increment error:', error);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Play count increment error:', err);
-      });
+      }
+    })();
   }, [setGlobalPlaying, track?.id]);
   const handlePauseEvent = useCallback(() => setGlobalPlaying(false), [setGlobalPlaying]);
 
@@ -343,6 +243,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const canPlay = !!resolvedSource && isReady && !loadingUrl && !errorMessage;
+  const hasPreview = Boolean(track?.preview_url?.trim());
 
   if (!track) {
     return (
@@ -472,6 +373,11 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
         {errorMessage && (
           <p className="text-xs text-rose-400 ml-4 truncate" aria-live="polite">
             {errorMessage}
+          </p>
+        )}
+        {!loadingUrl && !errorMessage && !hasPreview && (
+          <p className="text-xs text-zinc-400 ml-4 truncate" aria-live="polite">
+            Preview unavailable
           </p>
         )}
         {loadingUrl && !errorMessage && (

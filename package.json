@@ -13,6 +13,8 @@
     "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.6",
+    "@ffmpeg/util": "^0.12.1",
     "@supabase/supabase-js": "^2.57.4",
     "@tanstack/react-query": "^5.90.20",
     "chart.js": "^4.5.1",

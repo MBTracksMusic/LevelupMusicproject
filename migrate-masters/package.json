@@ -1,0 +1,23 @@
+{
+  "name": "levelupmusic-migrate-masters",
+  "private": true,
+  "version": "1.0.0",
+  "description": "One-off storage sync utility to copy missing canonical masters from beats-audio to beats-masters.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "ts-node src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}

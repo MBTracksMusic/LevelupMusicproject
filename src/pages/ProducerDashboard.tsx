@@ -4,6 +4,7 @@ import { Music, BarChart3, ShoppingBag, UploadCloud, Trash2 } from 'lucide-react
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
+import { PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { Database, Product, ProducerTier } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 import { extractStoragePathFromCandidate } from '../lib/utils/storage';
@@ -142,7 +143,7 @@ export function ProducerDashboardPage() {
             .is('deleted_at', null),
           supabase
             .from('products')
-            .select('*')
+            .select(PRODUCT_SAFE_COLUMNS)
             .eq('producer_id', profile.id)
             .is('deleted_at', null)
             .order('created_at', { ascending: false }),
@@ -433,7 +434,7 @@ export function ProducerDashboardPage() {
 
     // Collect storage paths to delete
     const audioPaths = [
-      extractStoragePathFromCandidate(product.master_url, AUDIO_BUCKET),
+      extractStoragePathFromCandidate(product.watermarked_path, AUDIO_BUCKET),
       extractStoragePathFromCandidate(product.preview_url, AUDIO_BUCKET),
       extractStoragePathFromCandidate(product.exclusive_preview_url, AUDIO_BUCKET),
     ].filter(Boolean) as string[];

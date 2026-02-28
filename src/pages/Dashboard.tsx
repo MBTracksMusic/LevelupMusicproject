@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
 import type { License, ProductWithRelations, Purchase } from '../lib/supabase/types';
 import { fetchPublicProducerProfilesMap, type PublicProducerProfileRow } from '../lib/supabase/publicProfiles';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import { buildAudioStoragePathCandidates, extractStoragePathFromCandidate } from '../lib/utils/storage';
 import { formatPrice } from '../lib/utils/format';
 import { Card } from '../components/ui/Card';
@@ -152,7 +153,8 @@ const roleColors: Record<string, string> = {
   admin: 'bg-rose-600',
 };
 
-const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
+const LEGACY_AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
+const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
@@ -190,7 +192,7 @@ export function DashboardPage() {
           .select(`
             *,
             product:products!purchases_product_id_fkey(
-              *
+              ${PRODUCT_SAFE_COLUMNS}
             ),
             license:licenses!purchases_license_id_fkey(
               id,
@@ -294,9 +296,9 @@ export function DashboardPage() {
             .from('wishlists')
             .select(`
               product:products(
-                *,
-                genre:genres(*),
-                mood:moods(*)
+                ${PRODUCT_SAFE_COLUMNS},
+                genre:genres(${GENRE_SAFE_COLUMNS}),
+                mood:moods(${MOOD_SAFE_COLUMNS})
               )
             `)
             .eq('user_id', user.id)
@@ -524,78 +526,125 @@ export function DashboardPage() {
     }
 
     return (
-      purchase.product?.master_url ||
+      purchase.product?.watermarked_path ||
       purchase.product?.preview_url ||
       purchase.product?.exclusive_preview_url ||
       null
     );
   };
 
-  const handleDownload = async (rawPath: string) => {
+  const forceFileDownload = async (url: string, fallbackName = 'track.mp3') => {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed with status ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fallbackName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(blobUrl);
+  };
+
+  const handleLegacyDownload = async (rawPath: string) => {
     const filePath = rawPath.trim();
     if (!filePath) return;
-
-    const forceFileDownload = async (url: string, fallbackName = 'track.mp3') => {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Download failed with status ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fallbackName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-    };
 
     if (filePath.startsWith('http')) {
       const fallbackName = decodeURIComponent(
         filePath.split('?')[0].split('/').pop() || 'track.mp3'
       );
+      await forceFileDownload(filePath, fallbackName);
+      return;
+    }
+
+    const buckets = [LEGACY_AUDIO_BUCKET, WATERMARKED_BUCKET, 'beats-audio', 'beats-watermarked']
+      .filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
+
+    let lastError: unknown = null;
+
+    for (const bucket of buckets) {
+      const resolvedPath = extractStoragePathFromCandidate(filePath, bucket) || filePath;
+      const fallbackName = decodeURIComponent(resolvedPath.split('/').pop() || 'track.mp3');
+      const pathCandidates = buildAudioStoragePathCandidates(resolvedPath);
+
+      for (const pathCandidate of pathCandidates) {
+        const publicUrl = supabase.storage.from(bucket).getPublicUrl(pathCandidate).data.publicUrl;
+        if (!publicUrl) continue;
+
+        try {
+          await forceFileDownload(publicUrl, fallbackName);
+          return;
+        } catch (downloadError) {
+          lastError = downloadError;
+        }
+      }
+    }
+
+    throw lastError ?? new Error('Legacy download failed');
+  };
+
+  const handleDownload = async (purchase: DashboardPurchase) => {
+    const productId = purchase.product_id || purchase.product?.id;
+
+    if (!productId) {
+      toast.error('Produit indisponible pour ce téléchargement.');
+      return;
+    }
+
+    const { data: masterData, error: masterError } = await supabase.functions.invoke<{
+      url: string;
+      expires_in: number;
+      bucket?: string;
+      path?: string;
+      code?: string;
+    }>('get-master-url', {
+      body: { product_id: productId },
+    });
+
+    if (!masterError && masterData?.url) {
       try {
-        await forceFileDownload(filePath, fallbackName);
+        const fallbackName = decodeURIComponent(
+          (masterData.path || masterData.url).split('?')[0].split('/').pop() || 'track.mp3'
+        );
+        await forceFileDownload(masterData.url, fallbackName);
         toast.success('Téléchargement lancé');
-      } catch (error) {
-        console.error('Download error:', error);
+      } catch (downloadError) {
+        console.error('Master download error:', downloadError);
         toast.error('Téléchargement impossible pour le moment.');
       }
       return;
     }
 
-    const resolvedPath =
-      extractStoragePathFromCandidate(filePath, AUDIO_BUCKET) || filePath;
-    const fallbackName = decodeURIComponent(
-      resolvedPath.split('/').pop() || 'track.mp3'
-    );
-
-    const pathCandidates = buildAudioStoragePathCandidates(resolvedPath);
-    let lastError: unknown = null;
-
-    for (const pathToSign of pathCandidates) {
-      const { data, error } = await supabase.storage
-        .from(AUDIO_BUCKET)
-        .createSignedUrl(pathToSign, 60, { download: fallbackName });
-
-      if (data?.signedUrl) {
-        try {
-          await forceFileDownload(data.signedUrl, fallbackName);
-          toast.success('Téléchargement lancé');
-        } catch (downloadError) {
-          console.error('Download error:', downloadError);
-          toast.error('Téléchargement impossible pour le moment.');
-        }
-        return;
-      }
-
-      lastError = error;
+    const legacyPath = getPurchaseFilePath(purchase);
+    if (!legacyPath) {
+      console.error('Download error: missing master and legacy path', {
+        purchaseId: purchase.id,
+        productId,
+        masterError,
+        masterData,
+      });
+      toast.error('Téléchargement impossible pour le moment.');
+      return;
     }
 
-    console.error('Download error:', lastError);
-    toast.error('Téléchargement impossible pour le moment.');
+    try {
+      await handleLegacyDownload(legacyPath);
+      toast.success('Téléchargement lancé');
+    } catch (legacyError) {
+      console.error('Legacy download error:', {
+        purchaseId: purchase.id,
+        productId,
+        masterError,
+        masterData,
+        legacyError,
+      });
+      toast.error('Téléchargement impossible pour le moment.');
+    }
   };
 
   const handleLicenseDownload = async (purchase: DashboardPurchase) => {
@@ -821,8 +870,7 @@ export function DashboardPage() {
               {purchases.map((purchase) => {
                 const product = purchase.product;
                 const license = purchase.license;
-                const track = { id: getPurchaseFilePath(purchase) };
-                const canDownload = Boolean(track.id);
+                const canDownload = Boolean(purchase.product_id);
                 const licenseName = license?.name || purchase.license_type || 'Licence';
                 const licenseDescription =
                   license?.description ||
@@ -871,8 +919,7 @@ export function DashboardPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!track.id) return;
-                            void handleDownload(track.id);
+                            void handleDownload(purchase);
                           }}
                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors"
                         >

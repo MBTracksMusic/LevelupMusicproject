@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { ProductWithRelations } from '../lib/supabase/types';
 
 interface HomeStatsPayload {
@@ -68,9 +69,9 @@ export function HomePage() {
         const { data } = await supabase
           .from('products')
           .select(`
-            *,
-            genre:genres(*),
-            mood:moods(*)
+            ${PRODUCT_SAFE_COLUMNS},
+            genre:genres(${GENRE_SAFE_COLUMNS}),
+            mood:moods(${MOOD_SAFE_COLUMNS})
           `)
           .eq('is_published', true)
           .eq('is_exclusive', true)

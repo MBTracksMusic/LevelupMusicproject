@@ -1,82 +1,5 @@
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, Volume2 } from 'lucide-react';
-import { supabase } from '../../lib/supabase/client';
-
-const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
-const AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
-const KNOWN_AUDIO_BUCKETS = [
-  WATERMARKED_BUCKET,
-  AUDIO_BUCKET,
-  'beats-watermarked',
-  'beats-audio',
-].filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
-
-const normalizeAudioPath = (value: string) => {
-  const trimmed = value.trim().replace(/^\/+/, '');
-  if (!trimmed) return null;
-
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    if (trimmed === bucket) return null;
-    if (trimmed.startsWith(`${bucket}/`)) {
-      return trimmed.slice(bucket.length + 1);
-    }
-  }
-
-  return trimmed;
-};
-
-const extractPathFromStorageUrl = (value: string) => {
-  try {
-    const parsed = new URL(value);
-    const segments = parsed.pathname.split('/').filter(Boolean);
-
-    const objectIndex = segments.findIndex((segment) => segment === 'object');
-    if (objectIndex >= 0 && objectIndex + 3 < segments.length) {
-      return decodeURIComponent(segments.slice(objectIndex + 3).join('/'));
-    }
-
-    const bucketIndex = segments.findIndex((segment) => KNOWN_AUDIO_BUCKETS.includes(segment));
-    if (bucketIndex >= 0) {
-      return decodeURIComponent(segments.slice(bucketIndex + 1).join('/'));
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-};
-
-const resolveSources = async (source: string) => {
-  const candidates = new Set<string>();
-  let normalizedPath: string | null = null;
-
-  if (/^https?:\/\//i.test(source)) {
-    candidates.add(source);
-    normalizedPath = extractPathFromStorageUrl(source);
-  } else {
-    normalizedPath = normalizeAudioPath(source);
-  }
-
-  if (!normalizedPath) {
-    return [...candidates];
-  }
-
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    const publicUrl = supabase.storage.from(bucket).getPublicUrl(normalizedPath).data.publicUrl;
-    if (publicUrl) {
-      candidates.add(publicUrl);
-    }
-  }
-
-  for (const bucket of KNOWN_AUDIO_BUCKETS) {
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(normalizedPath, 180);
-    if (data?.signedUrl) {
-      candidates.add(data.signedUrl);
-    }
-  }
-
-  return [...candidates];
-};
 
 const formatTime = (value: number) => {
   const safeValue = Number.isFinite(value) && value > 0 ? value : 0;
@@ -126,16 +49,17 @@ export function BattleAudioPlayer({
       setErrorMessage(null);
 
       if (!trimmed) {
+        setErrorMessage('Preview unavailable');
         return;
       }
 
       setIsResolving(true);
-      const resolved = await resolveSources(trimmed);
+      const resolved = [trimmed];
       if (isCancelled) return;
 
       setSourceCandidates(resolved);
       if (resolved.length === 0) {
-        setErrorMessage('Extrait indisponible.');
+        setErrorMessage('Preview unavailable');
       }
       setIsResolving(false);
     };
@@ -253,7 +177,7 @@ export function BattleAudioPlayer({
       return;
     }
 
-    setErrorMessage('Impossible de lire cet extrait.');
+    setErrorMessage('Preview unavailable');
     onActivePlayerChange(null);
   }, [onActivePlayerChange, sourceCandidates.length, sourceIndex]);
 
@@ -315,7 +239,7 @@ export function BattleAudioPlayer({
       </div>
 
       {isResolving && <p className="text-xs text-zinc-500">Chargement de l&apos;extrait...</p>}
-      {!isResolving && !currentSource && !errorMessage && <p className="text-xs text-zinc-500">Extrait indisponible.</p>}
+      {!isResolving && !currentSource && !errorMessage && <p className="text-xs text-zinc-500">Preview unavailable</p>}
       {errorMessage && <p className="text-xs text-red-400">{errorMessage}</p>}
     </div>
   );

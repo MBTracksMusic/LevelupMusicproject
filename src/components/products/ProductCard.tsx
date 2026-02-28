@@ -24,13 +24,15 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
   const { addToCart } = useCartStore();
   const [isHovered, setIsHovered] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const hasPreview = Boolean(product.preview_url?.trim());
 
   const isCurrentTrack = currentTrack?.id === product.id;
-  const isPlayingCurrent = isCurrentTrack && isPlaying;
+  const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
 
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!hasPreview) return;
 
     if (isCurrentTrack) {
       setIsPlaying(!isPlaying);
@@ -110,7 +112,9 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
           >
             <button
               onClick={handlePlay}
-              className="w-14 h-14 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform"
+              disabled={!hasPreview}
+              className="w-14 h-14 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={hasPreview ? (isPlayingCurrent ? 'Pause' : 'Play') : 'Preview unavailable'}
             >
               {isPlayingCurrent ? (
                 <Pause className="w-6 h-6 text-zinc-900" fill="currentColor" />
@@ -182,6 +186,10 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
             {product.bpm && <span>{product.bpm} BPM</span>}
             {product.key_signature && <span>{product.key_signature}</span>}
           </div>
+
+          {!hasPreview && (
+            <p className="mb-3 text-xs text-zinc-500">Preview unavailable</p>
+          )}
 
           <div className="flex items-center justify-between">
             <span className="text-lg font-bold text-white">

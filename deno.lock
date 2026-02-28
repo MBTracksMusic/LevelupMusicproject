@@ -1,0 +1,47 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@supabase/functions-js@*": "2.97.0"
+  },
+  "jsr": {
+    "@supabase/functions-js@2.97.0": {
+      "integrity": "f33893e8f742d7b83a3f52750a79edd5bf6c869411d126d509fe3327f39f54c2"
+    }
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@eslint/js@^9.39.2",
+        "npm:@ffmpeg/ffmpeg@~0.12.6",
+        "npm:@ffmpeg/util@~0.12.1",
+        "npm:@supabase/supabase-js@^2.57.4",
+        "npm:@tanstack/react-query@^5.90.20",
+        "npm:@types/react-dom@^18.3.0",
+        "npm:@types/react@^18.3.5",
+        "npm:@vitejs/plugin-react@^5.1.2",
+        "npm:autoprefixer@^10.4.18",
+        "npm:chart.js@^4.5.1",
+        "npm:cypress@^15.9.0",
+        "npm:eslint-plugin-react-hooks@^5.1.0",
+        "npm:eslint-plugin-react-refresh@~0.4.26",
+        "npm:eslint@^9.39.2",
+        "npm:globals@^15.9.0",
+        "npm:lucide-react@0.344",
+        "npm:pdfkit@~0.17.2",
+        "npm:postcss@^8.4.35",
+        "npm:react-chartjs-2@^5.3.1",
+        "npm:react-dom@^18.3.1",
+        "npm:react-hot-toast@^2.6.0",
+        "npm:react-router-dom@^7.13.0",
+        "npm:react@^18.3.1",
+        "npm:serverless-http@4",
+        "npm:tailwindcss@^3.4.1",
+        "npm:typescript-eslint@^8.54.0",
+        "npm:typescript@^5.5.3",
+        "npm:vite@^7.3.1",
+        "npm:zod@^4.3.6",
+        "npm:zustand@^5.0.10"
+      ]
+    }
+  }
+}
