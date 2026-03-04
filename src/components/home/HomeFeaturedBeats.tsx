@@ -5,10 +5,11 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../lib/auth/hooks';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import { useCartStore } from '../../lib/stores/cart';
-import { formatPrice } from '../../lib/utils/format';
+import { formatNumber, formatPrice } from '../../lib/utils/format';
 
 interface HomeBeatRow {
   id: string;
@@ -25,15 +26,13 @@ interface HomeBeatRow {
   };
 }
 
-const numberFormatter = new Intl.NumberFormat('fr-FR');
-
 export function HomeFeaturedBeats() {
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCartStore();
   const [beats, setBeats] = useState<HomeBeatRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addingBeatId, setAddingBeatId] = useState<string | null>(null);
-
   useEffect(() => {
     let isCancelled = false;
 
@@ -112,13 +111,13 @@ export function HomeFeaturedBeats() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Headphones className="w-5 h-5 text-emerald-400" />
-              <h2 className="text-3xl font-bold text-white">Beats en vedette</h2>
+              <h2 className="text-3xl font-bold text-white">{t('home.featuredBeats')}</h2>
             </div>
-            <p className="text-zinc-400">Top 10 des beats les plus ecoutes</p>
+            <p className="text-zinc-400">{t('home.featuredBeatsSubtitle')}</p>
           </div>
           <Link to="/beats">
             <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Voir tous les beats
+              {t('home.viewAllBeats')}
             </Button>
           </Link>
         </div>
@@ -134,7 +133,7 @@ export function HomeFeaturedBeats() {
             ))}
           </div>
         ) : beats.length === 0 ? (
-          <Card className="text-zinc-400">Aucun beat public a afficher pour le moment.</Card>
+          <Card className="text-zinc-400">{t('home.noFeaturedBeats')}</Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {beats.map((beat) => (
@@ -154,11 +153,11 @@ export function HomeFeaturedBeats() {
                     <div className="min-w-0 flex-1">
                       <p className="text-white font-semibold truncate">{beat.title}</p>
                       <p className="text-zinc-400 text-sm truncate">
-                        {beat.producer?.username || 'Producteur inconnu'}
+                        {beat.producer?.username || t('home.unknownProducer')}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="info">
-                          {numberFormatter.format(beat.play_count)} lectures
+                          {formatNumber(beat.play_count)} {t('home.playsLabel')}
                         </Badge>
                         <span className="text-white font-semibold">{formatPrice(beat.price)}</span>
                       </div>
@@ -166,7 +165,7 @@ export function HomeFeaturedBeats() {
                   </Link>
 
                   {beat.is_sold ? (
-                    <Badge variant="danger">Vendu</Badge>
+                    <Badge variant="danger">{t('products.sold')}</Badge>
                   ) : (
                     <Button
                       size="sm"
@@ -177,7 +176,7 @@ export function HomeFeaturedBeats() {
                         void handleAddToCart(beat.id);
                       }}
                     >
-                      {isAuthenticated ? 'Ajouter' : 'Connexion requise'}
+                      {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
                     </Button>
                   )}
                 </div>

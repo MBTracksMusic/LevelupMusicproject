@@ -19,13 +19,14 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { formatRankTier } from '../reputation/ReputationBadge';
 import { useAuth } from '../../lib/auth/hooks';
 import { useMyReputation } from '../../lib/reputation/hooks';
-import { useTranslation, languageNames, type Language } from '../../lib/i18n';
+import { useTranslation, languageNames } from '../../lib/i18n';
 import { useCartStore } from '../../lib/stores/cart';
 
 export function Header() {
-  const { t, language, setLanguage, languages } = useTranslation();
+  const { t, language, updateLanguage, languages } = useTranslation();
   const { user, profile, signOut } = useAuth();
   const { reputation } = useMyReputation();
   const { items } = useCartStore();
@@ -41,6 +42,12 @@ export function Header() {
     navigate('/');
   };
 
+  const handleLanguageChange = (nextLanguage: string) => {
+    void updateLanguage(nextLanguage).catch((error) => {
+      console.error('Error updating language', error);
+    });
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 z-40 bg-zinc-950/80 backdrop-blur-lg border-b border-zinc-800">
       <div className="max-w-7xl mx-auto px-4">
@@ -51,7 +58,7 @@ export function Header() {
                 <Music className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-white hidden sm:block">
-                LevelupMusic
+                {t('footer.brandName')}
               </span>
             </Link>
 
@@ -79,13 +86,13 @@ export function Header() {
                 to="/forum"
                 className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
               >
-                Forum
+                {t('forum.title')}
               </Link>
               <Link
                 to="/leaderboard"
                 className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
               >
-                Leaderboard
+                {t('leaderboard.title')}
               </Link>
               <Link
                 to="/pricing"
@@ -124,14 +131,14 @@ export function Header() {
                       <button
                         key={lang}
                         onClick={() => {
-                          setLanguage(lang as Language);
+                          handleLanguageChange(lang);
                           setIsLangMenuOpen(false);
                         }}
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-zinc-800 transition-colors ${
                           language === lang ? 'text-rose-400' : 'text-zinc-300'
                         }`}
                       >
-                        {languageNames[lang as Language]}
+                        {languageNames[lang]}
                       </button>
                     ))}
                   </div>
@@ -170,7 +177,7 @@ export function Header() {
                   {reputation && (
                     <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300">
                       <Sparkles className="h-3 w-3 text-amber-300" />
-                      Nv {reputation.level} • {reputation.rank_tier}
+                      {t('common.levelShort')} {reputation.level} • {formatRankTier(reputation.rank_tier, t)}
                     </span>
                   )}
                   {profile?.avatar_url ? (
@@ -223,7 +230,7 @@ export function Header() {
                           className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
                         >
                           <MessageSquareText className="w-4 h-4" />
-                          Mes messages
+                          {t('myMessages.title')}
                         </Link>
                         {profile?.is_producer_active && (
                           <Link
@@ -241,7 +248,7 @@ export function Header() {
                           className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
                         >
                           <Trophy className="w-4 h-4" />
-                          Leaderboard
+                          {t('leaderboard.title')}
                         </Link>
                         <Link
                           to="/settings"
@@ -261,7 +268,7 @@ export function Header() {
                               className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
                             >
                               <Shield className="w-4 h-4" />
-                              Administration
+                              {t('admin.layout.title')}
                             </Link>
                             <div className="my-1 border-t border-zinc-800" />
                           </>
@@ -338,7 +345,7 @@ export function Header() {
               onClick={() => setIsMenuOpen(false)}
               className="block px-3 py-2 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg"
             >
-              Forum
+              {t('forum.title')}
             </Link>
             <Link
               to="/pricing"

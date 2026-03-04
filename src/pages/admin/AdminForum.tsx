@@ -4,7 +4,9 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../lib/auth/hooks';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
+import { formatDateTime } from '../../lib/utils/format';
 
 type ForumCategoryRow = {
   id: string;
@@ -45,6 +47,7 @@ const FORUM_POSTS_TABLE = 'forum_posts' as any;
 
 export function AdminForumPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [topics, setTopics] = useState<ForumTopicRow[]>([]);
   const [posts, setPosts] = useState<ForumPostRow[]>([]);
   const [categories, setCategories] = useState<ForumCategoryRow[]>([]);
@@ -114,7 +117,7 @@ export function AdminForumPage() {
 
       const legacyLoaded = await loadLegacyForumData();
       if (!legacyLoaded) {
-        toast.error('Impossible de charger la moderation forum.');
+        toast.error(t('admin.forum.loadError'));
         setCategories([]);
         setTopics([]);
         setPosts([]);
@@ -131,7 +134,7 @@ export function AdminForumPage() {
     setTopics((topicsData as unknown as ForumTopicRow[] | null) ?? []);
     setPosts((postsData as unknown as ForumPostRow[] | null) ?? []);
     setIsLoading(false);
-  }, [loadLegacyForumData]);
+  }, [loadLegacyForumData, t]);
 
   useEffect(() => {
     void loadForumModeration();
@@ -154,12 +157,12 @@ export function AdminForumPage() {
 
     if (error) {
       console.error('Error updating forum topic deletion state', error);
-      toast.error('Action topic impossible.');
+      toast.error(t('admin.forum.topicActionError'));
       setActionKey(null);
       return;
     }
 
-    toast.success(nextDeleted ? 'Topic masque.' : 'Topic restaure.');
+    toast.success(nextDeleted ? t('admin.forum.topicHidden') : t('admin.forum.topicRestored'));
     setActionKey(null);
     await loadForumModeration();
   };
@@ -174,18 +177,18 @@ export function AdminForumPage() {
 
     if (error) {
       console.error('Error applying forum post moderation action', error);
-      toast.error('Action post impossible.');
+      toast.error(t('admin.forum.postActionError'));
       setActionKey(null);
       return;
     }
 
     const label = action === 'approve'
-      ? 'Post approuve.'
+      ? t('admin.forum.postApproved')
       : action === 'block'
-      ? 'Post bloque.'
+      ? t('admin.forum.postBlocked')
       : action === 'delete'
-      ? 'Post supprime en soft delete.'
-      : 'Post restaure.';
+      ? t('admin.forum.postDeleted')
+      : t('admin.forum.postRestored');
 
     toast.success(label);
     setActionKey(null);
@@ -193,19 +196,24 @@ export function AdminForumPage() {
   };
 
   const canAct = Boolean(user?.id) && !isLegacyMode;
+  const getModerationBadgeLabel = (status: ForumPostRow['moderation_status']) => {
+    if (status === 'review') return t('forum.review');
+    if (status === 'blocked') return t('forum.blocked');
+    return '';
+  };
 
   return (
     <div className="space-y-4">
       <Card className="p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-white">Forum Moderation</h2>
+            <h2 className="text-xl font-semibold text-white">{t('admin.forum.title')}</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Soft delete, revue de moderation et supervision des posts IA.
+              {t('admin.forum.subtitle')}
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadForumModeration()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
       </Card>
@@ -213,23 +221,21 @@ export function AdminForumPage() {
       {isLegacyMode && (
         <Card className="border-amber-900 bg-amber-950/20 p-4 sm:p-5">
           <p className="text-sm text-amber-300">
-            La migration `forum_agents_base` n&apos;est pas encore visible sur cette base. Vue admin chargee en mode legacy:
-            revue IA et actions de moderation avancees desactivees tant que la migration `20260302110000_100_forum_agents_base.sql`
-            n&apos;est pas appliquee.
+            {t('admin.forum.legacyNotice')}
           </p>
         </Card>
       )}
 
       <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 text-lg font-semibold text-white">A revoir / flagges</h3>
+        <h3 className="mb-4 text-lg font-semibold text-white">{t('admin.forum.reviewTitle')}</h3>
         {isLoading ? (
-          <p className="text-zinc-400">Chargement...</p>
+          <p className="text-zinc-400">{t('common.loading')}</p>
         ) : isLegacyMode ? (
           <p className="text-zinc-500">
-            Indisponible avant application de la migration forum agents.
+            {t('admin.forum.legacyUnavailable')}
           </p>
         ) : reviewPosts.length === 0 ? (
-          <p className="text-zinc-500">Aucun post en revue.</p>
+          <p className="text-zinc-500">{t('admin.forum.reviewEmpty')}</p>
         ) : (
           <div className="space-y-3">
             {reviewPosts.map((post) => {
@@ -239,16 +245,16 @@ export function AdminForumPage() {
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm text-zinc-500">
-                        {topic?.title || post.topic_id} • {new Date(post.created_at).toLocaleString('fr-FR')}
+                        {topic?.title || post.topic_id} • {formatDateTime(post.created_at)}
                       </p>
-                      {post.moderation_status === 'review' && <Badge variant="warning">Review</Badge>}
-                      {post.moderation_status === 'blocked' && <Badge variant="danger">Blocked</Badge>}
-                      {post.is_deleted && <Badge variant="info">Soft deleted</Badge>}
-                      {post.is_ai_generated && <Badge variant="info">{post.ai_agent_name || 'Assistant IA'}</Badge>}
+                      {post.moderation_status === 'review' && <Badge variant="warning">{getModerationBadgeLabel('review')}</Badge>}
+                      {post.moderation_status === 'blocked' && <Badge variant="danger">{getModerationBadgeLabel('blocked')}</Badge>}
+                      {post.is_deleted && <Badge variant="info">{t('admin.forum.softDeleted')}</Badge>}
+                      {post.is_ai_generated && <Badge variant="info">{post.ai_agent_name || t('forum.aiAssistant')}</Badge>}
                     </div>
                     <p className="text-sm whitespace-pre-wrap text-zinc-200">{post.content}</p>
                     {post.moderation_reason && (
-                      <p className="text-xs text-zinc-500">Motif: {post.moderation_reason}</p>
+                      <p className="text-xs text-zinc-500">{t('admin.forum.reason')}: {post.moderation_reason}</p>
                     )}
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -257,7 +263,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'approve')}
                       >
-                        Approve
+                        {t('admin.forum.approve')}
                       </Button>
                       <Button
                         variant="outline"
@@ -266,7 +272,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'block')}
                       >
-                        Block
+                        {t('admin.forum.block')}
                       </Button>
                       <Button
                         variant="danger"
@@ -275,7 +281,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'delete')}
                       >
-                        Soft delete
+                        {t('admin.forum.softDelete')}
                       </Button>
                       {post.is_deleted && (
                         <Button
@@ -285,7 +291,7 @@ export function AdminForumPage() {
                           disabled={!canAct}
                           onClick={() => void runPostAction(post.id, 'restore')}
                         >
-                          Restore
+                          {t('admin.forum.restore')}
                         </Button>
                       )}
                     </div>
@@ -298,11 +304,11 @@ export function AdminForumPage() {
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 text-lg font-semibold text-white">Derniers topics</h3>
+        <h3 className="mb-4 text-lg font-semibold text-white">{t('admin.forum.latestTopics')}</h3>
         {isLoading ? (
-          <p className="text-zinc-400">Chargement...</p>
+          <p className="text-zinc-400">{t('common.loading')}</p>
         ) : topics.length === 0 ? (
-          <p className="text-zinc-500">Aucun topic.</p>
+          <p className="text-zinc-500">{t('admin.forum.noTopic')}</p>
         ) : (
           <div className="space-y-3">
             {topics.map((topic) => {
@@ -313,9 +319,9 @@ export function AdminForumPage() {
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm text-zinc-500">
-                          {category?.name || topic.category_id} • {new Date(topic.created_at).toLocaleString('fr-FR')}
+                          {category?.name || topic.category_id} • {formatDateTime(topic.created_at)}
                         </p>
-                        {topic.is_deleted && <Badge variant="warning">Masque</Badge>}
+                        {topic.is_deleted && <Badge variant="warning">{t('admin.forum.hidden')}</Badge>}
                       </div>
                       <h4 className="font-medium text-white">{topic.title}</h4>
                       <p className="text-xs text-zinc-500">{topic.slug}</p>
@@ -328,7 +334,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runTopicDeleteState(topic, !topic.is_deleted)}
                       >
-                        {topic.is_deleted ? 'Restaurer' : 'Masquer'}
+                        {topic.is_deleted ? t('admin.forum.restore') : t('admin.forum.hide')}
                       </Button>
                     </div>
                   </div>
@@ -340,11 +346,11 @@ export function AdminForumPage() {
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <h3 className="mb-4 text-lg font-semibold text-white">Derniers posts</h3>
+        <h3 className="mb-4 text-lg font-semibold text-white">{t('admin.forum.latestPosts')}</h3>
         {isLoading ? (
-          <p className="text-zinc-400">Chargement...</p>
+          <p className="text-zinc-400">{t('common.loading')}</p>
         ) : posts.length === 0 ? (
-          <p className="text-zinc-500">Aucun post.</p>
+          <p className="text-zinc-500">{t('admin.forum.noPost')}</p>
         ) : (
           <div className="space-y-3">
             {posts.map((post) => {
@@ -357,12 +363,12 @@ export function AdminForumPage() {
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm text-zinc-500">
-                          {topic?.title || post.topic_id} • {new Date(post.created_at).toLocaleString('fr-FR')}
+                          {topic?.title || post.topic_id} • {formatDateTime(post.created_at)}
                         </p>
-                        {post.moderation_status === 'review' && <Badge variant="warning">Review</Badge>}
-                        {post.moderation_status === 'blocked' && <Badge variant="danger">Blocked</Badge>}
-                        {post.is_deleted && <Badge variant="info">Soft deleted</Badge>}
-                        {post.is_ai_generated && <Badge variant="info">{post.ai_agent_name || 'Assistant IA'}</Badge>}
+                        {post.moderation_status === 'review' && <Badge variant="warning">{getModerationBadgeLabel('review')}</Badge>}
+                        {post.moderation_status === 'blocked' && <Badge variant="danger">{getModerationBadgeLabel('blocked')}</Badge>}
+                        {post.is_deleted && <Badge variant="info">{t('admin.forum.softDeleted')}</Badge>}
+                        {post.is_ai_generated && <Badge variant="info">{post.ai_agent_name || t('forum.aiAssistant')}</Badge>}
                       </div>
                       <p className="whitespace-pre-wrap text-sm text-zinc-200">{preview}</p>
                     </div>
@@ -373,7 +379,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'approve')}
                       >
-                        Approve
+                        {t('admin.forum.approve')}
                       </Button>
                       <Button
                         variant="outline"
@@ -382,7 +388,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'block')}
                       >
-                        Block
+                        {t('admin.forum.block')}
                       </Button>
                       <Button
                         variant="danger"
@@ -391,7 +397,7 @@ export function AdminForumPage() {
                         disabled={!canAct}
                         onClick={() => void runPostAction(post.id, 'delete')}
                       >
-                        Soft delete
+                        {t('admin.forum.softDelete')}
                       </Button>
                       {post.is_deleted && (
                         <Button
@@ -401,7 +407,7 @@ export function AdminForumPage() {
                           disabled={!canAct}
                           onClick={() => void runPostAction(post.id, 'restore')}
                         >
-                          Restore
+                          {t('admin.forum.restore')}
                         </Button>
                       )}
                     </div>

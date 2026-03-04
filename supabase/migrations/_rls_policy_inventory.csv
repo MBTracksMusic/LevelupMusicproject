@@ -1,0 +1,131 @@
+table_name,policy_name,command,roles,using_expression,check_expression
+public.admin_action_audit_log,Admins can read centralized admin action audit log,SELECT,authenticated,public.is_admin(auth.uid()),
+public.admin_notifications,Admins can read own notifications,SELECT,authenticated,user_id = auth.uid() AND public.is_admin(auth.uid()),
+public.admin_notifications,Admins can update own notifications,UPDATE,authenticated,user_id = auth.uid() AND public.is_admin(auth.uid()),user_id = auth.uid() AND public.is_admin(auth.uid())
+public.ai_admin_actions,Admins can insert ai admin actions,INSERT,authenticated,,public.is_admin(auth.uid())
+public.ai_admin_actions,Admins can read ai admin actions,SELECT,authenticated,public.is_admin(auth.uid()),
+public.ai_admin_actions,Admins can update ai admin actions,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.ai_training_feedback,Admins can insert ai training feedback,INSERT,authenticated,,public.is_admin(auth.uid())
+public.ai_training_feedback,Admins can read ai training feedback,SELECT,authenticated,public.is_admin(auth.uid()),
+public.ai_training_feedback,Admins can update ai training feedback,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.app_settings,Admins can insert app settings,INSERT,authenticated,,public.is_admin(auth.uid())
+public.app_settings,Admins can update app settings,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.app_settings,Anyone can read app settings,SELECT,"anon, authenticated",true,
+public.audio_processing_jobs,Admins can view audio processing jobs,SELECT,authenticated,public.is_admin(auth.uid()),
+public.audit_logs,Users can view own audit logs,SELECT,authenticated,user_id = auth.uid(),
+public.battle_comments,Admins can moderate battle comments,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.battle_comments,Admins can view all battle comments,SELECT,authenticated,public.is_admin(auth.uid()),
+public.battle_comments,Anyone can view visible comments,SELECT,PUBLIC,is_hidden = false,
+public.battle_comments,Confirmed users can comment,INSERT,authenticated,,"user_id = auth.uid() AND public.is_email_verified_user(auth.uid()) AND EXISTS ( SELECT 1 FROM public.battles WHERE id = battle_comments.battle_id AND status IN ('active', 'voting') )"
+public.battle_comments,Users can delete own comments,DELETE,authenticated,user_id = auth.uid(),
+public.battle_comments,Users can update own comments,UPDATE,authenticated,user_id = auth.uid(),user_id = auth.uid() AND is_hidden = false
+public.battle_product_snapshots,Admins can view all battle product snapshots,SELECT,authenticated,public.is_admin(auth.uid()),
+public.battle_product_snapshots,Anyone can view public battle product snapshots,SELECT,"anon, authenticated","EXISTS ( SELECT 1 FROM public.battles b WHERE b.id = battle_product_snapshots.battle_id AND b.status IN ('active', 'voting', 'completed') )",
+public.battle_product_snapshots,Participants can view own battle product snapshots,SELECT,authenticated,EXISTS ( SELECT 1 FROM public.battles b WHERE b.id = battle_product_snapshots.battle_id AND (b.producer1_id = auth.uid() OR b.producer2_id = auth.uid()) ),
+public.battle_votes,Admins can read all battle votes,SELECT,authenticated,public.is_admin(auth.uid()),
+public.battle_votes,Confirmed users can vote,INSERT,authenticated,,user_id = auth.uid() AND public.is_email_verified_user(auth.uid()) AND voted_for_producer_id != auth.uid() AND EXISTS ( SELECT 1 FROM public.battles b WHERE b.id = battle_votes.battle_id AND b.status = 'active' AND b.producer1_id IS NOT NULL AND b.producer2_id IS NOT NULL AND ( voted_for_producer_id = b.producer1_id OR voted_for_producer_id = b.producer2_id ) AND auth.uid() != b.producer1_id AND auth.uid() != b.producer2_id ) AND NOT EXISTS ( SELECT 1 FROM public.battle_votes bv WHERE bv.battle_id = battle_votes.battle_id AND bv.user_id = auth.uid() )
+public.battle_votes,Users can read own battle votes,SELECT,authenticated,user_id = auth.uid(),
+public.battles,Active producers can create battles,INSERT,authenticated,,auth.uid() IS NOT NULL AND producer1_id = auth.uid() AND producer2_id IS NOT NULL AND producer1_id != producer2_id AND status = 'pending_acceptance' AND winner_id IS NULL AND votes_producer1 = 0 AND votes_producer2 = 0 AND accepted_at IS NULL AND rejected_at IS NULL AND admin_validated_at IS NULL AND public.can_create_battle(auth.uid()) = true AND EXISTS ( SELECT 1 FROM public.public_producer_profiles pp2 WHERE pp2.user_id = producer2_id ) AND ( product1_id IS NULL OR EXISTS ( SELECT 1 FROM public.products p1 WHERE p1.id = product1_id AND p1.producer_id = auth.uid() AND p1.deleted_at IS NULL ) ) AND ( product2_id IS NULL OR EXISTS ( SELECT 1 FROM public.products p2 WHERE p2.id = product2_id AND p2.producer_id = producer2_id AND p2.deleted_at IS NULL ) )
+public.battles,Admins can update all battles,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.battles,Admins can view all battles,SELECT,authenticated,public.is_admin(auth.uid()),
+public.battles,Anyone can view public battles,SELECT,PUBLIC,"status IN ('active', 'voting', 'completed')",
+public.battles,Producers can update own pending battles,UPDATE,authenticated,(producer1_id = auth.uid() OR producer2_id = auth.uid()) AND status = 'pending',(producer1_id = auth.uid() OR producer2_id = auth.uid()) AND status = 'pending' AND winner_id IS NULL AND votes_producer1 = 0 AND votes_producer2 = 0 AND accepted_at IS NULL AND rejected_at IS NULL AND admin_validated_at IS NULL
+public.battles,Producers can view own battles,SELECT,authenticated,producer1_id = auth.uid() OR producer2_id = auth.uid(),
+public.cart_items,Users can add to cart,INSERT,authenticated,,user_id = auth.uid() AND EXISTS ( SELECT 1 FROM products WHERE id = cart_items.product_id AND is_published = true AND (is_exclusive = false OR is_sold = false) )
+public.cart_items,Users can remove from cart,DELETE,authenticated,user_id = auth.uid(),
+public.cart_items,Users can view own cart,SELECT,authenticated,user_id = auth.uid(),
+public.contact_messages,Admins can delete contact messages,DELETE,authenticated,public.is_admin(auth.uid()),
+public.contact_messages,Admins can read all contact messages,SELECT,authenticated,public.is_admin(auth.uid()),
+public.contact_messages,Admins can update contact messages,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.contact_messages,Authenticated users can read own contact messages,SELECT,authenticated,user_id = auth.uid(),
+public.contact_messages,Public can insert contact messages,INSERT,"anon, authenticated",,( auth.uid() IS NULL AND user_id IS NULL AND email IS NOT NULL AND length(btrim(email)) > 0 ) OR ( auth.uid() IS NOT NULL AND user_id = auth.uid() )
+public.download_logs,Users can view own download logs,SELECT,authenticated,user_id = auth.uid(),
+public.elite_interest,Elite interest insertable,INSERT,"anon, authenticated",,length(trim(email)) > 3
+public.elite_waitlist,Anonymous can insert elite waitlist,INSERT,anon,,user_id IS NULL AND length(btrim(email)) > 0
+public.elite_waitlist,Authenticated can insert elite waitlist,INSERT,authenticated,,auth.uid() IS NOT NULL AND user_id = auth.uid() AND length(btrim(email)) > 0
+public.entitlements,Users can view own entitlements,SELECT,authenticated,user_id = auth.uid(),
+public.exclusive_locks,Users can view own locks,SELECT,authenticated,user_id = auth.uid(),
+public.forum_assistant_jobs,Admins can read forum assistant jobs,SELECT,authenticated,public.is_admin(auth.uid()),
+public.forum_categories,Authenticated admins can create forum categories,INSERT,authenticated,,public.is_admin(auth.uid())
+public.forum_categories,Authenticated admins can delete forum categories,DELETE,authenticated,public.is_admin(auth.uid()),
+public.forum_categories,Authenticated admins can update forum categories,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.forum_categories,Forum categories readable,SELECT,"anon, authenticated",is_premium_only = false OR public.forum_has_active_subscription(auth.uid()),
+public.forum_likes,Authenticated users can like forum posts,INSERT,authenticated,,auth.uid() = user_id
+public.forum_likes,Forum likes are publicly readable,SELECT,"anon, authenticated",true,
+public.forum_likes,Owners or admins can delete forum likes,DELETE,authenticated,auth.uid() = user_id OR public.is_admin(auth.uid()),
+public.forum_moderation_logs,Admins can read forum moderation logs,SELECT,authenticated,public.is_admin(auth.uid()),
+public.forum_post_likes,Authenticated users can like forum posts,INSERT,authenticated,,"user_id = auth.uid() AND EXISTS ( SELECT 1 FROM public.forum_posts fp JOIN public.forum_topics ft ON ft.id = fp.topic_id WHERE fp.id = forum_post_likes.post_id AND fp.is_deleted = false AND public.forum_can_write_topic(ft.id, auth.uid()) )"
+public.forum_post_likes,Forum post likes readable,SELECT,"anon, authenticated","EXISTS ( SELECT 1 FROM public.forum_posts fp JOIN public.forum_topics ft ON ft.id = fp.topic_id WHERE fp.id = forum_post_likes.post_id AND public.forum_can_access_category(ft.category_id, auth.uid()) )",
+public.forum_post_likes,Users or admins can unlike forum posts,DELETE,authenticated,user_id = auth.uid() OR public.is_admin(auth.uid()),
+public.forum_posts,Forum posts readable,SELECT,"anon, authenticated","EXISTS ( SELECT 1 FROM public.forum_topics ft WHERE ft.id = forum_posts.topic_id AND ft.is_deleted = false AND public.forum_can_access_category(ft.category_id, auth.uid()) ) AND ( public.is_admin(auth.uid()) OR forum_posts.user_id = auth.uid() OR forum_posts.is_deleted = true OR forum_posts.is_visible = true )",
+public.forum_topics,Forum topics readable,SELECT,"anon, authenticated","public.forum_can_access_category(category_id, auth.uid()) AND ( COALESCE(is_deleted, false) = false OR user_id = auth.uid() OR public.is_admin(auth.uid()) )",
+public.genres,Anyone can view active genres,SELECT,PUBLIC,is_active = true,
+public.licenses,Anyone can read licenses,SELECT,"anon, authenticated",true,
+public.monitoring_alert_events,Admins can read monitoring alert events,SELECT,authenticated,public.is_admin(auth.uid()),
+public.monitoring_alert_events,Admins can update monitoring alert events,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.moods,Anyone can view active moods,SELECT,PUBLIC,is_active = true,
+public.news_videos,Admins can delete news videos,DELETE,authenticated,public.is_admin(auth.uid()),
+public.news_videos,Admins can insert news videos,INSERT,authenticated,,public.is_admin(auth.uid())
+public.news_videos,Admins can read all news videos,SELECT,authenticated,public.is_admin(auth.uid()),
+public.news_videos,Admins can update news videos,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.news_videos,Public can read published news videos,SELECT,"anon, authenticated",is_published = true,
+public.notification_email_log,Service role can manage notification email log,ALL,service_role,true,true
+public.preview_access_logs,Users can view own preview access logs,SELECT,authenticated,user_id = auth.uid(),
+public.producer_plan_config,Producer plan readable,SELECT,"anon, authenticated",true,
+public.producer_plans,Anyone can view active producer plans,SELECT,PUBLIC,is_active = true,
+public.producer_subscriptions,Producer subscriptions: owner can read,SELECT,authenticated,auth.uid() = user_id,
+public.product_files,Active producers can add product files,INSERT,authenticated,,EXISTS ( SELECT 1 FROM products p JOIN user_profiles up ON up.id = p.producer_id WHERE p.id = product_files.product_id AND p.producer_id = auth.uid() AND up.is_producer_active = true )
+public.product_files,Producers can delete own product files,DELETE,authenticated,EXISTS ( SELECT 1 FROM products WHERE products.id = product_files.product_id AND products.producer_id = auth.uid() AND products.is_sold = false ),
+public.product_files,Producers can view own product files,SELECT,authenticated,EXISTS ( SELECT 1 FROM products WHERE products.id = product_files.product_id AND products.producer_id = auth.uid() ),
+public.products,Active producers can create products,INSERT,authenticated,,"producer_id = auth.uid() AND EXISTS ( SELECT 1 FROM public.user_profiles up WHERE up.id = auth.uid() AND up.is_producer_active = true ) AND ( NOT (product_type = 'beat' AND is_published = true AND deleted_at IS NULL) OR public.can_publish_beat(auth.uid(), NULL) )"
+public.products,Buyers can view purchased products,SELECT,authenticated,"deleted_at IS NULL AND EXISTS ( SELECT 1 FROM public.purchases pu WHERE pu.product_id = products.id AND pu.user_id = auth.uid() AND pu.status IN ('completed', 'refunded') )",
+public.products,Producer can view own products,SELECT,authenticated,auth.uid() = producer_id AND deleted_at IS NULL,
+public.products,Producers can update own unsold products,UPDATE,authenticated,"producer_id = auth.uid() AND deleted_at IS NULL AND EXISTS ( SELECT 1 FROM public.user_profiles up WHERE up.id = auth.uid() AND up.is_producer_active = true ) AND NOT EXISTS ( SELECT 1 FROM public.purchases pu WHERE pu.product_id = products.id AND pu.status IN ('completed', 'refunded') )","producer_id = auth.uid() AND deleted_at IS NULL AND EXISTS ( SELECT 1 FROM public.user_profiles up WHERE up.id = auth.uid() AND up.is_producer_active = true ) AND NOT EXISTS ( SELECT 1 FROM public.purchases pu WHERE pu.product_id = products.id AND pu.status IN ('completed', 'refunded') ) AND ( NOT (product_type = 'beat' AND is_published = true AND deleted_at IS NULL) OR public.can_publish_beat(auth.uid(), id) )"
+public.products,Public can view active products,SELECT,"anon, authenticated",deleted_at IS NULL AND status = 'active' AND ( is_published IS DISTINCT FROM false ) AND (is_exclusive = false OR (is_exclusive = true AND is_sold = false)),
+public.purchases,Producers can view sales of their products,SELECT,authenticated,producer_id = auth.uid(),
+public.purchases,Users can view own purchases,SELECT,authenticated,user_id = auth.uid(),
+public.reputation_events,Reputation events readable by owner or admin,SELECT,authenticated,user_id = auth.uid() OR public.is_admin(auth.uid()),
+public.reputation_rules,Admins can manage reputation rules,ALL,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.reputation_rules,Reputation rules readable,SELECT,"anon, authenticated",true,
+public.rpc_rate_limit_counters,Admins can read rpc rate limit counters,SELECT,authenticated,public.is_admin(auth.uid()),
+public.rpc_rate_limit_hits,Admins can read rpc rate limit hits,SELECT,authenticated,public.is_admin(auth.uid()),
+public.rpc_rate_limit_rules,Admins can insert rpc rate limit rules,INSERT,authenticated,,public.is_admin(auth.uid())
+public.rpc_rate_limit_rules,Admins can read rpc rate limit rules,SELECT,authenticated,public.is_admin(auth.uid()),
+public.rpc_rate_limit_rules,Admins can update rpc rate limit rules,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.site_audio_settings,Admins can delete site audio settings,DELETE,authenticated,public.is_admin(auth.uid()),
+public.site_audio_settings,Admins can insert site audio settings,INSERT,authenticated,,public.is_admin(auth.uid())
+public.site_audio_settings,Admins can update site audio settings,UPDATE,authenticated,public.is_admin(auth.uid()),public.is_admin(auth.uid())
+public.site_audio_settings,Admins can view site audio settings,SELECT,authenticated,public.is_admin(auth.uid()),
+public.stripe_events,Stripe events deny clients,ALL,"anon, authenticated",false,false
+public.user_profiles,Admins can view all profiles,SELECT,authenticated,public.is_admin(auth.uid()),
+public.user_profiles,Auth service can insert profiles,INSERT,"supabase_auth_admin, service_role",,true
+public.user_profiles,Authenticated can insert own profile,INSERT,authenticated,,auth.uid() = id
+public.user_profiles,Owner can insert own profile,INSERT,authenticated,,id = auth.uid()
+public.user_profiles,Owner can select own profile,SELECT,authenticated,id = auth.uid(),
+public.user_profiles,Owner can update own profile,UPDATE,authenticated,id = auth.uid(),id = auth.uid() AND role IS NOT DISTINCT FROM (SELECT role FROM public.user_profiles WHERE id = auth.uid()) AND producer_tier IS NOT DISTINCT FROM (SELECT producer_tier FROM public.user_profiles WHERE id = auth.uid()) AND is_confirmed IS NOT DISTINCT FROM (SELECT is_confirmed FROM public.user_profiles WHERE id = auth.uid()) AND is_producer_active IS NOT DISTINCT FROM (SELECT is_producer_active FROM public.user_profiles WHERE id = auth.uid()) AND stripe_customer_id IS NOT DISTINCT FROM (SELECT stripe_customer_id FROM public.user_profiles WHERE id = auth.uid()) AND stripe_subscription_id IS NOT DISTINCT FROM (SELECT stripe_subscription_id FROM public.user_profiles WHERE id = auth.uid()) AND subscription_status IS NOT DISTINCT FROM (SELECT subscription_status FROM public.user_profiles WHERE id = auth.uid()) AND total_purchases IS NOT DISTINCT FROM (SELECT total_purchases FROM public.user_profiles WHERE id = auth.uid()) AND confirmed_at IS NOT DISTINCT FROM (SELECT confirmed_at FROM public.user_profiles WHERE id = auth.uid()) AND producer_verified_at IS NOT DISTINCT FROM (SELECT producer_verified_at FROM public.user_profiles WHERE id = auth.uid())
+public.user_reputation,User reputation readable,SELECT,"anon, authenticated",true,
+public.wishlists,Users can add to wishlist,INSERT,authenticated,,user_id = auth.uid()
+public.wishlists,Users can remove from wishlist,DELETE,authenticated,user_id = auth.uid(),
+public.wishlists,Users can view own wishlist,SELECT,authenticated,user_id = auth.uid(),
+storage.objects,Admins can delete watermark assets,DELETE,authenticated,bucket_id = 'watermark-assets' AND public.is_admin(auth.uid()) AND name LIKE 'admin/%',
+storage.objects,Admins can read watermark assets,SELECT,authenticated,bucket_id = 'watermark-assets' AND public.is_admin(auth.uid()),
+storage.objects,Admins can update watermark assets,UPDATE,authenticated,bucket_id = 'watermark-assets' AND public.is_admin(auth.uid()) AND name LIKE 'admin/%',bucket_id = 'watermark-assets' AND public.is_admin(auth.uid()) AND name LIKE 'admin/%'
+storage.objects,Admins can upload watermark assets,INSERT,authenticated,,bucket_id = 'watermark-assets' AND public.is_admin(auth.uid()) AND name LIKE 'admin/%'
+storage.objects,Anyone can view avatars,SELECT,"anon, authenticated",bucket_id = 'avatars',
+storage.objects,Anyone can view covers,SELECT,"anon, authenticated",bucket_id = 'beats-covers',
+storage.objects,Authenticated users can read beats audio,SELECT,authenticated,bucket_id = 'beats-audio',
+storage.objects,Buyers can read own contracts,SELECT,authenticated,bucket_id = 'contracts' AND EXISTS ( SELECT 1 FROM public.purchases p WHERE p.user_id = auth.uid() AND p.contract_pdf_path IS NOT NULL AND p.contract_pdf_path = storage.objects.name ),
+storage.objects,Producers can delete own masters,DELETE,authenticated,bucket_id = 'beats-masters' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',
+storage.objects,Producers can delete their audio,DELETE,authenticated,bucket_id = 'beats-audio' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',
+storage.objects,Producers can delete their covers,DELETE,authenticated,bucket_id = 'beats-covers' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',
+storage.objects,Producers can read their audio,SELECT,authenticated,bucket_id = 'beats-audio' AND auth.uid() = owner AND public.is_active_producer(auth.uid()),
+storage.objects,Producers can update own masters,UPDATE,authenticated,bucket_id = 'beats-masters' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',bucket_id = 'beats-masters' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Producers can update their audio,UPDATE,authenticated,bucket_id = 'beats-audio' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',bucket_id = 'beats-audio' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Producers can update their covers,UPDATE,authenticated,bucket_id = 'beats-covers' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%',bucket_id = 'beats-covers' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Producers can upload audio,INSERT,authenticated,,bucket_id = 'beats-audio' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Producers can upload covers,INSERT,authenticated,,bucket_id = 'beats-covers' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Producers can upload masters,INSERT,authenticated,,bucket_id = 'beats-masters' AND auth.uid() = owner AND public.is_active_producer(auth.uid()) AND name LIKE auth.uid()::text || '/%'
+storage.objects,Public can read watermarked audio,SELECT,"anon, authenticated",bucket_id = 'beats-watermarked',
+storage.objects,Users can delete own avatars,DELETE,authenticated,bucket_id = 'avatars' AND auth.uid() = owner AND name LIKE auth.uid()::text || '/%',
+storage.objects,Users can update own avatars,UPDATE,authenticated,bucket_id = 'avatars' AND auth.uid() = owner AND name LIKE auth.uid()::text || '/%',bucket_id = 'avatars' AND auth.uid() = owner AND name LIKE auth.uid()::text || '/%'
+storage.objects,Users can upload avatars,INSERT,authenticated,,bucket_id = 'avatars' AND auth.uid() = owner AND name LIKE auth.uid()::text || '/%'

@@ -5,9 +5,11 @@ import { ChevronLeft } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { useTranslation } from '../../lib/i18n';
 import { getForumFunctionErrorCode, getForumFunctionErrorMessage, useForumActions, useForumCategories } from '../../lib/forum/hooks';
 
 export function CreateTopicPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const categorySlugParam = searchParams.get('category') || '';
@@ -38,7 +40,7 @@ export function CreateTopicPage() {
     const trimmedContent = content.trim();
 
     if (!categoryId || !trimmedTitle || !trimmedContent) {
-      toast.error('Categorie, titre et message sont obligatoires.');
+      toast.error(t('forum.createTopicRequiredError'));
       return;
     }
 
@@ -50,9 +52,9 @@ export function CreateTopicPage() {
       });
 
       if (topic.status === 'review') {
-        toast.success('Topic cree et place en attente de moderation.');
+        toast.success(t('forum.createTopicPending'));
       } else {
-        toast.success('Topic cree.');
+        toast.success(t('forum.createTopicSuccess'));
       }
 
       navigate(`/forum/${topic.category_slug}/${topic.topic_slug}`);
@@ -60,11 +62,11 @@ export function CreateTopicPage() {
       console.error('Failed to create topic', createError);
       const errorCode = getForumFunctionErrorCode(createError);
       if (errorCode === 'blocked') {
-        toast.error('Contenu refuse.');
+        toast.error(t('forum.contentRejected'));
         return;
       }
 
-      toast.error(getForumFunctionErrorMessage(createError, 'Impossible de creer ce topic.'));
+      toast.error(getForumFunctionErrorMessage(createError, t('forum.createTopicError')));
     }
   };
 
@@ -74,24 +76,24 @@ export function CreateTopicPage() {
         <div className="space-y-4">
           <Link to="/forum" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ChevronLeft className="h-4 w-4" />
-            Retour au forum
+            {t('forum.backToForum')}
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-white">Creer un topic</h1>
-            <p className="text-zinc-400">Lancez une nouvelle discussion dans la categorie adaptee.</p>
+            <h1 className="text-3xl font-bold text-white">{t('forum.createTopicPageTitle')}</h1>
+            <p className="text-zinc-400">{t('forum.createTopicPageSubtitle')}</p>
           </div>
         </div>
 
         <Card className="border-zinc-800">
           <CardHeader>
-            <CardTitle>Nouveau topic</CardTitle>
-            <CardDescription>Le premier message sera publie avec le topic.</CardDescription>
+            <CardTitle>{t('forum.createTopicCardTitle')}</CardTitle>
+            <CardDescription>{t('forum.createTopicCardDescription')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="forum-category" className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  Categorie
+                  {t('forum.categoryLabel')}
                 </label>
                 <select
                   id="forum-category"
@@ -100,26 +102,26 @@ export function CreateTopicPage() {
                   disabled={isSubmitting || isLoading}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-white focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
                 >
-                  <option value="">Selectionner une categorie</option>
+                  <option value="">{t('forum.selectCategory')}</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}{category.is_premium_only ? ' • Premium' : ''}
+                      {category.name}{category.is_premium_only ? ` • ${t('forum.premium')}` : ''}
                     </option>
                   ))}
                 </select>
               </div>
 
               <Input
-                label="Titre"
+                label={t('forum.titleLabel')}
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Ex: Comment organiser ses stems pour un client ?"
+                placeholder={t('forum.createTopicPlaceholder')}
                 disabled={isSubmitting}
               />
 
               <div>
                 <label htmlFor="forum-topic-message" className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  Message
+                  {t('forum.messageLabel')}
                 </label>
                 <textarea
                   id="forum-topic-message"
@@ -128,7 +130,7 @@ export function CreateTopicPage() {
                   disabled={isSubmitting}
                   rows={10}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white placeholder-zinc-500 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
-                  placeholder="Detaillez clairement votre sujet, votre contexte et votre question."
+                  placeholder={t('forum.createTopicMessagePlaceholder')}
                 />
               </div>
 
@@ -139,11 +141,11 @@ export function CreateTopicPage() {
               <div className="flex justify-end gap-3">
                 <Link to="/forum">
                   <Button type="button" variant="ghost">
-                    Annuler
+                    {t('common.cancel')}
                   </Button>
                 </Link>
                 <Button type="submit" isLoading={isSubmitting}>
-                  Publier le topic
+                  {t('forum.publishTopic')}
                 </Button>
               </div>
             </form>

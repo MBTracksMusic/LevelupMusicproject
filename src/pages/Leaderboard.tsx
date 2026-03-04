@@ -5,11 +5,13 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { useLeaderboard } from '../lib/reputation/hooks';
+import { useTranslation } from '../lib/i18n';
 
 type LeaderboardPeriod = 'week' | 'month';
 type LeaderboardSource = 'overall' | 'forum' | 'battle';
 
 export function LeaderboardPage() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState<LeaderboardPeriod>('week');
   const [source, setSource] = useState<LeaderboardSource>('overall');
   const { entries, isLoading, error, refresh } = useLeaderboard(period, source);
@@ -19,29 +21,29 @@ export function LeaderboardPage() {
       <div className="max-w-5xl mx-auto px-4 space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">Leaderboard</h1>
-            <p className="text-zinc-400">Classements XP sur la semaine ou le mois.</p>
+            <h1 className="text-3xl font-bold text-white">{t('leaderboard.title')}</h1>
+            <p className="text-zinc-400">{t('leaderboard.subtitle')}</p>
           </div>
           <Button variant="outline" onClick={() => void refresh()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Button variant={period === 'week' ? 'primary' : 'outline'} onClick={() => setPeriod('week')}>
-            Semaine
+            {t('leaderboard.week')}
           </Button>
           <Button variant={period === 'month' ? 'primary' : 'outline'} onClick={() => setPeriod('month')}>
-            Mois
+            {t('leaderboard.month')}
           </Button>
           <Button variant={source === 'overall' ? 'primary' : 'outline'} onClick={() => setSource('overall')}>
-            Global
+            {t('leaderboard.overall')}
           </Button>
           <Button variant={source === 'forum' ? 'primary' : 'outline'} onClick={() => setSource('forum')}>
-            Forum
+            {t('leaderboard.forum')}
           </Button>
           <Button variant={source === 'battle' ? 'primary' : 'outline'} onClick={() => setSource('battle')}>
-            Battles
+            {t('leaderboard.battles')}
           </Button>
         </div>
 
@@ -59,7 +61,7 @@ export function LeaderboardPage() {
           </div>
         ) : entries.length === 0 ? (
           <Card className="p-8 text-center text-zinc-400">
-            Aucun classement disponible.
+            {t('leaderboard.empty')}
           </Card>
         ) : (
           <div className="space-y-3">
@@ -72,11 +74,11 @@ export function LeaderboardPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-semibold text-white">{entry.username || 'Membre'}</p>
+                        <p className="font-semibold text-white">{entry.username || t('leaderboard.memberFallback')}</p>
                         {index < 3 && (
                           <span className="inline-flex items-center gap-1 text-amber-300 text-xs">
                             <Trophy className="h-3 w-3" />
-                            Top {index + 1}
+                            {t('leaderboard.topRank', { rank: index + 1 })}
                           </span>
                         )}
                       </div>
@@ -84,8 +86,8 @@ export function LeaderboardPage() {
                     </div>
                   </div>
                   <div className="text-right text-sm text-zinc-400">
-                    <div className="text-white font-semibold">+{entry.period_xp} XP</div>
-                    <div>Total {entry.xp} XP</div>
+                    <div className="text-white font-semibold">{t('leaderboard.periodXp', { xp: entry.period_xp })}</div>
+                    <div>{t('leaderboard.totalXp', { xp: entry.xp })}</div>
                   </div>
                 </div>
               </Card>
@@ -94,7 +96,10 @@ export function LeaderboardPage() {
         )}
 
         <div className="text-sm text-zinc-500">
-          Classement protégé. Retour forum: <Link to="/forum" className="text-rose-400 hover:text-rose-300">ouvrir le forum</Link>
+          {t('leaderboard.protectedPrefix')}{' '}
+          <Link to="/forum" className="text-rose-400 hover:text-rose-300">
+            {t('leaderboard.openForum')}
+          </Link>
         </div>
       </div>
     </div>

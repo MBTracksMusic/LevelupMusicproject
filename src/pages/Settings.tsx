@@ -19,7 +19,7 @@ type SocialLinkKey = 'instagram' | 'youtube' | 'soundcloud' | 'tiktok' | 'spotif
 
 export function SettingsPage() {
   const { profile, refreshProfile } = useAuth();
-  const { language, setLanguage } = useTranslation();
+  const { t, language, updateLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,14 +93,14 @@ export function SettingsPage() {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setAvatarError('Le fichier doit être une image.');
-      toast.error('Le fichier doit être une image.');
+      setAvatarError(t('settings.avatarMustBeImage'));
+      toast.error(t('settings.avatarMustBeImage'));
       return;
     }
 
     if (file.size > MAX_AVATAR_SIZE) {
-      setAvatarError('Image trop volumineuse (max 2 Mo).');
-      toast.error('Image trop volumineuse (max 2 Mo).');
+      setAvatarError(t('settings.avatarTooLarge'));
+      toast.error(t('settings.avatarTooLarge'));
       return;
     }
 
@@ -117,7 +117,7 @@ export function SettingsPage() {
 
   const uploadAvatarAndGetUrl = async (file: File) => {
     if (!profile?.id) {
-      throw new Error('Utilisateur non authentifié');
+      throw new Error(t('settings.userNotAuthenticated'));
     }
 
     setIsAvatarUploading(true);
@@ -147,12 +147,12 @@ export function SettingsPage() {
         .getPublicUrl(avatarPath);
 
       if (!publicData?.publicUrl) {
-        throw new Error('Impossible de récupérer l’URL de l’avatar.');
+        throw new Error(t('settings.avatarPublicUrlError'));
       }
 
       return publicData.publicUrl;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erreur lors de l’upload de l’avatar';
+      const message = error instanceof Error ? error.message : t('settings.avatarUploadError');
       setAvatarError(message);
       throw error;
     } finally {
@@ -165,12 +165,14 @@ export function SettingsPage() {
     if (!trimmed) return null;
 
     if (trimmed.toLowerCase().includes('javascript:')) {
-      throw new Error(`Lien ${label} invalide.`);
+      throw new Error(t('settings.socialLinkInvalid', { label }));
     }
 
     const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
     if (withProtocol.length > MAX_SOCIAL_LINK_LENGTH) {
-      throw new Error(`Lien ${label} trop long (max ${MAX_SOCIAL_LINK_LENGTH} caractères).`);
+      throw new Error(
+        t('settings.socialLinkTooLong', { label, max: MAX_SOCIAL_LINK_LENGTH })
+      );
     }
 
     return withProtocol;
@@ -232,10 +234,10 @@ export function SettingsPage() {
         tiktok: normalizedSocialLinks.tiktok || '',
         spotify: normalizedSocialLinks.spotify || '',
       });
-      toast.success('Profil mis à jour avec succès');
+      toast.success(t('settings.profileUpdateSuccess'));
     } catch (error) {
       console.error('Error updating profile', error);
-      const message = error instanceof Error ? error.message : 'Erreur lors de la mise à jour du profil';
+      const message = error instanceof Error ? error.message : t('settings.profileUpdateError');
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -246,12 +248,12 @@ export function SettingsPage() {
     e.preventDefault();
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('Les mots de passe ne correspondent pas');
+      toast.error(t('auth.passwordMismatch'));
       return;
     }
 
     if (passwordData.newPassword.length < 8) {
-      toast.error('Le mot de passe doit contenir au moins 8 caractères');
+      toast.error(t('auth.weakPassword'));
       return;
     }
 
@@ -259,39 +261,38 @@ export function SettingsPage() {
 
     try {
       await updatePassword(passwordData.newPassword);
-      toast.success('Mot de passe mis à jour avec succès');
+      toast.success(t('settings.passwordUpdateSuccess'));
       setPasswordData({ newPassword: '', confirmPassword: '' });
     } catch (error) {
       console.error('Error updating password', error);
-      toast.error('Erreur lors de la mise à jour du mot de passe');
+      toast.error(t('settings.passwordUpdateError'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleLanguageChange = async (newLanguage: string) => {
-    setLanguage(newLanguage as 'fr' | 'en' | 'de');
     try {
-      await updateProfile({ language: newLanguage as 'fr' | 'en' | 'de' });
-      toast.success('Langue mise à jour');
+      await updateLanguage(newLanguage);
+      toast.success(t('settings.languageUpdateSuccess'));
     } catch (error) {
       console.error('Error updating language', error);
-      toast.error('Erreur lors de la mise à jour de la langue');
+      toast.error(t('settings.languageUpdateError'));
     }
   };
 
   const tabs = [
-    { id: 'profile', label: 'Profil', icon: User },
-    { id: 'security', label: 'Sécurité', icon: Lock },
-    { id: 'preferences', label: 'Préférences', icon: Globe },
+    { id: 'profile', label: t('user.profile'), icon: User },
+    { id: 'security', label: t('settings.tabSecurity'), icon: Lock },
+    { id: 'preferences', label: t('settings.tabPreferences'), icon: Globe },
   ];
 
   return (
     <div className="pt-20 pb-12 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Paramètres</h1>
-          <p className="text-zinc-400">Gérez vos informations et préférences</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('nav.settings')}</h1>
+          <p className="text-zinc-400">{t('settings.subtitle')}</p>
         </div>
 
         <div className="flex gap-4 mb-6 border-b border-zinc-800">
@@ -316,16 +317,16 @@ export function SettingsPage() {
             <form onSubmit={handleProfileUpdate} className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-4">
-                  Informations du profil
+                  {t('settings.profileSectionTitle')}
                 </h2>
                 <div className="space-y-4">
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-                    <p className="text-sm font-medium text-zinc-300 mb-3">Avatar</p>
+                    <p className="text-sm font-medium text-zinc-300 mb-3">{t('settings.avatarTitle')}</p>
                     <div className="flex items-center gap-4">
                       {avatarPreviewUrl ? (
                         <img
                           src={avatarPreviewUrl}
-                          alt={profile?.username || 'Avatar'}
+                          alt={profile?.username || t('settings.avatarTitle')}
                           className="w-20 h-20 rounded-full object-cover border border-zinc-700"
                         />
                       ) : (
@@ -349,9 +350,9 @@ export function SettingsPage() {
                           className="flex items-center gap-2"
                         >
                           <Camera className="w-4 h-4" />
-                          Changer l’avatar
+                          {t('settings.changeAvatar')}
                         </Button>
-                        <p className="text-xs text-zinc-500">Formats image • max 2 Mo</p>
+                        <p className="text-xs text-zinc-500">{t('settings.avatarFormats')}</p>
                         {avatarError && (
                           <p className="text-xs text-red-400">{avatarError}</p>
                         )}
@@ -361,7 +362,7 @@ export function SettingsPage() {
 
                   <Input
                     type="text"
-                    label="Nom d'utilisateur"
+                    label={t('auth.username')}
                     value={profileData.username}
                     onChange={(e) =>
                       setProfileData({ ...profileData, username: e.target.value })
@@ -371,7 +372,7 @@ export function SettingsPage() {
                   />
                   <Input
                     type="text"
-                    label="Nom complet"
+                    label={t('auth.fullName')}
                     value={profileData.full_name}
                     onChange={(e) =>
                       setProfileData({ ...profileData, full_name: e.target.value })
@@ -379,7 +380,7 @@ export function SettingsPage() {
                   />
                   <div>
                     <label className="block text-sm font-medium text-zinc-300 mb-2">
-                      Bio
+                      {t('settings.bioLabel')}
                     </label>
                     <textarea
                       value={profileData.bio}
@@ -388,64 +389,64 @@ export function SettingsPage() {
                       }
                       rows={4}
                       className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition-colors"
-                      placeholder="Parlez-nous de vous..."
+                      placeholder={t('settings.bioPlaceholder')}
                     />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-zinc-300 mb-2">Réseaux sociaux</p>
+                    <p className="text-sm font-medium text-zinc-300 mb-2">{t('settings.socialLinksTitle')}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <Input
                         type="text"
-                        label="Instagram"
+                        label={t('settings.instagramLabel')}
                         value={socialLinksData.instagram}
                         onChange={(e) =>
                           setSocialLinksData({ ...socialLinksData, instagram: e.target.value })
                         }
-                        placeholder="https://instagram.com/votrecompte"
+                        placeholder={t('settings.instagramPlaceholder')}
                         leftIcon={<Instagram className="w-4 h-4" />}
                         maxLength={MAX_SOCIAL_LINK_LENGTH}
                       />
                       <Input
                         type="text"
-                        label="YouTube"
+                        label={t('settings.youtubeLabel')}
                         value={socialLinksData.youtube}
                         onChange={(e) =>
                           setSocialLinksData({ ...socialLinksData, youtube: e.target.value })
                         }
-                        placeholder="https://youtube.com/@votrechaine"
+                        placeholder={t('settings.youtubePlaceholder')}
                         leftIcon={<Youtube className="w-4 h-4" />}
                         maxLength={MAX_SOCIAL_LINK_LENGTH}
                       />
                       <Input
                         type="text"
-                        label="SoundCloud"
+                        label={t('settings.soundcloudLabel')}
                         value={socialLinksData.soundcloud}
                         onChange={(e) =>
                           setSocialLinksData({ ...socialLinksData, soundcloud: e.target.value })
                         }
-                        placeholder="https://soundcloud.com/votrecompte"
+                        placeholder={t('settings.soundcloudPlaceholder')}
                         leftIcon={<Cloud className="w-4 h-4" />}
                         maxLength={MAX_SOCIAL_LINK_LENGTH}
                       />
                       <Input
                         type="text"
-                        label="TikTok"
+                        label={t('settings.tiktokLabel')}
                         value={socialLinksData.tiktok}
                         onChange={(e) =>
                           setSocialLinksData({ ...socialLinksData, tiktok: e.target.value })
                         }
-                        placeholder="https://www.tiktok.com/@votrecompte"
+                        placeholder={t('settings.tiktokPlaceholder')}
                         leftIcon={<Music2 className="w-4 h-4" />}
                         maxLength={MAX_SOCIAL_LINK_LENGTH}
                       />
                       <Input
                         type="text"
-                        label="Spotify"
+                        label={t('settings.spotifyLabel')}
                         value={socialLinksData.spotify}
                         onChange={(e) =>
                           setSocialLinksData({ ...socialLinksData, spotify: e.target.value })
                         }
-                        placeholder="https://open.spotify.com/artist/..."
+                        placeholder={t('settings.spotifyPlaceholder')}
                         leftIcon={<Disc3 className="w-4 h-4" />}
                         maxLength={MAX_SOCIAL_LINK_LENGTH}
                       />
@@ -453,19 +454,19 @@ export function SettingsPage() {
                   </div>
                   <Input
                     type="url"
-                    label="Site web"
+                    label={t('settings.websiteLabel')}
                     value={profileData.website_url}
                     onChange={(e) =>
                       setProfileData({ ...profileData, website_url: e.target.value })
                     }
-                    placeholder="https://example.com"
+                    placeholder={t('settings.websitePlaceholder')}
                   />
                 </div>
               </div>
 
               <Button type="submit" isLoading={isLoading || isAvatarUploading} className="flex items-center gap-2">
                 <Save className="w-4 h-4" />
-                Enregistrer les modifications
+                {t('settings.saveChanges')}
               </Button>
             </form>
           </Card>
@@ -476,12 +477,12 @@ export function SettingsPage() {
             <form onSubmit={handlePasswordUpdate} className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-4">
-                  Changer le mot de passe
+                  {t('user.changePassword')}
                 </h2>
                 <div className="space-y-4">
                   <Input
                     type="password"
-                    label="Nouveau mot de passe"
+                    label={t('settings.newPasswordLabel')}
                     value={passwordData.newPassword}
                     onChange={(e) =>
                       setPasswordData({ ...passwordData, newPassword: e.target.value })
@@ -492,7 +493,7 @@ export function SettingsPage() {
                   />
                   <Input
                     type="password"
-                    label="Confirmer le mot de passe"
+                    label={t('auth.confirmPassword')}
                     value={passwordData.confirmPassword}
                     onChange={(e) =>
                       setPasswordData({ ...passwordData, confirmPassword: e.target.value })
@@ -506,7 +507,7 @@ export function SettingsPage() {
 
               <Button type="submit" isLoading={isLoading} className="flex items-center gap-2">
                 <Save className="w-4 h-4" />
-                Mettre à jour le mot de passe
+                {t('settings.updatePasswordButton')}
               </Button>
             </form>
           </Card>
@@ -517,16 +518,16 @@ export function SettingsPage() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-4">
-                  Préférences de langue
+                  {t('settings.languageSectionTitle')}
                 </h2>
                 <Select
-                  label="Langue de l'interface"
+                  label={t('settings.interfaceLanguageLabel')}
                   value={language}
                   onChange={(e) => handleLanguageChange(e.target.value)}
                   options={[
-                    { value: 'fr', label: 'Français' },
-                    { value: 'en', label: 'English' },
-                    { value: 'de', label: 'Deutsch' },
+                    { value: 'fr', label: t('settings.languageFrench') },
+                    { value: 'en', label: t('settings.languageEnglish') },
+                    { value: 'de', label: t('settings.languageGerman') },
                   ]}
                 />
               </div>

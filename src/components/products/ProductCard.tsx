@@ -8,6 +8,7 @@ import { usePlayerStore } from '../../lib/stores/player';
 import { useCartStore } from '../../lib/stores/cart';
 import { useAuth, usePermissions } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
+import { getLocalizedField } from '../../lib/i18n/localized';
 import { formatPrice } from '../../lib/utils/format';
 
 interface ProductCardProps {
@@ -65,15 +66,7 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
   };
 
   const getGenreName = () => {
-    if (!product.genre) return null;
-    switch (language) {
-      case 'en':
-        return product.genre.name_en;
-      case 'de':
-        return product.genre.name_de;
-      default:
-        return product.genre.name;
-    }
+    return getLocalizedField(product.genre, language);
   };
 
   const productUrl = product.is_exclusive
@@ -114,7 +107,11 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
               onClick={handlePlay}
               disabled={!hasPreview}
               className="w-14 h-14 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={hasPreview ? (isPlayingCurrent ? 'Pause' : 'Play') : 'Preview unavailable'}
+              aria-label={
+                hasPreview
+                  ? (isPlayingCurrent ? t('common.pause') : t('common.play'))
+                  : t('products.previewUnavailable')
+              }
             >
               {isPlayingCurrent ? (
                 <Pause className="w-6 h-6 text-zinc-900" fill="currentColor" />
@@ -172,7 +169,7 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
                 {product.title}
               </h3>
               <p className="text-sm text-zinc-400 truncate">
-                {product.producer?.username || 'Unknown'}
+                {product.producer?.username || t('home.unknownProducer')}
               </p>
             </div>
           </div>
@@ -183,12 +180,12 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
                 {getGenreName()}
               </span>
             )}
-            {product.bpm && <span>{product.bpm} BPM</span>}
+            {product.bpm && <span>{product.bpm} {t('products.bpm')}</span>}
             {product.key_signature && <span>{product.key_signature}</span>}
           </div>
 
           {!hasPreview && (
-            <p className="mb-3 text-xs text-zinc-500">Preview unavailable</p>
+            <p className="mb-3 text-xs text-zinc-500">{t('products.previewUnavailable')}</p>
           )}
 
           <div className="flex items-center justify-between">

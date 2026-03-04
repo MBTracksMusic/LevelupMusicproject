@@ -29,14 +29,14 @@ export function ForgotPasswordPage() {
     try {
       await resetPassword(email.trim());
       setEmailSent(true);
-      toast.success('Email de réinitialisation envoyé');
+      toast.success(t('auth.forgotPasswordEmailSentSuccess'));
     } catch (error) {
       const apiError = error as AuthApiError;
       if (apiError?.code === 'over_email_send_rate_limit' || apiError?.status === 429) {
         setCooldown(60);
-        toast.error('Trop de demandes. Réessayez dans 60s.');
+        toast.error(t('auth.forgotPasswordRateLimited'));
       } else {
-        toast.error('Erreur lors de l\'envoi de l\'email');
+        toast.error(t('auth.forgotPasswordSendError'));
       }
     } finally {
       setIsLoading(false);
@@ -56,7 +56,7 @@ export function ForgotPasswordPage() {
             {t('auth.forgotPassword')}
           </h1>
           <p className="text-zinc-400">
-            Entrez votre email pour réinitialiser votre mot de passe
+            {t('auth.forgotPasswordSubtitle')}
           </p>
         </div>
 
@@ -68,15 +68,15 @@ export function ForgotPasswordPage() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">
-                  Email envoyé !
+                  {t('auth.forgotPasswordEmailSentTitle')}
                 </h3>
                 <p className="text-zinc-400 text-sm mb-6">
-                  Vérifiez votre boîte mail et cliquez sur le lien pour réinitialiser votre mot de passe.
+                  {t('auth.forgotPasswordEmailSentDescription')}
                 </p>
               </div>
               <Link to="/login">
                 <Button className="w-full">
-                  Retour à la connexion
+                  {t('auth.backToLogin')}
                 </Button>
               </Link>
             </div>
@@ -88,7 +88,7 @@ export function ForgotPasswordPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 leftIcon={<Mail className="w-5 h-5" />}
-                placeholder="email@exemple.com"
+                placeholder={t('auth.emailPlaceholder')}
                 required
                 autoComplete="email"
               />
@@ -100,7 +100,9 @@ export function ForgotPasswordPage() {
                 isLoading={isLoading}
                 disabled={cooldown > 0}
               >
-                {cooldown > 0 ? `Réessayer dans ${cooldown}s` : "Envoyer l'email"}
+                {cooldown > 0
+                  ? t('auth.forgotPasswordRetryIn', { count: cooldown })
+                  : t('auth.forgotPasswordSendButton')}
               </Button>
 
               <Link
@@ -108,7 +110,7 @@ export function ForgotPasswordPage() {
                 className="flex items-center justify-center gap-2 text-sm text-zinc-400 hover:text-rose-400 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Retour à la connexion
+                {t('auth.backToLogin')}
               </Link>
             </form>
           )}

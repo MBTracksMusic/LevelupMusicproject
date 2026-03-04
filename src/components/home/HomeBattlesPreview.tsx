@@ -4,6 +4,7 @@ import { ArrowRight, Swords } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import type { BattleStatus } from '../../lib/supabase/types';
@@ -34,12 +35,13 @@ const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'd
 };
 
 function toStatusLabel(status: BattleStatus) {
-  if (status === 'active' || status === 'voting') return 'En cours';
-  if (status === 'completed') return 'Terminee';
+  if (status === 'active' || status === 'voting') return 'home.battleStatusActive';
+  if (status === 'completed') return 'home.battleStatusCompleted';
   return status;
 }
 
 export function HomeBattlesPreview() {
+  const { t } = useTranslation();
   const [battles, setBattles] = useState<HomeBattleRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -111,13 +113,13 @@ export function HomeBattlesPreview() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Swords className="w-5 h-5 text-rose-400" />
-              <h2 className="text-3xl font-bold text-white">Battles</h2>
+              <h2 className="text-3xl font-bold text-white">{t('battles.title')}</h2>
             </div>
-            <p className="text-zinc-400">Les 3 dernieres battles publiees</p>
+            <p className="text-zinc-400">{t('home.latestBattlesSubtitle')}</p>
           </div>
           <Link to="/battles">
             <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Voir toutes les battles
+              {t('home.viewAllBattles')}
             </Button>
           </Link>
         </div>
@@ -133,7 +135,7 @@ export function HomeBattlesPreview() {
             ))}
           </div>
         ) : battles.length === 0 ? (
-          <Card className="text-zinc-400">Aucune battle publique pour le moment.</Card>
+          <Card className="text-zinc-400">{t('home.noPublicBattles')}</Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {battles.map((battle) => (
@@ -141,9 +143,9 @@ export function HomeBattlesPreview() {
                 <Card variant="interactive" className="h-full space-y-3 hover:border-rose-500/50">
                   <p className="text-lg font-semibold text-white">{battle.title}</p>
                   <p className="text-sm text-zinc-400">
-                    {battle.producer1?.username || 'Producteur 1'} vs {battle.producer2?.username || 'Producteur 2'}
+                    {battle.producer1?.username || t('home.producerOne')} {t('battles.vs')} {battle.producer2?.username || t('home.producerTwo')}
                   </p>
-                  <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status)}</Badge>
+                  <Badge variant={badgeByStatus[battle.status]}>{t(toStatusLabel(battle.status) as 'home.battleStatusActive' | 'home.battleStatusCompleted')}</Badge>
                 </Card>
               </Link>
             ))}

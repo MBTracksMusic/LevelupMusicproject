@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Instagram, Twitter, Users, Youtube } from 'lucide-react';
-import { ReputationBadge } from '../components/reputation/ReputationBadge';
+import { ReputationBadge, formatRankTier } from '../components/reputation/ReputationBadge';
+import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import type { ProducerTier, ReputationRankTier } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
@@ -66,7 +67,14 @@ const toSocialLinks = (raw: unknown): Array<{ key: 'twitter' | 'instagram' | 'yo
     .filter((item): item is { key: 'twitter' | 'instagram' | 'youtube'; href: string } => item !== null);
 };
 
+const getProducerTierLabel = (tier: ProducerTier | null, t: ReturnType<typeof useTranslation>['t']) => {
+  if (tier === 'elite') return t('producerProfile.tierElite');
+  if (tier === 'pro') return t('producerProfile.tierPro');
+  return t('producerProfile.tierStarter');
+};
+
 export function ProducerPublicProfilePage() {
+  const { t } = useTranslation();
   const { username } = useParams<{ username: string }>();
   const [producer, setProducer] = useState<PublicProducerProfile | null>(null);
   const [beats, setBeats] = useState<PublicProducerBeat[]>([]);
@@ -85,7 +93,7 @@ export function ProducerPublicProfilePage() {
 
     const fetchPublicProducer = async () => {
       if (!username) {
-        setProfileError('Nom utilisateur manquant.');
+        setProfileError(t('producerProfile.missingUsername'));
         setIsProfileLoading(false);
         return;
       }
@@ -107,7 +115,7 @@ export function ProducerPublicProfilePage() {
         if (profileFetchError || !data) {
           if (!isCancelled) {
             setProducer(null);
-            setProfileError('Producteur introuvable');
+            setProfileError(t('producerProfile.notFoundTitle'));
             setIsProfileLoading(false);
           }
           return;
@@ -146,7 +154,7 @@ export function ProducerPublicProfilePage() {
         if (beatsResponse.error) {
           if (!isCancelled) {
             setBeats([]);
-            setBeatsError('Impossible de charger les beats pour le moment.');
+            setBeatsError(t('producerProfile.loadBeatsError'));
           }
         } else if (!isCancelled) {
           setBeats((beatsResponse.data ?? []) as PublicProducerBeat[]);
@@ -155,7 +163,7 @@ export function ProducerPublicProfilePage() {
         if (battlesResponse.error) {
           if (!isCancelled) {
             setBattles([]);
-            setBattlesError('Impossible de charger les battles pour le moment.');
+            setBattlesError(t('producerProfile.loadBattlesError'));
           }
         } else if (!isCancelled) {
           setBattles((battlesResponse.data ?? []) as PublicProducerBattle[]);
@@ -164,7 +172,7 @@ export function ProducerPublicProfilePage() {
         console.error('Error fetching producer public page:', e);
         if (!isCancelled) {
           setProducer(null);
-          setProfileError('Producteur introuvable');
+          setProfileError(t('producerProfile.notFoundTitle'));
         }
       } finally {
         if (!isCancelled) {
@@ -180,7 +188,7 @@ export function ProducerPublicProfilePage() {
     return () => {
       isCancelled = true;
     };
-  }, [username]);
+  }, [username, t]);
 
   if (isProfileLoading) {
     return (
@@ -200,10 +208,10 @@ export function ProducerPublicProfilePage() {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
         <div className="max-w-4xl mx-auto px-4 text-center py-20">
-          <h1 className="text-3xl font-bold text-white mb-3">Producteur introuvable</h1>
-          <p className="text-zinc-400 mb-6">{profileError || 'Ce profil est indisponible.'}</p>
+          <h1 className="text-3xl font-bold text-white mb-3">{t('producerProfile.notFoundTitle')}</h1>
+          <p className="text-zinc-400 mb-6">{profileError || t('producerProfile.unavailableProfile')}</p>
           <Link to="/producers" className="text-rose-400 hover:text-rose-300">
-            Retour aux producteurs
+            {t('producerProfile.backToProducers')}
           </Link>
         </div>
       </div>
@@ -214,7 +222,7 @@ export function ProducerPublicProfilePage() {
     <div className="min-h-screen bg-zinc-950 pt-6 pb-20">
       <div className="max-w-4xl mx-auto px-4">
         <Link to="/producers" className="inline-block text-zinc-400 hover:text-white mb-4">
-          Retour aux producteurs
+          {t('producerProfile.backToProducers')}
         </Link>
 
         <section className="bg-gradient-to-br from-zinc-900 to-zinc-900/70 border border-zinc-800 rounded-xl p-6 md:p-8 mb-4 min-h-[240px] flex flex-col justify-center">
@@ -222,7 +230,7 @@ export function ProducerPublicProfilePage() {
             {producer.avatar_url ? (
               <img
                 src={producer.avatar_url}
-                alt={producer.username || 'Producteur'}
+                alt={producer.username || t('producerProfile.unknownProducer')}
                 className="w-[120px] h-[120px] rounded-full object-cover border border-zinc-700"
               />
             ) : (
@@ -231,41 +239,42 @@ export function ProducerPublicProfilePage() {
               </div>
             )}
             <div>
-              <h1 className="text-3xl font-bold text-white">{producer.username || 'Producteur'}</h1>
+              <h1 className="text-3xl font-bold text-white">{producer.username || t('producerProfile.unknownProducer')}</h1>
               <p className="text-zinc-400">
-                Producteur actif {producer.producer_tier ? `• ${producer.producer_tier.toUpperCase()}` : ''}
+                {t('producerProfile.activeProducer')}
+                {producer.producer_tier ? ` • ${getProducerTierLabel(producer.producer_tier, t)}` : ''}
               </p>
               <ReputationBadge rankTier={producer.rank_tier} level={producer.level} xp={producer.xp} />
             </div>
           </div>
           <p className="text-zinc-300 whitespace-pre-wrap">
-            {producer.bio || 'Aucune biographie disponible.'}
+            {producer.bio || t('producerProfile.noBio')}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-5 max-w-xl">
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Beats</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsBeats')}</p>
               <p className="text-base font-semibold text-white">{beats.length}</p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Battles</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsBattles')}</p>
               <p className="text-base font-semibold text-white">{battles.length}</p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Victoires</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsWins')}</p>
               <p className="text-base font-semibold text-white">
                 {battles.filter((battle) => battle.winner_id === producer.user_id).length}
               </p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">XP</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsXp')}</p>
               <p className="text-base font-semibold text-white">{producer.xp}</p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Rang</p>
-              <p className="text-base font-semibold text-white">{producer.rank_tier}</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsRank')}</p>
+              <p className="text-base font-semibold text-white">{formatRankTier(producer.rank_tier, t)}</p>
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Niveau</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{t('producerProfile.statsLevel')}</p>
               <p className="text-base font-semibold text-white">{producer.level}</p>
             </div>
           </div>
@@ -273,7 +282,7 @@ export function ProducerPublicProfilePage() {
 
         {socialLinks.length > 0 && (
           <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-4">
-            <h2 className="text-lg font-semibold text-white mb-4">Réseaux sociaux</h2>
+            <h2 className="text-lg font-semibold text-white mb-4">{t('producerProfile.socialNetworks')}</h2>
             <div className="flex flex-wrap gap-3">
               {socialLinks.map(({ key, href }) => {
                 const Icon = key === 'twitter' ? Twitter : key === 'instagram' ? Instagram : Youtube;
@@ -297,7 +306,7 @@ export function ProducerPublicProfilePage() {
         )}
 
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-white mb-4">Beats publiés</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t('producerProfile.publishedBeats')}</h2>
 
           {isBeatsLoading && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -318,7 +327,7 @@ export function ProducerPublicProfilePage() {
           )}
 
           {!isBeatsLoading && !beatsError && beats.length === 0 && (
-            <p className="text-sm text-zinc-400">Aucun beat publié pour le moment.</p>
+            <p className="text-sm text-zinc-400">{t('producerProfile.noPublishedBeats')}</p>
           )}
 
           {!isBeatsLoading && !beatsError && beats.length > 0 && (
@@ -343,7 +352,7 @@ export function ProducerPublicProfilePage() {
                   <div className="p-2.5">
                     <p className="text-sm font-semibold text-white truncate">{beat.title}</p>
                     <p className="text-xs text-zinc-400 mt-1">
-                      {beat.bpm ? `${beat.bpm} BPM` : '—'} · {beat.key_signature || '—'}
+                      {beat.bpm ? `${beat.bpm} ${t('products.bpm')}` : '—'} · {beat.key_signature || '—'}
                     </p>
                     <p className="text-sm font-bold text-rose-300 mt-2">{formatPrice(beat.price || 0)}</p>
                   </div>
@@ -354,7 +363,7 @@ export function ProducerPublicProfilePage() {
         </section>
 
         <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mt-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Battles</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t('producerProfile.battlesTitle')}</h2>
 
           {isBattlesLoading && (
             <div className="space-y-3">
@@ -369,7 +378,7 @@ export function ProducerPublicProfilePage() {
           )}
 
           {!isBattlesLoading && !battlesError && battles.length === 0 && (
-            <p className="text-sm text-zinc-400">Aucune battle pour le moment.</p>
+            <p className="text-sm text-zinc-400">{t('producerProfile.noBattles')}</p>
           )}
 
           {!isBattlesLoading && !battlesError && battles.length > 0 && (
@@ -384,12 +393,12 @@ export function ProducerPublicProfilePage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-white truncate">{battle.title}</p>
                       <p className="text-[11px] text-zinc-400 mt-0.5">
-                        Statut: {battle.status}
+                        {t('producerProfile.statusLabel')}: {battle.status}
                       </p>
                     </div>
                     {battle.winner_id === producer.user_id && (
                       <span className="shrink-0 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
-                        🏆 Gagnant
+                        🏆 {t('producerProfile.winnerBadge')}
                       </span>
                     )}
                   </div>

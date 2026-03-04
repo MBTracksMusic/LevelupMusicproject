@@ -10,7 +10,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useTranslation } from '../lib/i18n';
+import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
 import type { Database } from '../lib/supabase/types';
@@ -96,54 +96,60 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const getEditLockMessage = (permissions: EditPermissions | null | undefined) => {
+const getEditLockMessage = (
+  permissions: EditPermissions | null | undefined,
+  t: TranslateFn,
+) => {
   if (!permissions) {
-    return 'Modification impossible pour le moment.';
+    return t('uploadBeat.editUnavailable');
   }
 
   if (permissions.must_create_new_version) {
     if (permissions.has_terminated_battle) {
-      return 'Ce produit a participe a une battle terminee. Creez une nouvelle version pour modifier l’audio ou les metadonnees essentielles.';
+      return t('uploadBeat.lockCompletedBattle');
     }
 
     if (permissions.has_sales) {
-      return 'Ce beat a deja des ventes. Creez une nouvelle version.';
+      return t('uploadBeat.lockHasSales');
     }
   }
 
   if (permissions.can_edit_audio === false && permissions.has_active_battle) {
-    return 'Audio verrouille: une battle active empeche la modification du master.';
+    return t('uploadBeat.audioLockedActiveBattle');
   }
 
   if (permissions.can_edit_audio === false && permissions.has_terminated_battle) {
-    return 'Audio verrouille: une battle terminee fige l’historique de cette version.';
+    return t('uploadBeat.audioLockedCompletedBattle');
   }
 
   if (permissions.can_edit_metadata === false && permissions.has_terminated_battle) {
-    return 'Metadonnees essentielles verrouillees: ce produit a participe a une battle terminee.';
+    return t('uploadBeat.metadataLockedCompletedBattle');
   }
 
-  return 'Modification impossible pour le moment.';
+  return t('uploadBeat.editUnavailable');
 };
 
-const getEditModeDescription = (permissions: EditPermissions | null | undefined) => {
+const getEditModeDescription = (
+  permissions: EditPermissions | null | undefined,
+  t: TranslateFn,
+) => {
   if (!permissions) {
-    return 'Verification des droits de modification en cours.';
+    return t('uploadBeat.checkingPermissions');
   }
 
   if (permissions.must_create_new_version) {
-    return getEditLockMessage(permissions);
+    return getEditLockMessage(permissions, t);
   }
 
   if (permissions.can_edit_audio === false && permissions.has_active_battle) {
-    return 'Modification partielle: les metadonnees essentielles restent modifiables, mais l’audio est verrouille par une battle active.';
+    return t('uploadBeat.partialEditActiveBattle');
   }
 
   if (permissions.can_edit_audio === false) {
-    return getEditLockMessage(permissions);
+    return getEditLockMessage(permissions, t);
   }
 
-  return 'Modification complete autorisee.';
+  return t('uploadBeat.fullEditAllowed');
 };
 
 const isProductSchemaMismatchError = (error: unknown) => {
@@ -239,7 +245,7 @@ export function UploadBeatPage() {
 
         const sourceRow = (data as VersionSourceRow | null) ?? null;
         if (!sourceRow) {
-          throw new Error('Version source introuvable.');
+          throw new Error(t('uploadBeat.versionSourceNotFound'));
         }
 
         if (!isCancelled) {
@@ -257,7 +263,7 @@ export function UploadBeatPage() {
         if (!isCancelled) {
           setErrors((prev) => ({
             ...prev,
-            form: getErrorMessage(error, 'Impossible de charger la version source.'),
+            form: getErrorMessage(error, t('uploadBeat.loadVersionSourceError')),
           }));
           setVersionSource(null);
         }
@@ -273,7 +279,7 @@ export function UploadBeatPage() {
     return () => {
       isCancelled = true;
     };
-  }, [cloneFrom, profile?.id]);
+  }, [cloneFrom, profile?.id, t]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -307,11 +313,11 @@ export function UploadBeatPage() {
         const permissions = (editabilityData as EditPermissions | null) ?? null;
 
         if (!sourceRow) {
-          throw new Error('Produit introuvable.');
+          throw new Error(t('uploadBeat.productNotFound'));
         }
 
         if (!permissions) {
-          throw new Error('Impossible de verifier les droits de modification.');
+          throw new Error(t('uploadBeat.editPermissionsError'));
         }
 
         if (!isCancelled) {
@@ -325,7 +331,7 @@ export function UploadBeatPage() {
           setImagePreviewUrl(sourceRow.cover_image_url);
           setErrors((prev) => ({
             ...prev,
-            form: permissions.must_create_new_version ? getEditLockMessage(permissions) : undefined,
+            form: permissions.must_create_new_version ? getEditLockMessage(permissions, t) : undefined,
           }));
         }
       } catch (error) {
@@ -333,7 +339,7 @@ export function UploadBeatPage() {
         if (!isCancelled) {
           setErrors((prev) => ({
             ...prev,
-            form: getErrorMessage(error, 'Impossible de charger le produit a modifier.'),
+            form: getErrorMessage(error, t('uploadBeat.loadEditProductError')),
           }));
           setEditingProduct(null);
           setEditPermissions(null);
@@ -350,7 +356,7 @@ export function UploadBeatPage() {
     return () => {
       isCancelled = true;
     };
-  }, [editProductId, profile?.id]);
+  }, [editProductId, profile?.id, t]);
 
   const isProducerActive = profile?.is_producer_active ?? false;
   const hasValidationErrors = !!errors.audio || !!errors.image;
@@ -406,14 +412,14 @@ export function UploadBeatPage() {
       audio.preload = 'metadata';
       audio.src = src;
       audio.onloadedmetadata = () => resolve(audio.duration || 0);
-      audio.onerror = () => reject(new Error('Impossible de lire ce fichier audio.'));
+      audio.onerror = () => reject(new Error(t('uploadBeat.audioReadError')));
     });
 
   const getImageDimensions = (src: string) =>
     new Promise<{ width: number; height: number }>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve({ width: img.width, height: img.height });
-      img.onerror = () => reject(new Error('Impossible de lire cette image.'));
+      img.onerror = () => reject(new Error(t('uploadBeat.imageReadError')));
       img.src = src;
     });
 
@@ -421,7 +427,7 @@ export function UploadBeatPage() {
     if (isEditMode && editPermissions && !editPermissions.can_edit_audio) {
       setErrors((prev) => ({
         ...prev,
-        audio: getEditLockMessage(editPermissions),
+        audio: getEditLockMessage(editPermissions, t),
       }));
       event.target.value = '';
       return;
@@ -434,12 +440,12 @@ export function UploadBeatPage() {
 
     const allowedTypes = ['audio/wav', 'audio/x-wav', 'audio/wave', 'audio/mpeg', 'audio/mp3'];
     if (!allowedTypes.includes(file.type)) {
-      setErrors((prev) => ({ ...prev, audio: 'Formats autorisés : WAV ou MP3' }));
+      setErrors((prev) => ({ ...prev, audio: t('uploadBeat.audioFormatError') }));
       return;
     }
 
     if (file.size > MAX_AUDIO_SIZE) {
-      setErrors((prev) => ({ ...prev, audio: 'Poids maxi : 50 Mo' }));
+      setErrors((prev) => ({ ...prev, audio: t('uploadBeat.audioSizeError') }));
       return;
     }
 
@@ -447,7 +453,7 @@ export function UploadBeatPage() {
     try {
       const duration = await getAudioDuration(previewUrl);
       if (duration > MAX_AUDIO_DURATION) {
-        throw new Error('Durée maximale : 10 minutes');
+        throw new Error(t('uploadBeat.audioDurationError'));
       }
 
       setAudioFile(file);
@@ -459,7 +465,7 @@ export function UploadBeatPage() {
       URL.revokeObjectURL(previewUrl);
       setErrors((prev) => ({
         ...prev,
-        audio: error instanceof Error ? error.message : 'Fichier audio invalide',
+        audio: error instanceof Error ? error.message : t('uploadBeat.audioInvalid'),
       }));
     }
   };
@@ -472,12 +478,12 @@ export function UploadBeatPage() {
 
     const allowedTypes = ['image/jpeg', 'image/png'];
     if (!allowedTypes.includes(file.type)) {
-      setErrors((prev) => ({ ...prev, image: 'Formats autorisés : JPG ou PNG' }));
+      setErrors((prev) => ({ ...prev, image: t('uploadBeat.imageFormatError') }));
       return;
     }
 
     if (file.size > MAX_IMAGE_SIZE) {
-      setErrors((prev) => ({ ...prev, image: 'Poids maxi : 5 Mo' }));
+      setErrors((prev) => ({ ...prev, image: t('uploadBeat.imageSizeError') }));
       return;
     }
 
@@ -485,7 +491,7 @@ export function UploadBeatPage() {
     try {
       const { width, height } = await getImageDimensions(previewUrl);
       if (width < MIN_IMAGE_DIMENSION || height < MIN_IMAGE_DIMENSION) {
-        throw new Error('Dimensions minimales : 500x500 px');
+        throw new Error(t('uploadBeat.imageDimensionError'));
       }
 
       setImageFile(file);
@@ -496,7 +502,7 @@ export function UploadBeatPage() {
       URL.revokeObjectURL(previewUrl);
       setErrors((prev) => ({
         ...prev,
-        image: error instanceof Error ? error.message : 'Image invalide',
+        image: error instanceof Error ? error.message : t('uploadBeat.imageInvalid'),
       }));
     }
   };
@@ -557,7 +563,7 @@ export function UploadBeatPage() {
     if (isEditMode && !editPermissions?.can_edit_metadata) {
       setErrors((prev) => ({
         ...prev,
-        form: getEditLockMessage(editPermissions),
+        form: getEditLockMessage(editPermissions, t),
       }));
       return;
     }
@@ -602,7 +608,7 @@ export function UploadBeatPage() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       const producerId = authData.user?.id ?? profile?.id ?? null;
       if (authError || !producerId) {
-        throw new Error('Session expirée. Reconnectez-vous puis réessayez.');
+        throw new Error(t('uploadBeat.sessionExpired'));
       }
 
       let masterStorageReference: string | null = null;
@@ -622,7 +628,7 @@ export function UploadBeatPage() {
 
         const normalizedMasterPath = normalizeStoragePath(audioData?.path || audioPath, MASTER_BUCKET);
         if (!normalizedMasterPath) {
-          throw new Error('Echec upload master: chemin invalide.');
+          throw new Error(t('uploadBeat.masterPathInvalid'));
         }
         masterStorageReference = `${MASTER_BUCKET}/${normalizedMasterPath}`;
 
@@ -754,14 +760,14 @@ export function UploadBeatPage() {
       setIsWatermarkProcessing(Boolean(versionSource || audioFile));
       toast.success(
         versionSource
-          ? 'Nouvelle version publiée. Traitement watermark en cours.'
+          ? t('uploadBeat.versionPublished')
           : editingProduct
             ? (
               audioFile
-                ? 'Produit mis a jour. Traitement watermark en cours.'
-                : 'Produit mis a jour.'
+                ? t('uploadBeat.productUpdatedWatermark')
+                : t('uploadBeat.productUpdated')
             )
-            : 'Beat publié. Traitement watermark en cours.'
+            : t('uploadBeat.beatPublished')
       );
       setErrors({});
       setTitle('');
@@ -779,7 +785,7 @@ export function UploadBeatPage() {
         navigate('/producer');
       }
     } catch (error) {
-      const errorMessage = getErrorMessage(error, 'Upload impossible pour le moment.');
+      const errorMessage = getErrorMessage(error, t('uploadBeat.uploadError'));
       console.error('[upload-beat] upload failed', error);
       if (audioPath) {
         const { error: cleanupAudioError } = await supabase.storage.from(MASTER_BUCKET).remove([audioPath]);
@@ -848,13 +854,15 @@ export function UploadBeatPage() {
               {t('producer.uploadBeat')}
             </p>
             <h1 className="text-3xl font-bold mt-1">
-              {isEditMode ? 'Modifier le beat' : isVersionMode ? 'Nouvelle version' : (profile?.username || profile?.email)}
+              {isEditMode ? t('uploadBeat.editBeat') : isVersionMode ? t('uploadBeat.newVersion') : (profile?.username || profile?.email)}
             </h1>
             <p className="text-zinc-400 mt-1">
               {isEditMode
-                ? getEditModeDescription(editPermissions)
+                ? getEditModeDescription(editPermissions, t)
                 : isVersionMode
-                ? `Pré-remplissage depuis la version ${versionSource?.version_number ?? 'source'}. Aucune ligne ne sera créée tant que vous ne cliquez pas sur Publier.`
+                ? t('uploadBeat.prefillFromVersion', {
+                  version: versionSource?.version_number ?? t('uploadBeat.sourceFallback'),
+                })
                 : t('producer.subscriptionRequired')}
             </p>
           </div>
@@ -862,13 +870,13 @@ export function UploadBeatPage() {
 
         {profile && !isProducerActive && (
           <div className="rounded-2xl border border-amber-700/50 bg-amber-900/10 p-5">
-            <h2 className="text-lg font-semibold text-white">Devenez Producteur</h2>
+            <h2 className="text-lg font-semibold text-white">{t('uploadBeat.becomeProducerTitle')}</h2>
             <p className="mt-1 text-sm text-zinc-300">
-              L’upload est réservé aux producteurs abonnés.
+              {t('uploadBeat.uploadReserved')}
             </p>
             <div className="mt-4">
               <Button variant="secondary" onClick={() => navigate('/pricing')}>
-                Voir les offres
+                {t('uploadBeat.viewPlans')}
               </Button>
             </div>
           </div>
@@ -878,7 +886,7 @@ export function UploadBeatPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label={t('producer.productTitle')}
-              placeholder="Ex: Midnight Bounce"
+              placeholder={t('uploadBeat.titlePlaceholder')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={isUploading || isMetadataLocked}
@@ -886,7 +894,7 @@ export function UploadBeatPage() {
             <Input
               label={t('products.price')}
               type="number"
-              placeholder="Prix (€)"
+              placeholder={t('uploadBeat.pricePlaceholder')}
               min="0"
               step="0.01"
               value={price}
@@ -902,7 +910,7 @@ export function UploadBeatPage() {
             <textarea
               rows={4}
               className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
-              placeholder="Décris l'ambiance, les instruments, les licences..."
+              placeholder={t('uploadBeat.descriptionPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={isUploading || isMetadataLocked}
@@ -911,9 +919,9 @@ export function UploadBeatPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="BPM"
+              label={t('producer.productBpm')}
               type="number"
-              placeholder="Ex: 140"
+              placeholder={t('uploadBeat.bpmPlaceholder')}
               min="0"
               value={bpm}
               onChange={(e) => setBpm(e.target.value)}
@@ -921,7 +929,7 @@ export function UploadBeatPage() {
             />
             <Input
               label={t('products.key')}
-              placeholder="Ex: Am"
+              placeholder={t('uploadBeat.keyPlaceholder')}
               value={keySignature}
               onChange={(e) => setKeySignature(e.target.value)}
               disabled={isUploading || isMetadataLocked}
@@ -963,7 +971,7 @@ export function UploadBeatPage() {
                   disabled={isUploading || (isEditMode && editPermissions?.can_edit_audio === false)}
                   leftIcon={<UploadCloud className="w-4 h-4" />}
                 >
-                  {isEditMode && editPermissions?.can_edit_audio === false ? 'Audio verrouille' : t('producer.chooseAudioFile')}
+                  {isEditMode && editPermissions?.can_edit_audio === false ? t('uploadBeat.audioLocked') : t('producer.chooseAudioFile')}
                 </Button>
                 {audioFile && (
                   <Button
@@ -1004,8 +1012,8 @@ export function UploadBeatPage() {
               ) : (
                 <p className="text-xs text-zinc-500">
                   {isEditMode && editPermissions?.can_edit_audio === false
-                    ? 'Le master actuel est conserve car une battle active verrouille l’audio.'
-                    : `${t('producer.fileMissing')} – ${t('producer.audioRequirements')}`}
+                    ? t('uploadBeat.currentMasterKept')
+                    : `${t('producer.fileMissing')} - ${t('producer.audioRequirements')}`}
                 </p>
               )}
             </div>
@@ -1044,7 +1052,7 @@ export function UploadBeatPage() {
                   disabled={isUploading || isMetadataLocked}
                   leftIcon={<UploadCloud className="w-4 h-4" />}
                 >
-                  {isMetadataLocked ? 'Pochette verrouillee' : t('producer.chooseCoverFile')}
+                  {isMetadataLocked ? t('uploadBeat.coverLocked') : t('producer.chooseCoverFile')}
                 </Button>
                 {imageFile && (
                   <Button
@@ -1070,14 +1078,14 @@ export function UploadBeatPage() {
                     <div className="overflow-hidden rounded-lg border border-zinc-800">
                       <img
                         src={imagePreviewUrl}
-                        alt="Prévisualisation pochette"
+                        alt={t('uploadBeat.coverPreviewAlt')}
                         className="w-full aspect-square object-cover"
                       />
                     </div>
                   )}
                   {!imageFile && imagePreviewUrl && (
                     <p className="text-xs text-zinc-500">
-                      La pochette actuelle sera conservée tant que vous n’en choisissez pas une autre.
+                      {t('uploadBeat.currentCoverKept')}
                     </p>
                   )}
                   {isUploading &&
@@ -1092,8 +1100,8 @@ export function UploadBeatPage() {
               ) : (
                 <p className="text-xs text-zinc-500">
                   {isMetadataLocked
-                    ? 'La pochette actuelle est conservee car les metadonnees essentielles sont verrouillees.'
-                    : `${t('producer.fileMissing')} – ${t('producer.coverRequirements')}`}
+                    ? t('uploadBeat.metadataCoverLocked')
+                    : `${t('producer.fileMissing')} - ${t('producer.coverRequirements')}`}
                 </p>
               )}
             </div>
@@ -1108,13 +1116,13 @@ export function UploadBeatPage() {
 
           {isSourceLoading && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-300">
-              Chargement du produit...
+              {t('uploadBeat.loadingProduct')}
             </div>
           )}
 
           {isWatermarkProcessing && (
             <div className="rounded-lg border border-amber-700/60 bg-amber-900/15 px-3 py-2 text-sm text-amber-200">
-              Traitement en cours: la preview watermarked n'est pas encore disponible.
+              {t('uploadBeat.watermarkProcessing')}
             </div>
           )}
 

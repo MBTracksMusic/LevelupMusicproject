@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
+import { useTranslation } from '../../lib/i18n';
 
 export interface NewsFormValues {
   title: string;
@@ -37,6 +38,7 @@ export function NewsForm({
   onSubmit,
   onCancel,
 }: NewsFormProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<NewsFormValues>({
     title: initialValues?.title ?? '',
     description: initialValues?.description ?? '',
@@ -47,7 +49,10 @@ export function NewsForm({
   });
   const [errors, setErrors] = useState<Partial<Record<keyof NewsFormValues, string>>>({});
 
-  const submitLabel = useMemo(() => (mode === 'create' ? 'Créer la news' : 'Enregistrer'), [mode]);
+  const submitLabel = useMemo(
+    () => (mode === 'create' ? t('admin.news.form.createSubmit') : t('common.save')),
+    [mode, t],
+  );
 
   const setField = <K extends keyof NewsFormValues>(key: K, value: NewsFormValues[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -58,23 +63,23 @@ export function NewsForm({
     const nextErrors: Partial<Record<keyof NewsFormValues, string>> = {};
 
     if (!form.title.trim()) {
-      nextErrors.title = 'Le titre est obligatoire.';
+      nextErrors.title = t('admin.news.form.titleRequired');
     }
 
     if (!form.video_url.trim()) {
-      nextErrors.video_url = 'L’URL vidéo est obligatoire.';
+      nextErrors.video_url = t('admin.news.form.videoUrlRequired');
     } else if (!isSupportedVideoUrl(form.video_url)) {
-      nextErrors.video_url = 'URL non supportée (YouTube, Vimeo ou MP4 https).';
+      nextErrors.video_url = t('admin.news.form.videoUrlInvalid');
     }
 
     if (form.thumbnail_url.trim()) {
       try {
         const parsed = new URL(form.thumbnail_url.trim());
         if (!(parsed.protocol === 'https:' || parsed.protocol === 'http:')) {
-          nextErrors.thumbnail_url = 'URL de thumbnail invalide.';
+          nextErrors.thumbnail_url = t('admin.news.form.thumbnailInvalid');
         }
       } catch {
-        nextErrors.thumbnail_url = 'URL de thumbnail invalide.';
+        nextErrors.thumbnail_url = t('admin.news.form.thumbnailInvalid');
       }
     }
 
@@ -99,41 +104,41 @@ export function NewsForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
-        label="Titre"
+        label={t('admin.news.form.titleLabel')}
         value={form.title}
         onChange={(event) => setField('title', event.target.value)}
-        placeholder="Annonce nouvelle vidéo..."
+        placeholder={t('admin.news.form.titlePlaceholder')}
         error={errors.title}
         required
       />
 
       <div>
         <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="news-description">
-          Description
+          {t('common.description')}
         </label>
         <textarea
           id="news-description"
           className="w-full min-h-[110px] bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
           value={form.description}
           onChange={(event) => setField('description', event.target.value)}
-          placeholder="Description courte"
+          placeholder={t('admin.news.form.descriptionPlaceholder')}
         />
       </div>
 
       <Input
-        label="URL vidéo"
+        label={t('admin.news.form.videoUrlLabel')}
         value={form.video_url}
         onChange={(event) => setField('video_url', event.target.value)}
-        placeholder="https://youtube.com/... / https://vimeo.com/... / https://...mp4"
+        placeholder={t('admin.news.form.videoUrlPlaceholder')}
         error={errors.video_url}
         required
       />
 
       <Input
-        label="URL thumbnail (optionnel)"
+        label={t('admin.news.form.thumbnailLabel')}
         value={form.thumbnail_url}
         onChange={(event) => setField('thumbnail_url', event.target.value)}
-        placeholder="https://..."
+        placeholder={t('admin.news.form.thumbnailPlaceholder')}
         error={errors.thumbnail_url}
       />
 
@@ -145,7 +150,7 @@ export function NewsForm({
             checked={form.is_published}
             onChange={(event) => setField('is_published', event.target.checked)}
           />
-          <span>Publié</span>
+          <span>{t('producer.published')}</span>
         </label>
 
         <label className="flex items-center gap-3 text-sm text-zinc-200 cursor-pointer">
@@ -155,13 +160,13 @@ export function NewsForm({
             checked={form.broadcast_email}
             onChange={(event) => setField('broadcast_email', event.target.checked)}
           />
-          <span>Diffuser aux abonnés à la publication</span>
+          <span>{t('admin.news.form.broadcastLabel')}</span>
         </label>
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
-          Annuler
+          {t('common.cancel')}
         </Button>
         <Button type="submit" isLoading={isSubmitting}>
           {submitLabel}

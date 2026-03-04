@@ -7,12 +7,14 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { useAuth } from '../lib/auth/hooks';
+import { useTranslation } from '../lib/i18n';
 import { getForumFunctionErrorCode, getForumFunctionErrorMessage, useForumActions, useForumPosts } from '../lib/forum/hooks';
 import { formatDateTime } from '../lib/utils/format';
 
 const PAGE_SIZE = 20;
 
 export function ForumTopicPage() {
+  const { t } = useTranslation();
   const { categorySlug, topicSlug } = useParams<{ categorySlug: string; topicSlug: string }>();
   const { user } = useAuth();
   const [page, setPage] = useState(1);
@@ -27,11 +29,11 @@ export function ForumTopicPage() {
   const { createReply, isSubmitting } = useForumActions();
 
   const paginationLabel = useMemo(() => {
-    if (totalCount === 0) return '0 message';
+    if (totalCount === 0) return t('forum.paginationMessagesZero');
     const from = (page - 1) * PAGE_SIZE + 1;
     const to = Math.min(page * PAGE_SIZE, totalCount);
-    return `${from}-${to} sur ${totalCount} messages`;
-  }, [page, totalCount]);
+    return t('forum.paginationMessages', { from, to, total: totalCount });
+  }, [page, t, totalCount]);
 
   const handleReply = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,7 +41,7 @@ export function ForumTopicPage() {
 
     const trimmedReply = reply.trim();
     if (!trimmedReply) {
-      toast.error('Votre reponse ne peut pas etre vide.');
+      toast.error(t('forum.replyEmptyError'));
       return;
     }
 
@@ -50,9 +52,9 @@ export function ForumTopicPage() {
       });
       setReply('');
       if (result.status === 'review') {
-        toast.success('Reponse envoyee et placee en attente de moderation.');
+        toast.success(t('forum.replyPending'));
       } else {
-        toast.success('Reponse publiee.');
+        toast.success(t('forum.replySuccess'));
       }
       await refresh();
       setPage(totalPages);
@@ -60,11 +62,11 @@ export function ForumTopicPage() {
       console.error('Failed to create forum reply', replyError);
       const errorCode = getForumFunctionErrorCode(replyError);
       if (errorCode === 'blocked') {
-        toast.error('Contenu refuse.');
+        toast.error(t('forum.contentRejected'));
         return;
       }
 
-      toast.error(getForumFunctionErrorMessage(replyError, 'Impossible de publier la reponse.'));
+      toast.error(getForumFunctionErrorMessage(replyError, t('forum.publishReplyError')));
     }
   };
 
@@ -77,20 +79,20 @@ export function ForumTopicPage() {
             className="inline-flex items-center gap-2 text-zinc-400 hover:text-white"
           >
             <ChevronLeft className="h-4 w-4" />
-            Retour a la categorie
+            {t('forum.backToCategory')}
           </Link>
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-bold text-white">{topic?.title || 'Topic forum'}</h1>
+              <h1 className="text-3xl font-bold text-white">{topic?.title || t('forum.topicFallbackTitle')}</h1>
               {topic?.is_locked && (
                 <Badge variant="warning">
                   <Lock className="h-3 w-3" />
-                  Verrouille
+                  {t('forum.topicLocked')}
                 </Badge>
               )}
             </div>
             <p className="text-zinc-400">
-              {category?.name || 'Forum'} • {paginationLabel}
+              {category?.name || t('forum.title')} • {paginationLabel}
             </p>
           </div>
         </div>
@@ -98,7 +100,7 @@ export function ForumTopicPage() {
         <div className="flex items-center justify-between text-sm text-zinc-400">
           <span>{paginationLabel}</span>
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
 
@@ -124,10 +126,10 @@ export function ForumTopicPage() {
               <CardHeader className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <CardTitle className="text-base">
-                    {post.author?.username || `Membre ${post.user_id.slice(0, 8)}`}
+                    {post.author?.username || t('forum.memberFallback', { id: post.user_id.slice(0, 8) })}
                   </CardTitle>
                   <CardDescription>
-                    Message #{(page - 1) * PAGE_SIZE + index + 1} • {formatDateTime(post.created_at)}
+                    {t('forum.postNumber', { count: (page - 1) * PAGE_SIZE + index + 1 })} • {formatDateTime(post.created_at)}
                   </CardDescription>
                   {post.author && !post.is_ai_generated && (
                     <ReputationBadge
@@ -142,28 +144,28 @@ export function ForumTopicPage() {
                   {post.is_ai_generated && (
                     <Badge variant="info">
                       <Bot className="h-3 w-3" />
-                      {post.ai_agent_name || 'Assistant IA'}
+                      {post.ai_agent_name || t('forum.aiAssistant')}
                     </Badge>
                   )}
                   {post.moderation_status === 'review' && (
-                    <Badge variant="warning">En revue</Badge>
+                    <Badge variant="warning">{t('forum.review')}</Badge>
                   )}
                   {post.moderation_status === 'blocked' && (
-                    <Badge variant="danger">Bloque</Badge>
+                    <Badge variant="danger">{t('forum.blocked')}</Badge>
                   )}
                   {post.edited_at && (
-                    <Badge variant="info">Edite le {formatDateTime(post.edited_at)}</Badge>
+                    <Badge variant="info">{t('forum.editedAt', { date: formatDateTime(post.edited_at) })}</Badge>
                   )}
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="whitespace-pre-wrap text-sm leading-7 text-zinc-200">
                   {post.is_deleted
-                    ? 'Ce message a ete supprime.'
+                    ? t('forum.deletedPost')
                     : post.is_visible === false && post.moderation_status === 'review'
-                    ? 'Ce message est en attente de moderation.'
+                    ? t('forum.pendingModeration')
                     : post.is_visible === false && post.moderation_status === 'blocked'
-                    ? 'Ce message a ete masque par moderation.'
+                    ? t('forum.blockedByModeration')
                     : post.content}
                 </p>
               </CardContent>
@@ -179,10 +181,10 @@ export function ForumTopicPage() {
               disabled={page <= 1}
               leftIcon={<ChevronLeft className="h-4 w-4" />}
             >
-              Page precedente
+              {t('forum.previousPage')}
             </Button>
             <span className="text-sm text-zinc-400">
-              Page {page} / {totalPages}
+              {t('common.page')} {page} / {totalPages}
             </span>
             <Button
               variant="outline"
@@ -190,7 +192,7 @@ export function ForumTopicPage() {
               disabled={page >= totalPages}
               rightIcon={<ChevronRight className="h-4 w-4" />}
             >
-              Page suivante
+              {t('forum.nextPage')}
             </Button>
           </div>
         )}
@@ -199,14 +201,14 @@ export function ForumTopicPage() {
           topic?.is_locked ? (
             <Card className="border-amber-900 bg-amber-950/20">
               <CardContent className="text-sm text-amber-300">
-                Ce topic est verrouille. Aucune nouvelle reponse n'est autorisee.
+                {t('forum.topicLockedNotice')}
               </CardContent>
             </Card>
           ) : (
             <Card className="border-zinc-800">
               <CardHeader>
-                <CardTitle>Repondre</CardTitle>
-                <CardDescription>Votre message sera publie a la suite de la discussion.</CardDescription>
+                <CardTitle>{t('forum.replyTitle')}</CardTitle>
+                <CardDescription>{t('forum.replyDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleReply} className="space-y-4">
@@ -216,11 +218,11 @@ export function ForumTopicPage() {
                     disabled={isSubmitting}
                     rows={7}
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white placeholder-zinc-500 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
-                    placeholder="Partagez votre reponse, votre retour ou une precision utile."
+                    placeholder={t('forum.replyPlaceholder')}
                   />
                   <div className="flex justify-end">
                     <Button type="submit" isLoading={isSubmitting}>
-                      Publier la reponse
+                      {t('forum.publishReply')}
                     </Button>
                   </div>
                 </form>
@@ -230,7 +232,7 @@ export function ForumTopicPage() {
         ) : (
           <Card className="border-zinc-800">
             <CardContent className="py-8 text-center text-zinc-400">
-              Connectez-vous pour repondre a ce topic.
+              {t('forum.loginToReply')}
             </CardContent>
           </Card>
         )}

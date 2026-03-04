@@ -1,5 +1,6 @@
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pause, Play, Volume2 } from 'lucide-react';
+import { useTranslation } from '../../lib/i18n';
 
 const formatTime = (value: number) => {
   const safeValue = Number.isFinite(value) && value > 0 ? value : 0;
@@ -23,6 +24,7 @@ export function BattleAudioPlayer({
   activePlayerId,
   onActivePlayerChange,
 }: BattleAudioPlayerProps) {
+  const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [sourceCandidates, setSourceCandidates] = useState<string[]>([]);
   const [sourceIndex, setSourceIndex] = useState(0);
@@ -49,7 +51,7 @@ export function BattleAudioPlayer({
       setErrorMessage(null);
 
       if (!trimmed) {
-        setErrorMessage('Preview unavailable');
+        setErrorMessage(t('audio.previewUnavailable'));
         return;
       }
 
@@ -59,7 +61,7 @@ export function BattleAudioPlayer({
 
       setSourceCandidates(resolved);
       if (resolved.length === 0) {
-        setErrorMessage('Preview unavailable');
+        setErrorMessage(t('audio.previewUnavailable'));
       }
       setIsResolving(false);
     };
@@ -68,7 +70,7 @@ export function BattleAudioPlayer({
     return () => {
       isCancelled = true;
     };
-  }, [src]);
+  }, [src, t]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -105,12 +107,12 @@ export function BattleAudioPlayer({
 
     if (!isReady || !currentSource) return;
 
-    audio.play().catch((error) => {
-      console.error('Battle preview play failed', error);
-      setErrorMessage('Lecture bloquee par le navigateur.');
-      onActivePlayerChange(null);
-    });
-  }, [currentSource, isActive, isReady, onActivePlayerChange]);
+      audio.play().catch((error) => {
+        console.error('Battle preview play failed', error);
+        setErrorMessage(t('audio.playbackBlocked'));
+        onActivePlayerChange(null);
+      });
+  }, [currentSource, isActive, isReady, onActivePlayerChange, t]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -177,9 +179,9 @@ export function BattleAudioPlayer({
       return;
     }
 
-    setErrorMessage('Preview unavailable');
+    setErrorMessage(t('audio.previewUnavailable'));
     onActivePlayerChange(null);
-  }, [onActivePlayerChange, sourceCandidates.length, sourceIndex]);
+  }, [onActivePlayerChange, sourceCandidates.length, sourceIndex, t]);
 
   return (
     <div className="space-y-2">
@@ -200,13 +202,13 @@ export function BattleAudioPlayer({
           onClick={togglePlay}
           disabled={!canPlay}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-zinc-900 transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60"
-          aria-label={isActive ? 'Pause preview' : 'Play preview'}
+          aria-label={isActive ? t('audio.pausePreview') : t('audio.playPreview')}
         >
           {isActive ? <Pause className="h-4 w-4" fill="currentColor" /> : <Play className="h-4 w-4 ml-0.5" fill="currentColor" />}
         </button>
 
         <div className="flex-1">
-          <p className="mb-1 text-xs text-zinc-500">{label || 'Extrait audio'}</p>
+          <p className="mb-1 text-xs text-zinc-500">{label || t('audio.excerptLabel')}</p>
           <div className="flex items-center gap-2">
             <input
               type="range"
@@ -238,8 +240,8 @@ export function BattleAudioPlayer({
         </div>
       </div>
 
-      {isResolving && <p className="text-xs text-zinc-500">Chargement de l&apos;extrait...</p>}
-      {!isResolving && !currentSource && !errorMessage && <p className="text-xs text-zinc-500">Preview unavailable</p>}
+      {isResolving && <p className="text-xs text-zinc-500">{t('audio.previewLoading')}</p>}
+      {!isResolving && !currentSource && !errorMessage && <p className="text-xs text-zinc-500">{t('audio.previewUnavailable')}</p>}
       {errorMessage && <p className="text-xs text-red-400">{errorMessage}</p>}
     </div>
   );

@@ -1,52 +1,39 @@
+import { useTranslation } from '../../lib/i18n';
+
 export function ProducerGuide() {
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-4xl mx-auto px-4 space-y-8">
         <div className="space-y-3">
-          <h1 className="text-3xl font-bold text-white">Guide du producteur</h1>
-          <p className="text-zinc-400">
-            Retrouvez les etapes essentielles pour publier, vendre et maintenir un compte producteur conforme.
-          </p>
+          <h1 className="text-3xl font-bold text-white">{t('support.producerGuide.title')}</h1>
+          <p className="text-zinc-400">{t('support.producerGuide.subtitle')}</p>
         </div>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-white">Creer un compte producteur</h2>
-          <p className="text-zinc-400">
-            Commencez par creer votre compte, completer votre profil public et souscrire a l&apos;offre producteur
-            active.
-          </p>
+          <h2 className="text-2xl font-semibold text-white">{t('support.producerGuide.accountTitle')}</h2>
+          <p className="text-zinc-400">{t('support.producerGuide.accountBody')}</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-white">Soumettre un produit</h2>
-          <p className="text-zinc-400">
-            Uploadez votre contenu avec metadonnees completes (titre, type, prix, visuel, tags) et assurez-vous que
-            les elements audio respectent les standards de la plateforme.
-          </p>
+          <h2 className="text-2xl font-semibold text-white">{t('support.producerGuide.submitTitle')}</h2>
+          <p className="text-zinc-400">{t('support.producerGuide.submitBody')}</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-white">Validation</h2>
-          <p className="text-zinc-400">
-            Les produits et contenus peuvent etre verifies pour garantir la qualite, la conformite legale et le
-            respect des regles communautaires.
-          </p>
+          <h2 className="text-2xl font-semibold text-white">{t('support.producerGuide.validationTitle')}</h2>
+          <p className="text-zinc-400">{t('support.producerGuide.validationBody')}</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-white">Commission &amp; paiements</h2>
-          <p className="text-zinc-400">
-            Les paiements sont traites via Stripe. Les revenus, commissions et statuts de transactions sont
-            consultables depuis votre espace producteur.
-          </p>
+          <h2 className="text-2xl font-semibold text-white">{t('support.producerGuide.paymentsTitle')}</h2>
+          <p className="text-zinc-400">{t('support.producerGuide.paymentsBody')}</p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-white">Regles &amp; sanctions</h2>
-          <p className="text-zinc-400">
-            Toute violation des conditions (contenu interdit, fraude, usurpation, non-respect des licences) peut
-            entrainer des restrictions, une suspension temporaire ou definitive du compte.
-          </p>
+          <h2 className="text-2xl font-semibold text-white">{t('support.producerGuide.rulesTitle')}</h2>
+          <p className="text-zinc-400">{t('support.producerGuide.rulesBody')}</p>
         </section>
       </div>
     </div>

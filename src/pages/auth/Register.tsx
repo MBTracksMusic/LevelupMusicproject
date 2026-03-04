@@ -54,7 +54,7 @@ export function RegisterPage() {
     if (!username) {
       newErrors.username = t('errors.requiredField');
     } else if (!USERNAME_REGEX.test(username)) {
-      newErrors.username = '3-32 caracteres, lettres/chiffres/underscore uniquement';
+      newErrors.username = t('auth.usernameRules');
     }
 
     if (!formData.password) {
@@ -114,11 +114,11 @@ export function RegisterPage() {
       console.error('Erreur inscription:', error);
       if (isRateLimited) {
         setCooldown(60);
-        toast.error('Trop de tentatives. Réessaie dans 60 secondes.');
+        toast.error(t('auth.registerRateLimited'));
       } else if (error instanceof AuthApiError && error.code === 'user_already_exists') {
         setErrors({ email: t('auth.emailInUse') });
       } else if (error.message?.includes('duplicate key value') && error.message.includes('user_profiles_username_key')) {
-        setErrors({ username: 'Ce nom d’utilisateur est déjà pris.' });
+        setErrors({ username: t('auth.usernameTaken') });
       } else if (error.message?.includes('already registered')) {
         setErrors({ email: t('auth.emailInUse') });
       } else {
@@ -198,7 +198,7 @@ export function RegisterPage() {
               value={formData.email}
               onChange={handleChange}
               leftIcon={<Mail className="w-5 h-5" />}
-              placeholder="email@exemple.com"
+              placeholder={t('auth.emailPlaceholder')}
               error={errors.email}
               required
               autoComplete="email"
@@ -211,7 +211,7 @@ export function RegisterPage() {
               value={formData.username}
               onChange={handleChange}
               leftIcon={<User className="w-5 h-5" />}
-              placeholder="mon_pseudo"
+              placeholder={t('auth.usernamePlaceholder')}
               error={errors.username}
               required
               autoComplete="username"
@@ -224,7 +224,7 @@ export function RegisterPage() {
               value={formData.password}
               onChange={handleChange}
               leftIcon={<Lock className="w-5 h-5" />}
-              placeholder="••••••••"
+              placeholder={t('auth.passwordPlaceholder')}
               error={errors.password}
               required
               autoComplete="new-password"
@@ -237,7 +237,7 @@ export function RegisterPage() {
               value={formData.confirmPassword}
               onChange={handleChange}
               leftIcon={<Lock className="w-5 h-5" />}
-              placeholder="••••••••"
+              placeholder={t('auth.passwordPlaceholder')}
               error={errors.confirmPassword}
               required
               autoComplete="new-password"

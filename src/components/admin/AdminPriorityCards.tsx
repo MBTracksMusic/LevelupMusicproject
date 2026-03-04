@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, BellRing, Clock3 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
+import { useTranslation } from '../../lib/i18n';
 
 interface AdminPriorityCardsProps {
   awaitingAdminCount: number;
@@ -22,24 +23,25 @@ export function AdminPriorityCards({
   expiringCount,
   notificationCount,
 }: AdminPriorityCardsProps) {
+  const { t } = useTranslation();
   const cards: PriorityCard[] = [
     {
       key: 'awaiting-admin',
-      label: 'Battles en attente',
+      label: t('admin.battles.awaitingAdminLabel'),
       value: awaitingAdminCount,
       icon: <AlertTriangle className="w-4 h-4" />,
       tone: awaitingAdminCount > 0 ? 'warning' : 'default',
     },
     {
       key: 'expiring',
-      label: 'Expiring Soon (24h)',
+      label: t('admin.battles.expiringSoon'),
       value: expiringCount,
       icon: <Clock3 className="w-4 h-4" />,
       tone: expiringCount > 0 ? 'danger' : 'default',
     },
     {
       key: 'notifications',
-      label: 'Notifications IA non lues',
+      label: t('admin.battles.unreadNotificationsLabel'),
       value: notificationCount,
       icon: <BellRing className="w-4 h-4" />,
       tone: notificationCount > 0 ? 'info' : 'default',

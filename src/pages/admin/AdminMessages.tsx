@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { Database } from '../../lib/supabase/types';
+import { formatDateTime } from '../../lib/utils/format';
 
 type ContactStatus = 'new' | 'in_progress' | 'closed';
 type ContactPriority = 'low' | 'normal' | 'high';
@@ -87,6 +89,7 @@ const parseAdminMessage = (row: unknown): AdminMessageRow | null => {
 };
 
 export function AdminMessagesPage() {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<AdminMessageRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -112,7 +115,7 @@ export function AdminMessagesPage() {
 
     if (error) {
       console.error('Error loading admin contact messages:', error);
-      toast.error('Chargement des messages impossible.');
+      toast.error(t('admin.messages.loadError'));
       setRows([]);
       setIsLoading(false);
       return;
@@ -124,7 +127,7 @@ export function AdminMessagesPage() {
 
     setRows(parsed);
     setIsLoading(false);
-  }, [categoryFilter, statusFilter]);
+  }, [categoryFilter, statusFilter, t]);
 
   useEffect(() => {
     void loadMessages();
@@ -148,21 +151,39 @@ export function AdminMessagesPage() {
 
     if (error) {
       console.error('Error updating contact message:', error);
-      toast.error('Mise à jour impossible.');
+      toast.error(t('admin.messages.updateError'));
       setActionKey(null);
       return;
     }
 
     const parsed = parseAdminMessage(data);
     if (!parsed) {
-      toast.error('Réponse serveur invalide.');
+      toast.error(t('admin.messages.invalidResponse'));
       setActionKey(null);
       return;
     }
 
     setRows((prev) => prev.map((item) => (item.id === parsed.id ? parsed : item)));
-    toast.success('Message mis à jour.');
+    toast.success(t('admin.messages.updateSuccess'));
     setActionKey(null);
+  };
+
+  const getCategoryLabel = (category: ContactCategory) => {
+    if (category === 'support') return t('myMessages.categorySupport');
+    if (category === 'battle') return t('myMessages.categoryBattle');
+    if (category === 'payment') return t('myMessages.categoryPayment');
+    if (category === 'partnership') return t('myMessages.categoryPartnership');
+    return t('myMessages.categoryOther');
+  };
+  const getStatusLabel = (status: ContactStatus) => {
+    if (status === 'new') return t('myMessages.statusNew');
+    if (status === 'in_progress') return t('myMessages.statusInProgress');
+    return t('myMessages.statusClosed');
+  };
+  const getPriorityLabel = (priority: ContactPriority) => {
+    if (priority === 'low') return t('myMessages.priorityLow');
+    if (priority === 'normal') return t('myMessages.priorityNormal');
+    return t('myMessages.priorityHigh');
   };
 
   return (
@@ -170,9 +191,9 @@ export function AdminMessagesPage() {
       <Card className="p-4 sm:p-5">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Messages reçus</h2>
+            <h2 className="text-xl font-semibold text-white">{t('admin.messages.title')}</h2>
             <p className="text-zinc-400 text-sm mt-1">
-              Vue admin des demandes contact/support.
+              {t('admin.messages.subtitle')}
             </p>
           </div>
 
@@ -182,10 +203,10 @@ export function AdminMessagesPage() {
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
             >
-              <option value="all">Tous statuts</option>
-              <option value="new">Nouveau</option>
-              <option value="in_progress">En cours</option>
-              <option value="closed">Clos</option>
+              <option value="all">{t('admin.messages.allStatuses')}</option>
+              <option value="new">{t('myMessages.statusNew')}</option>
+              <option value="in_progress">{t('myMessages.statusInProgress')}</option>
+              <option value="closed">{t('myMessages.statusClosed')}</option>
             </select>
 
             <select
@@ -193,12 +214,12 @@ export function AdminMessagesPage() {
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value as CategoryFilter)}
             >
-              <option value="all">Toutes catégories</option>
-              <option value="support">Support</option>
-              <option value="battle">Battle</option>
-              <option value="payment">Paiement</option>
-              <option value="partnership">Partenariat</option>
-              <option value="other">Autre</option>
+              <option value="all">{t('admin.messages.allCategories')}</option>
+              <option value="support">{t('myMessages.categorySupport')}</option>
+              <option value="battle">{t('myMessages.categoryBattle')}</option>
+              <option value="payment">{t('myMessages.categoryPayment')}</option>
+              <option value="partnership">{t('myMessages.categoryPartnership')}</option>
+              <option value="other">{t('myMessages.categoryOther')}</option>
             </select>
           </div>
         </div>
@@ -206,35 +227,35 @@ export function AdminMessagesPage() {
 
       <Card className="p-0 overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-zinc-400">Chargement...</div>
+          <div className="p-6 text-zinc-400">{t('common.loading')}</div>
         ) : filteredCount === 0 ? (
-          <div className="p-6 text-zinc-500">Aucun message pour ces filtres.</div>
+          <div className="p-6 text-zinc-500">{t('admin.messages.empty')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-zinc-900/90 text-zinc-400">
                 <tr>
-                  <th className="text-left p-3 font-medium">Date</th>
-                  <th className="text-left p-3 font-medium">Contact</th>
-                  <th className="text-left p-3 font-medium">Sujet</th>
-                  <th className="text-left p-3 font-medium">Catégorie</th>
-                  <th className="text-left p-3 font-medium">Origine</th>
-                  <th className="text-left p-3 font-medium">Statut</th>
-                  <th className="text-left p-3 font-medium">Priorité</th>
-                  <th className="text-left p-3 font-medium">Message</th>
+                  <th className="text-left p-3 font-medium">{t('common.date')}</th>
+                  <th className="text-left p-3 font-medium">{t('admin.messages.contact')}</th>
+                  <th className="text-left p-3 font-medium">{t('common.subject')}</th>
+                  <th className="text-left p-3 font-medium">{t('common.category')}</th>
+                  <th className="text-left p-3 font-medium">{t('admin.messages.origin')}</th>
+                  <th className="text-left p-3 font-medium">{t('common.status')}</th>
+                  <th className="text-left p-3 font-medium">{t('common.priority')}</th>
+                  <th className="text-left p-3 font-medium">{t('common.message')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} className="border-t border-zinc-800 text-zinc-200 align-top">
-                    <td className="p-3 whitespace-nowrap">{new Date(row.created_at).toLocaleString()}</td>
+                    <td className="p-3 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
                     <td className="p-3 whitespace-nowrap">
-                      <p>{row.name || 'Anonyme'}</p>
-                      <p className="text-zinc-500">{row.email || '-'}</p>
+                      <p>{row.name || t('admin.messages.anonymous')}</p>
+                      <p className="text-zinc-500">{row.email || t('common.notAvailable')}</p>
                     </td>
                     <td className="p-3">{row.subject}</td>
-                    <td className="p-3 whitespace-nowrap">{categoryLabel[row.category]}</td>
-                    <td className="p-3 whitespace-nowrap">{row.origin_page || '-'}</td>
+                    <td className="p-3 whitespace-nowrap">{getCategoryLabel(row.category)}</td>
+                    <td className="p-3 whitespace-nowrap">{row.origin_page || t('common.notAvailable')}</td>
                     <td className="p-3">
                       <select
                         className="h-9 rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
@@ -244,9 +265,9 @@ export function AdminMessagesPage() {
                           void updateRow(row, { status: event.target.value as ContactStatus })
                         }
                       >
-                        <option value="new">{statusLabel.new}</option>
-                        <option value="in_progress">{statusLabel.in_progress}</option>
-                        <option value="closed">{statusLabel.closed}</option>
+                        <option value="new">{getStatusLabel('new')}</option>
+                        <option value="in_progress">{getStatusLabel('in_progress')}</option>
+                        <option value="closed">{getStatusLabel('closed')}</option>
                       </select>
                     </td>
                     <td className="p-3">
@@ -258,9 +279,9 @@ export function AdminMessagesPage() {
                           void updateRow(row, { priority: event.target.value as ContactPriority })
                         }
                       >
-                        <option value="low">{priorityLabel.low}</option>
-                        <option value="normal">{priorityLabel.normal}</option>
-                        <option value="high">{priorityLabel.high}</option>
+                        <option value="low">{getPriorityLabel('low')}</option>
+                        <option value="normal">{getPriorityLabel('normal')}</option>
+                        <option value="high">{getPriorityLabel('high')}</option>
                       </select>
                     </td>
                     <td className="p-3 max-w-[360px]">

@@ -3,9 +3,11 @@ import { AuthApiError } from '@supabase/supabase-js';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../../components/ui';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 
 export default function EmailConfirmation() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'pending' | 'success' | 'error'>('pending');
@@ -45,7 +47,7 @@ export default function EmailConfirmation() {
       if (errorParam || errorDescription) {
         setStatus('error');
         setErrorMessage(
-          decodeURIComponent(errorDescription || errorParam || 'Une erreur est survenue')
+          decodeURIComponent(errorDescription || errorParam || t('errors.generic'))
         );
         return;
       }
@@ -61,7 +63,7 @@ export default function EmailConfirmation() {
           console.error('Error exchanging code for session:', error);
           const apiError = error as AuthApiError;
           setStatus('error');
-          setErrorMessage(apiError?.message || 'Lien invalide ou expiré.');
+          setErrorMessage(apiError?.message || t('auth.emailConfirmationInvalidLink'));
         }
         return;
       }
@@ -71,14 +73,14 @@ export default function EmailConfirmation() {
 
       if (!type) {
         setStatus('error');
-        setErrorMessage('Type de lien manquant ou invalide. Veuillez réessayer depuis votre email.');
+        setErrorMessage(t('auth.emailConfirmationMissingType'));
         return;
       }
 
       const allowedTypes = new Set(['signup', 'recovery', 'magiclink', 'invite', 'email_change']);
       if (!allowedTypes.has(type)) {
         setStatus('error');
-        setErrorMessage('Type de lien invalide. Veuillez vous reconnecter.');
+        setErrorMessage(t('auth.emailConfirmationInvalidType'));
         return;
       }
 
@@ -97,9 +99,9 @@ export default function EmailConfirmation() {
         const apiError = error as AuthApiError;
         setStatus('error');
         if (apiError?.status === 401) {
-          setErrorMessage('Lien expiré ou déjà utilisé. Renvoyez un email de confirmation.');
+          setErrorMessage(t('auth.emailConfirmationExpired'));
         } else {
-          setErrorMessage(apiError?.message || 'Une erreur est survenue');
+          setErrorMessage(apiError?.message || t('errors.generic'));
         }
       }
     };
@@ -118,15 +120,15 @@ export default function EmailConfirmation() {
 
       if (error) throw error;
       setCooldown(60);
-      alert('Email de confirmation renvoyé. Vous pourrez renvoyer un autre email dans 60s.');
+      alert(t('auth.emailConfirmationResent'));
     } catch (error) {
       console.error('Error resending email:', error);
       if (error instanceof AuthApiError && error.status === 429) {
         setCooldown(60);
-        alert('Limite atteinte. Réessayez dans 60 secondes.');
+        alert(t('auth.emailConfirmationRateLimited'));
         return;
       }
-      alert('Erreur lors de l\'envoi de l\'email');
+      alert(t('auth.emailConfirmationResendError'));
     }
   };
 
@@ -138,10 +140,10 @@ export default function EmailConfirmation() {
             <CheckCircle className="w-10 h-10 text-green-400" />
           </div>
           <h1 className="text-2xl font-bold text-white mb-4">
-            Email confirmé !
+            {t('auth.emailConfirmationSuccessTitle')}
           </h1>
           <p className="text-gray-300 mb-6">
-            Votre email a été confirmé avec succès. Vous allez être redirigé...
+            {t('auth.emailConfirmationSuccessBody')}
           </p>
         </div>
       </div>
@@ -156,13 +158,13 @@ export default function EmailConfirmation() {
             <XCircle className="w-10 h-10 text-red-400" />
           </div>
           <h1 className="text-2xl font-bold text-white mb-4">
-            Erreur de confirmation
+            {t('auth.emailConfirmationErrorTitle')}
           </h1>
           <p className="text-gray-300 mb-6">
-            {errorMessage || 'Une erreur est survenue lors de la confirmation de votre email.'}
+            {errorMessage || t('auth.emailConfirmationErrorBody')}
           </p>
           <Button onClick={() => navigate('/login')} className="w-full">
-            Retour à la connexion
+            {t('auth.backToLogin')}
           </Button>
         </div>
       </div>
@@ -176,11 +178,10 @@ export default function EmailConfirmation() {
           <Mail className="w-10 h-10 text-blue-400" />
         </div>
         <h1 className="text-2xl font-bold text-white mb-4">
-          Vérifiez votre email
+          {t('auth.emailConfirmationPendingTitle')}
         </h1>
         <p className="text-gray-300 mb-6">
-          Un email de confirmation a été envoyé à <strong className="text-white">{email}</strong>.
-          Cliquez sur le lien dans l'email pour activer votre compte.
+          {t('auth.emailConfirmationPendingBody', { email: email ?? '' })}
         </p>
         <div className="space-y-3">
           <Button
@@ -189,14 +190,14 @@ export default function EmailConfirmation() {
             className="w-full"
             disabled={cooldown > 0}
           >
-            {cooldown > 0 ? `Renvoyer dans ${cooldown}s` : "Renvoyer l'email"}
+            {cooldown > 0 ? t('auth.emailConfirmationRetryIn', { count: cooldown }) : t('auth.emailConfirmationResend')}
           </Button>
           <Button onClick={() => navigate('/login')} variant="outline" className="w-full">
-            Retour à la connexion
+            {t('auth.backToLogin')}
           </Button>
         </div>
         <p className="text-sm text-gray-400 mt-6">
-          Vous n'avez pas reçu l'email ? Vérifiez votre dossier spam.
+          {t('auth.emailConfirmationSpamHint')}
         </p>
       </div>
     </div>

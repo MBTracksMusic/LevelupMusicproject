@@ -1,8 +1,11 @@
 import { ArrowRight, Inbox, Newspaper, Swords } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardTitle } from '../../components/ui/Card';
+import { useTranslation } from '../../lib/i18n';
 
 export function AdminDashboardPage() {
+  const { t } = useTranslation();
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Link to="/admin/news" className="group">
@@ -12,10 +15,10 @@ export function AdminDashboardPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Newspaper className="w-5 h-5 text-rose-400" />
-                  News videos
+                  {t('admin.dashboard.newsTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
-                  Créer, publier et diffuser les annonces vidéo.
+                  {t('admin.dashboard.newsDescription')}
                 </CardDescription>
               </div>
               <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
@@ -31,10 +34,10 @@ export function AdminDashboardPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Swords className="w-5 h-5 text-rose-400" />
-                  Battles
+                  {t('admin.dashboard.battlesTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
-                  Ouvrir la modération battles existante.
+                  {t('admin.dashboard.battlesDescription')}
                 </CardDescription>
               </div>
               <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
@@ -50,10 +53,10 @@ export function AdminDashboardPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Inbox className="w-5 h-5 text-rose-400" />
-                  Messages reçus
+                  {t('admin.dashboard.messagesTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
-                  Lire et traiter les demandes contact/support.
+                  {t('admin.dashboard.messagesDescription')}
                 </CardDescription>
               </div>
               <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />

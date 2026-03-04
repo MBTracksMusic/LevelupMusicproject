@@ -4,8 +4,10 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ReputationBadge } from '../../components/reputation/ReputationBadge';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { ReputationRankTier } from '../../lib/supabase/types';
+import { formatDateTime } from '../../lib/utils/format';
 
 interface AdminReputationRow {
   user_id: string;
@@ -25,6 +27,7 @@ interface AdminReputationRow {
 }
 
 export function AdminReputationPage() {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<AdminReputationRow[]>([]);
   const [search, setSearch] = useState('');
   const [selectedUser, setSelectedUser] = useState<AdminReputationRow | null>(null);
@@ -42,7 +45,7 @@ export function AdminReputationPage() {
 
     if (error) {
       console.error('Error loading reputation overview:', error);
-      toast.error('Impossible de charger la réputation.');
+      toast.error(t('admin.reputation.loadError'));
       setRows([]);
       setIsLoading(false);
       return;
@@ -50,7 +53,7 @@ export function AdminReputationPage() {
 
     setRows((data as AdminReputationRow[] | null) ?? []);
     setIsLoading(false);
-  }, [search]);
+  }, [search, t]);
 
   useEffect(() => {
     void loadRows();
@@ -58,18 +61,18 @@ export function AdminReputationPage() {
 
   const submitAdjustment = async () => {
     if (!selectedUser) {
-      toast.error('Sélectionnez un utilisateur.');
+      toast.error(t('admin.reputation.selectUserError'));
       return;
     }
 
     const parsedDelta = Number.parseInt(delta, 10);
     if (!Number.isFinite(parsedDelta) || parsedDelta === 0) {
-      toast.error('Delta XP invalide.');
+      toast.error(t('admin.reputation.invalidDelta'));
       return;
     }
 
     if (!reason.trim()) {
-      toast.error('Le motif est requis.');
+      toast.error(t('admin.reputation.reasonRequired'));
       return;
     }
 
@@ -85,12 +88,12 @@ export function AdminReputationPage() {
 
     if (error) {
       console.error('Error adjusting reputation:', error);
-      toast.error('Ajustement impossible.');
+      toast.error(t('admin.reputation.adjustError'));
       setIsSubmitting(false);
       return;
     }
 
-    toast.success('Réputation ajustée.');
+    toast.success(t('admin.reputation.adjustSuccess'));
     setDelta('');
     setReason('');
     await loadRows();
@@ -102,45 +105,45 @@ export function AdminReputationPage() {
       <Card className="p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-white">Réputation</h2>
-            <p className="text-sm text-zinc-400">Vue admin et overrides audités.</p>
+            <h2 className="text-xl font-semibold text-white">{t('admin.reputation.title')}</h2>
+            <p className="text-sm text-zinc-400">{t('admin.reputation.subtitle')}</p>
           </div>
           <Button variant="outline" onClick={() => void loadRows()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
       </Card>
 
       <Card className="p-5 space-y-4">
         <Input
-          label="Recherche"
+          label={t('common.search')}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="username ou email"
+          placeholder={t('admin.reputation.searchPlaceholder')}
         />
         <div className="grid gap-4 md:grid-cols-3">
           <Input
-            label="Utilisateur ciblé"
+            label={t('admin.reputation.targetUser')}
             value={selectedUser ? `${selectedUser.username || selectedUser.email || selectedUser.user_id}` : ''}
             readOnly
-            placeholder="Choisir dans la liste"
+            placeholder={t('admin.reputation.targetUserPlaceholder')}
           />
           <Input
-            label="Delta XP"
+            label={t('admin.reputation.deltaLabel')}
             value={delta}
             onChange={(event) => setDelta(event.target.value)}
-            placeholder="+25 ou -10"
+            placeholder={t('admin.reputation.deltaPlaceholder')}
           />
           <Input
-            label="Motif"
+            label={t('admin.reputation.reasonLabel')}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Ajustement admin"
+            placeholder={t('admin.reputation.reasonPlaceholder')}
           />
         </div>
         <div className="flex gap-3">
           <Button onClick={() => void submitAdjustment()} isLoading={isSubmitting}>
-            Appliquer
+            {t('admin.reputation.apply')}
           </Button>
           <Button
             variant="outline"
@@ -150,16 +153,16 @@ export function AdminReputationPage() {
               setReason('');
             }}
           >
-            Réinitialiser
+            {t('admin.reputation.reset')}
           </Button>
         </div>
       </Card>
 
       <Card className="p-5">
         {isLoading ? (
-          <p className="text-zinc-400">Chargement...</p>
+          <p className="text-zinc-400">{t('common.loading')}</p>
         ) : rows.length === 0 ? (
-          <p className="text-zinc-500">Aucun profil trouvé.</p>
+          <p className="text-zinc-500">{t('admin.reputation.empty')}</p>
         ) : (
           <div className="space-y-3">
             {rows.map((row) => (
@@ -170,19 +173,23 @@ export function AdminReputationPage() {
                       <p className="font-medium text-white">{row.username || row.email || row.user_id}</p>
                       <span className="text-xs text-zinc-500">{row.role}</span>
                     </div>
-                    <p className="text-sm text-zinc-500">{row.email || 'email indisponible'}</p>
+                    <p className="text-sm text-zinc-500">{row.email || t('admin.reputation.emailUnavailable')}</p>
                     <ReputationBadge rankTier={row.rank_tier} level={row.level} xp={row.xp} />
                     <p className="text-xs text-zinc-500">
-                      Forum {row.forum_xp} • Battles {row.battle_xp} • Commerce {row.commerce_xp}
+                      {t('admin.reputation.breakdown', {
+                        forum: row.forum_xp,
+                        battles: row.battle_xp,
+                        commerce: row.commerce_xp,
+                      })}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right text-sm text-zinc-400">
-                      <div className="text-white font-semibold">{row.xp} XP</div>
-                      <div>Maj {new Date(row.updated_at).toLocaleString('fr-FR')}</div>
+                      <div className="text-white font-semibold">{row.xp} {t('common.xpShort')}</div>
+                      <div>{t('admin.reputation.updatedAt', { date: formatDateTime(row.updated_at) })}</div>
                     </div>
                     <Button variant="outline" onClick={() => setSelectedUser(row)}>
-                      Ajuster
+                      {t('admin.reputation.adjust')}
                     </Button>
                   </div>
                 </div>

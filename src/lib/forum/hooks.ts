@@ -3,6 +3,7 @@ import { supabase } from '../supabase/client';
 import type { ForumAuthor, ForumCategory, ForumPost, ForumTopic, LatestForumTopic, UserProfile } from '../supabase/types';
 import { fetchForumPublicProfilesMap } from '../supabase/forumProfiles';
 import { useAuth } from '../auth/hooks';
+import { useTranslation } from '../i18n';
 
 const FORUM_CATEGORIES_TABLE = 'forum_categories' as any;
 const FORUM_TOPICS_TABLE = 'forum_topics' as any;
@@ -104,12 +105,17 @@ const readFunctionError = async (error: unknown, fallbackMessage: string): Promi
   return enriched;
 };
 
-const invokeForumFunction = async <T,>(functionName: string, body: Record<string, unknown>, fallbackMessage: string): Promise<T> => {
+const invokeForumFunction = async <T,>(
+  functionName: string,
+  body: Record<string, unknown>,
+  fallbackMessage: string,
+  sessionExpiredMessage: string,
+): Promise<T> => {
   const { data: sessionData, error: refreshError } = await supabase.auth.refreshSession();
   const accessToken = sessionData.session?.access_token;
 
   if (refreshError || !accessToken) {
-    throw new Error(refreshError?.message || 'Session expiree, merci de vous reconnecter.');
+    throw new Error(refreshError?.message || sessionExpiredMessage);
   }
 
   const { data, error } = await supabase.functions.invoke<T>(functionName, {
@@ -174,6 +180,7 @@ const attachAuthorsToPosts = async (
 };
 
 export function useForumCategories() {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<ForumCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,12 +227,12 @@ export function useForumCategories() {
       );
     } catch (loadError) {
       console.error('Failed to load forum categories', loadError);
-      setError('Impossible de charger les categories du forum.');
+      setError(t('forum.categoriesLoadError'));
       setCategories([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refresh();
@@ -236,6 +243,7 @@ export function useForumCategories() {
 
 export function useLatestForumTopics(limit = 8) {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const [topics, setTopics] = useState<LatestForumTopic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -266,7 +274,7 @@ export function useLatestForumTopics(limit = 8) {
 
             return {
               ...topic,
-              category_name: category?.name ?? 'Categorie inconnue',
+              category_name: category?.name ?? t('forum.unknownCategory'),
               category_slug: category?.slug ?? '',
               category_is_premium_only: category?.is_premium_only ?? false,
             };
@@ -276,11 +284,11 @@ export function useLatestForumTopics(limit = 8) {
     } catch (loadError) {
       console.error('Failed to load latest forum topics', loadError);
       setTopics([]);
-      setError('Impossible de charger les derniers topics.');
+      setError(t('forum.latestTopicsLoadError'));
     } finally {
       setIsLoading(false);
     }
-  }, [limit, profile]);
+  }, [limit, profile, t]);
 
   useEffect(() => {
     void refresh();
@@ -297,6 +305,7 @@ interface UseForumTopicsOptions {
 
 export function useForumTopics({ categorySlug, page, pageSize = 20 }: UseForumTopicsOptions) {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const [category, setCategory] = useState<ForumCategoryRow | null>(null);
   const [topics, setTopics] = useState<ForumTopic[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -334,7 +343,7 @@ export function useForumTopics({ categorySlug, page, pageSize = 20 }: UseForumTo
         setCategory(null);
         setTopics([]);
         setTotalCount(0);
-        setError('Categorie introuvable ou reservee.');
+        setError(t('forum.categoryUnavailable'));
         return;
       }
 
@@ -361,11 +370,11 @@ export function useForumTopics({ categorySlug, page, pageSize = 20 }: UseForumTo
       setCategory(null);
       setTopics([]);
       setTotalCount(0);
-      setError('Impossible de charger cette categorie.');
+      setError(t('forum.categoryLoadError'));
     } finally {
       setIsLoading(false);
     }
-  }, [categorySlug, page, pageSize, profile]);
+  }, [categorySlug, page, pageSize, profile, t]);
 
   useEffect(() => {
     void refresh();
@@ -383,6 +392,7 @@ interface UseForumPostsOptions {
 
 export function useForumPosts({ categorySlug, topicSlug, page, pageSize = 20 }: UseForumPostsOptions) {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const [category, setCategory] = useState<ForumCategoryRow | null>(null);
   const [topic, setTopic] = useState<ForumTopic | null>(null);
   const [posts, setPosts] = useState<ForumPost[]>([]);
@@ -423,7 +433,7 @@ export function useForumPosts({ categorySlug, topicSlug, page, pageSize = 20 }: 
         setTopic(null);
         setPosts([]);
         setTotalCount(0);
-        setError('Topic introuvable ou reserve.');
+        setError(t('forum.topicUnavailable'));
         return;
       }
 
@@ -443,7 +453,7 @@ export function useForumPosts({ categorySlug, topicSlug, page, pageSize = 20 }: 
         setTopic(null);
         setPosts([]);
         setTotalCount(0);
-        setError('Topic introuvable ou reserve.');
+        setError(t('forum.topicUnavailable'));
         return;
       }
 
@@ -471,11 +481,11 @@ export function useForumPosts({ categorySlug, topicSlug, page, pageSize = 20 }: 
       setTopic(null);
       setPosts([]);
       setTotalCount(0);
-      setError('Impossible de charger ce topic.');
+      setError(t('forum.topicLoadError'));
     } finally {
       setIsLoading(false);
     }
-  }, [categorySlug, topicSlug, page, pageSize, profile]);
+  }, [categorySlug, topicSlug, page, pageSize, profile, t]);
 
   useEffect(() => {
     void refresh();
@@ -486,11 +496,12 @@ export function useForumPosts({ categorySlug, topicSlug, page, pageSize = 20 }: 
 
 export function useForumActions() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const createTopic = useCallback(async (input: { categorySlug: string; title: string; content: string }) => {
     if (!user) {
-      throw new Error('Vous devez etre connecte pour creer un topic.');
+      throw new Error(t('forum.loginRequiredCreateTopic'));
     }
 
     setIsSubmitting(true);
@@ -503,16 +514,17 @@ export function useForumActions() {
           title: input.title.trim(),
           content: input.content.trim(),
         },
-        'Impossible de creer ce topic.',
+        t('forum.createTopicError'),
+        t('forum.sessionExpired'),
       );
     } finally {
       setIsSubmitting(false);
     }
-  }, [user]);
+  }, [t, user]);
 
   const createReply = useCallback(async (input: { topicId: string; content: string }) => {
     if (!user) {
-      throw new Error('Vous devez etre connecte pour repondre.');
+      throw new Error(t('forum.loginRequiredReply'));
     }
 
     setIsSubmitting(true);
@@ -524,12 +536,13 @@ export function useForumActions() {
           topic_id: input.topicId,
           content: input.content.trim(),
         },
-        'Impossible de publier la reponse.',
+        t('forum.publishReplyError'),
+        t('forum.sessionExpired'),
       );
     } finally {
       setIsSubmitting(false);
     }
-  }, [user]);
+  }, [t, user]);
 
   return { createTopic, createReply, isSubmitting };
 }

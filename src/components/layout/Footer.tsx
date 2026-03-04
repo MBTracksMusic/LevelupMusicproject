@@ -80,10 +80,10 @@ export function Footer() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center">
                 <Music className="w-5 h-5 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">LevelupMusic</span>
+              <span className="text-xl font-bold text-white">{t('footer.brandName')}</span>
             </Link>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">
-              La marketplace musicale professionnelle pour les producteurs et artistes.
+              {t('footer.brandDescription')}
             </p>
             <div className="flex items-center gap-3">
               {socialItems.map(({ key, href, Icon }) => (
@@ -111,7 +111,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold mb-4">Marketplace</h4>
+            <h4 className="text-white font-semibold mb-4">{t('footer.marketplaceTitle')}</h4>
             <ul className="space-y-2">
               {/* TODO(levelup): sections exclusives/kits temporairement desactivees. */}
               <li>
@@ -142,7 +142,7 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-white font-semibold mb-4">Producteurs</h4>
+            <h4 className="text-white font-semibold mb-4">{t('nav.producers')}</h4>
             <ul className="space-y-2">
               <li>
                 <Link
@@ -165,7 +165,7 @@ export function Footer() {
                   to="/guide-producteur"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
-                  Guide du producteur
+                  {t('footer.producerGuide')}
                 </Link>
               </li>
               <li>
@@ -173,7 +173,7 @@ export function Footer() {
                   to="/licenses"
                   className="text-zinc-400 hover:text-white text-sm transition-colors"
                 >
-                  Licences & contrats
+                  {t('footer.licensesContracts')}
                 </Link>
               </li>
             </ul>
@@ -220,7 +220,7 @@ export function Footer() {
 
         <div className="mt-12 pt-8 border-t border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-zinc-500 text-sm">
-            &copy; {currentYear} LevelupMusic. {t('common.copyright')}.
+            {t('common.copyrightSymbol')} {currentYear} {t('footer.brandName')}. {t('common.copyright')}.
           </p>
           <p className="text-zinc-500 text-sm flex items-center gap-1">
             {t('footer.madeWith')} <Heart className="w-4 h-4 text-rose-500" fill="currentColor" /> {t('footer.inFrance')}

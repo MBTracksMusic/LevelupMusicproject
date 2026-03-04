@@ -4,8 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { useForumCategories } from '../lib/forum/hooks';
+import { useTranslation } from '../lib/i18n';
 
 export function ForumPage() {
+  const { t } = useTranslation();
   const { categories, isLoading, error } = useForumCategories();
 
   return (
@@ -13,13 +15,13 @@ export function ForumPage() {
       <div className="max-w-6xl mx-auto px-4 space-y-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-white">Forum</h1>
+            <h1 className="text-3xl font-bold text-white">{t('forum.title')}</h1>
             <p className="text-zinc-400">
-              Discutez beats, production, business et battles dans des espaces structures.
+              {t('forum.subtitle')}
             </p>
           </div>
           <Link to="/forum">
-            <Button variant="outline">Actualiser</Button>
+            <Button variant="outline">{t('common.refresh')}</Button>
           </Link>
         </div>
 
@@ -42,7 +44,7 @@ export function ForumPage() {
         {!isLoading && !error && categories.length === 0 && (
           <Card className="border-zinc-800">
             <CardContent className="py-12 text-center text-zinc-400">
-              Aucune categorie disponible pour le moment.
+              {t('forum.emptyCategory')}
             </CardContent>
           </Card>
         )}
@@ -58,22 +60,22 @@ export function ForumPage() {
                       {category.is_premium_only && (
                         <Badge variant="premium">
                           <Crown className="h-3 w-3" />
-                          Premium
+                          {t('forum.premium')}
                         </Badge>
                       )}
                     </div>
                     <CardDescription>
-                      {category.description || 'Aucune description pour cette categorie.'}
+                      {category.description || t('forum.noCategoryDescription')}
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-3 text-sm text-zinc-400">
                     <span className="inline-flex items-center gap-1">
                       <MessageSquareText className="h-4 w-4" />
-                      {category.topic_count} topics
+                      {t('forum.topicsCount', { count: category.topic_count })}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <MessageSquare className="h-4 w-4" />
-                      {category.post_count} posts
+                      {t('forum.postsCount', { count: category.post_count })}
                     </span>
                   </div>
                 </CardHeader>

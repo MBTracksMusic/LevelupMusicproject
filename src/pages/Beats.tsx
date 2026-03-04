@@ -11,6 +11,7 @@ import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { ProductWithRelations, Genre, Mood } from '../lib/supabase/types';
+import { getLocalizedName } from '../lib/i18n/localized';
 
 interface BeatsPageProps {
   mode?: 'beats' | 'exclusives' | 'kits';
@@ -159,17 +160,6 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
     return () => clearTimeout(debounce);
   }, [filters, mode]);
 
-  const getLocalizedName = (item: Genre | Mood) => {
-    switch (language) {
-      case 'en':
-        return item.name_en;
-      case 'de':
-        return item.name_de;
-      default:
-        return item.name;
-    }
-  };
-
   const clearFilters = () => {
     setFilters({
       search: '',
@@ -205,7 +195,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">{t('products.beats')}</h1>
           <p className="text-zinc-400">
-            Explorez notre catalogue de beats de qualite studio
+            {t('products.catalogSubtitle')}
           </p>
         </div>
 
@@ -242,7 +232,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
             {hasActiveFilters && (
               <Button variant="ghost" onClick={clearFilters} leftIcon={<X className="w-4 h-4" />}>
-                Effacer
+                {t('products.clearFilters')}
               </Button>
             )}
           </div>
@@ -258,7 +248,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                 placeholder={t('common.all')}
                 options={[
                   { value: '', label: t('common.all') },
-                  ...genres.map((g) => ({ value: g.id, label: getLocalizedName(g) })),
+                  ...genres.map((g) => ({ value: g.id, label: getLocalizedName(g, language) })),
                 ]}
               />
 
@@ -269,24 +259,24 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                 placeholder={t('common.all')}
                 options={[
                   { value: '', label: t('common.all') },
-                  ...moods.map((m) => ({ value: m.id, label: getLocalizedName(m) })),
+                  ...moods.map((m) => ({ value: m.id, label: getLocalizedName(m, language) })),
                 ]}
               />
 
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  BPM
+                  {t('products.bpm')}
                 </label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
-                    placeholder="Min"
+                    placeholder={t('common.min')}
                     value={filters.bpmMin}
                     onChange={(e) => setFilters({ ...filters, bpmMin: e.target.value })}
                   />
                   <Input
                     type="number"
-                    placeholder="Max"
+                    placeholder={t('common.max')}
                     value={filters.bpmMax}
                     onChange={(e) => setFilters({ ...filters, bpmMax: e.target.value })}
                   />
@@ -295,18 +285,18 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-                  {t('products.priceRange')} (EUR)
+                  {t('products.priceRange')} ({t('common.currencyEur')})
                 </label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
-                    placeholder="Min"
+                    placeholder={t('common.min')}
                     value={filters.priceMin}
                     onChange={(e) => setFilters({ ...filters, priceMin: e.target.value })}
                   />
                   <Input
                     type="number"
-                    placeholder="Max"
+                    placeholder={t('common.max')}
                     value={filters.priceMax}
                     onChange={(e) => setFilters({ ...filters, priceMax: e.target.value })}
                   />

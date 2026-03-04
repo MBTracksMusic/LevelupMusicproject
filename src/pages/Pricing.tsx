@@ -15,12 +15,14 @@ import {
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../lib/auth/hooks';
+import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import toast from 'react-hot-toast';
 import type { Database } from '../lib/supabase/types';
+import { formatPrice } from '../lib/utils/format';
 
 type ProducerTier = 'starter' | 'pro' | 'elite';
 type CheckoutTier = 'pro' | 'elite';
@@ -136,15 +138,14 @@ const buildPlansFromPayload = (payload: unknown) => {
   return nextPlans;
 };
 
-const COMMISSION_LABELS: Record<ProducerTier, string> = {
-  starter: 'Commission selon formule',
-  pro: 'Commission réduite',
-  elite: 'Commission ultra réduite',
-};
-
-const formatPlanPrice = (plan: ProducerPlan) => {
+const formatPlanPrice = (
+  plan: ProducerPlan,
+  freeLabel: string,
+  priceUnavailableLabel: string,
+  monthlyLabel: string,
+) => {
   if (plan.tier === 'starter') {
-    return { amount: 'Gratuit', interval: null as string | null };
+    return { amount: freeLabel, interval: null as string | null };
   }
 
   if (
@@ -152,15 +153,12 @@ const formatPlanPrice = (plan: ProducerPlan) => {
     Number.isFinite(plan.amount_cents) &&
     plan.amount_cents >= 0
   ) {
-    const amount = `${(plan.amount_cents / 100).toLocaleString('fr-FR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}€`;
-    const interval = plan.interval ? ` / ${plan.interval === 'month' ? 'mois' : plan.interval}` : null;
+    const amount = formatPrice(plan.amount_cents, plan.currency || 'EUR');
+    const interval = plan.interval ? (plan.interval === 'month' ? monthlyLabel : ` / ${plan.interval}`) : null;
     return { amount, interval };
   }
 
-  return { amount: 'Prix indisponible', interval: null as string | null };
+  return { amount: priceUnavailableLabel, interval: null as string | null };
 };
 
 interface ProfileWithTier {
@@ -172,6 +170,7 @@ const toProducerTier = (value: unknown): ProducerTier => {
 };
 
 export function PricingPage() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [isPlanLoading, setIsPlanLoading] = useState(true);
@@ -206,7 +205,7 @@ export function PricingPage() {
       if (!fetchError) {
         nextPlans = buildPlansFromPayload((data as { plans?: unknown })?.plans);
       } else {
-        setError('Impossible de charger les offres en temps réel.');
+        setError(t('pricing.loadOffersError'));
       }
 
       setPlans(nextPlans);
@@ -214,7 +213,7 @@ export function PricingPage() {
     };
 
     void fetchPlan();
-  }, []);
+  }, [t]);
 
   const startCheckout = async (tier: CheckoutTier) => {
     if (!user) {
@@ -223,7 +222,7 @@ export function PricingPage() {
     }
     const targetPlan = plans[tier];
     if (!targetPlan?.is_active) {
-      setError('Cette offre est temporairement indisponible.');
+      setError(t('pricing.planUnavailable'));
       return;
     }
     setError(null);
@@ -232,7 +231,7 @@ export function PricingPage() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        throw new Error('Session expirée. Merci de vous reconnecter.');
+        throw new Error(t('pricing.sessionExpired'));
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('producer-checkout', {
@@ -267,18 +266,18 @@ export function PricingPage() {
         const rawError =
           apiError ||
           contextError ||
-          `${fnError.status ?? ''} ${fnError.message || 'Checkout indisponible pour le moment.'}`.trim();
+          `${fnError.status ?? ''} ${fnError.message || t('pricing.checkoutUnavailable')}`.trim();
         if (rawError.includes('already_subscribed')) {
-          throw new Error('Vous avez déjà un abonnement producteur actif.');
+          throw new Error(t('pricing.alreadySubscribed'));
         }
         if (rawError.includes('plan_unavailable')) {
-          throw new Error('Cette offre est indisponible pour le moment.');
+          throw new Error(t('pricing.planUnavailable'));
         }
         if (rawError.includes('missing_price_id')) {
-          throw new Error('Prix Stripe non configuré pour cette offre.');
+          throw new Error(t('pricing.missingPriceId'));
         }
         if (rawError.includes('invalid_tier')) {
-          throw new Error('Offre invalide.');
+          throw new Error(t('pricing.invalidOffer'));
         }
         throw new Error(rawError);
       }
@@ -287,7 +286,7 @@ export function PricingPage() {
       if (url) {
         window.location.href = url;
       } else {
-        throw new Error('URL de paiement manquante.');
+        throw new Error(t('pricing.missingCheckoutUrl'));
       }
     } catch (err) {
       console.error(err);
@@ -303,21 +302,26 @@ export function PricingPage() {
     ? proPlan.max_battles_created_per_month
     : 3;
   const starterPlanItems: PlanItem[] = [
-    { icon: Music2, text: 'Achat de beats' },
-    { icon: Users, text: 'Vote et commentaires' },
-    { icon: Flame, text: 'Participation aux battles (vote)' },
-    { icon: Globe2, text: 'Profil personnel' },
+    { icon: Music2, text: t('pricing.userItemBuyBeats') },
+    { icon: Users, text: t('pricing.userItemVoteComment') },
+    { icon: Flame, text: t('pricing.userItemBattleVote') },
+    { icon: Globe2, text: t('pricing.userItemPersonalProfile') },
   ];
   const proPlanItems: PlanItem[] = [
-    { icon: Music2, text: `Jusqu’à ${proBeatsLimit} beats publiés` },
-    { icon: Users, text: `${proBattlesLimit} battles créées par mois` },
-    { icon: Flame, text: 'Participation illimitée aux battles' },
-    { icon: Globe2, text: 'Classement public' },
-    { icon: BadgeCheck, text: 'Badge Producteur vérifié' },
-    { icon: BarChart3, text: 'Statistiques avancées' },
-    { icon: Coins, text: COMMISSION_LABELS.pro },
+    { icon: Music2, text: t('pricing.proItemPublishedBeats', { count: proBeatsLimit }) },
+    { icon: Users, text: t('pricing.proItemBattlesPerMonth', { count: proBattlesLimit }) },
+    { icon: Flame, text: t('pricing.proItemUnlimitedBattles') },
+    { icon: Globe2, text: t('pricing.proItemPublicRanking') },
+    { icon: BadgeCheck, text: t('pricing.proItemVerifiedBadge') },
+    { icon: BarChart3, text: t('pricing.proItemAdvancedStats') },
+    { icon: Coins, text: t('pricing.proItemReducedCommission') },
   ];
-  const proPrice = formatPlanPrice(proPlan);
+  const proPrice = formatPlanPrice(
+    proPlan,
+    t('pricing.free'),
+    t('pricing.priceUnavailable'),
+    t('subscription.perMonth'),
+  );
   const isProCheckoutAvailable =
     proPlan.is_active &&
     Boolean(proPlan.stripe_price_id) &&
@@ -332,7 +336,7 @@ export function PricingPage() {
   const addToEliteWaitlist = async (rawEmail: string) => {
     const email = normalizeEmail(rawEmail);
     if (!EMAIL_REGEX.test(email)) {
-      toast.error('Adresse email invalide.');
+      toast.error(t('pricing.invalidEmail'));
       return false;
     }
 
@@ -342,15 +346,15 @@ export function PricingPage() {
 
     if (insertError) {
       if ((insertError as { code?: string }).code === '23505') {
-        toast.success('Vous êtes déjà inscrit au lancement Elite.');
+        toast.success(t('pricing.eliteAlreadyRegistered'));
         return true;
       }
       console.error('elite waitlist insert error', insertError);
-      toast.error('Impossible de vous inscrire pour le moment.');
+      toast.error(t('pricing.eliteWaitlistError'));
       return false;
     }
 
-    toast.success('Merci, vous serez informé du lancement.');
+    toast.success(t('pricing.eliteWaitlistSuccess'));
     return true;
   };
 
@@ -395,9 +399,9 @@ export function PricingPage() {
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Abonnements Producteur</h1>
+          <h1 className="text-4xl font-bold text-white mb-4">{t('pricing.title')}</h1>
           <p className="text-xl text-zinc-400 max-w-2xl mx-auto">
-            Choisissez la formule qui correspond à votre niveau.
+            {t('pricing.subtitle')}
           </p>
         </div>
 
@@ -405,23 +409,23 @@ export function PricingPage() {
           <Card className="relative h-full flex flex-col border border-emerald-700/60 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-2xl font-bold text-white mb-1">Compte USER</h3>
-                <p className="text-zinc-200 font-semibold">Explore, vote et soutiens les producteurs.</p>
+                <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.userPlanTitle')}</h3>
+                <p className="text-zinc-200 font-semibold">{t('pricing.userPlanSubtitle')}</p>
                 <p className="text-zinc-400 text-sm mt-1 flex items-start gap-2">
                   <Target className="w-4 h-4 mt-0.5 text-zinc-300" />
-                  Idéal pour découvrir la plateforme en tant qu’audience.
+                  {t('pricing.userPlanAudience')}
                 </p>
               </div>
-              {isUserCurrent && <Badge variant="info">Plan actuel</Badge>}
+              {isUserCurrent && <Badge variant="info">{t('subscription.currentPlan')}</Badge>}
             </div>
 
             <div className="mb-5">
-              <span className="text-4xl font-bold text-white">Gratuit</span>
+              <span className="text-4xl font-bold text-white">{t('pricing.free')}</span>
             </div>
 
             <div className="mb-3 flex items-center gap-2">
               <Check className="w-5 h-5 text-emerald-400" />
-              <p className="text-xl font-bold text-white">Ce qui est inclus</p>
+              <p className="text-xl font-bold text-white">{t('pricing.includedTitle')}</p>
             </div>
             <ul className="space-y-2 mb-6">
               {starterPlanItems.map(renderPlanItem)}
@@ -435,7 +439,7 @@ export function PricingPage() {
                   size="lg"
                   onClick={() => navigate('/dashboard')}
                 >
-                  {isUserCurrent ? 'Plan actuel' : 'Commencer gratuitement'}
+                  {isUserCurrent ? t('subscription.currentPlan') : t('pricing.startFree')}
                 </Button>
               ) : (
                 <Link to="/register">
@@ -444,7 +448,7 @@ export function PricingPage() {
                     variant="secondary"
                     size="lg"
                   >
-                    {isUserCurrent ? 'Plan actuel' : 'Commencer gratuitement'}
+                    {isUserCurrent ? t('subscription.currentPlan') : t('pricing.startFree')}
                   </Button>
                 </Link>
               )}
@@ -454,14 +458,14 @@ export function PricingPage() {
           <Card className="relative h-full flex flex-col border border-rose-500 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-2xl font-bold text-white mb-1">Producteur</h3>
-                <p className="text-zinc-200 font-semibold">Accède aux battles et développe ta visibilité.</p>
+                <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.proPlanTitle')}</h3>
+                <p className="text-zinc-200 font-semibold">{t('pricing.proPlanSubtitle')}</p>
                 <p className="text-zinc-400 text-sm mt-1 flex items-start gap-2">
                   <Target className="w-4 h-4 mt-0.5 text-zinc-300" />
-                  Pensé pour les producteurs actifs qui veulent progresser.
+                  {t('pricing.proPlanAudience')}
                 </p>
               </div>
-              {isProCurrent && <Badge variant="premium">Plan actuel</Badge>}
+              {isProCurrent && <Badge variant="premium">{t('subscription.currentPlan')}</Badge>}
             </div>
 
             <div className="mb-6">
@@ -471,7 +475,7 @@ export function PricingPage() {
 
             <div className="mb-3 flex items-center gap-2">
               <Check className="w-5 h-5 text-emerald-400" />
-              <p className="text-xl font-bold text-white">Inclus</p>
+              <p className="text-xl font-bold text-white">{t('pricing.includedShort')}</p>
             </div>
             <ul className="space-y-2 mb-8">
               {proPlanItems.map(renderPlanItem)}
@@ -491,7 +495,7 @@ export function PricingPage() {
                 disabled={isProCurrent || isPlanLoading || !isProCheckoutAvailable}
                 onClick={() => void startCheckout('pro')}
               >
-                {isProCurrent ? 'Plan actuel' : 'Devenir Producteur'}
+                {isProCurrent ? t('subscription.currentPlan') : t('pricing.becomeProducer')}
               </Button>
             </div>
           </Card>
@@ -499,16 +503,16 @@ export function PricingPage() {
           <Card className="relative h-full flex flex-col border border-red-700/60 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-2xl font-bold text-white mb-1">Producteur ELITE</h3>
+                <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.elitePlanTitle')}</h3>
                 <p className="text-zinc-200 font-semibold">
-                  En cours de développement. Un niveau supérieur pour les producteurs prêts à passer à l’étape suivante.
+                  {t('pricing.elitePlanSubtitle')}
                 </p>
                 <p className="text-zinc-400 text-sm mt-2 flex items-start gap-2">
                   <Target className="w-4 h-4 mt-0.5 text-zinc-300" />
-                  Bientôt disponible.
+                  {t('pricing.eliteComingSoon')}
                 </p>
               </div>
-              {isEliteCurrent && <Badge variant="danger">Plan actuel</Badge>}
+              {isEliteCurrent && <Badge variant="danger">{t('subscription.currentPlan')}</Badge>}
             </div>
 
             <div className="mt-auto pt-6">
@@ -519,16 +523,16 @@ export function PricingPage() {
                 disabled={isEliteCurrent || isEliteSubmitting}
                 onClick={handleEliteNotifyClick}
               >
-                {isEliteCurrent ? 'Plan actuel' : 'M’informer du lancement'}
+                {isEliteCurrent ? t('subscription.currentPlan') : t('pricing.notifyLaunch')}
               </Button>
             </div>
           </Card>
         </div>
 
         <div className="mt-16 text-center">
-          <p className="text-zinc-400 mb-4">Des questions sur nos offres ?</p>
+          <p className="text-zinc-400 mb-4">{t('pricing.questions')}</p>
           <Link to="/contact">
-            <Button variant="ghost">Contactez-nous</Button>
+            <Button variant="ghost">{t('pricing.contactUs')}</Button>
           </Link>
         </div>
       </div>
@@ -536,17 +540,17 @@ export function PricingPage() {
       <Modal
         isOpen={isEliteModalOpen}
         onClose={closeEliteModal}
-        title="Liste d’attente ELITE"
-        description="Entrez votre email pour être informé dès l’ouverture."
+        title={t('pricing.eliteWaitlistTitle')}
+        description={t('pricing.eliteWaitlistDescription')}
         size="sm"
       >
         <form onSubmit={handleEliteModalSubmit} className="space-y-4">
           <Input
             type="email"
-            label="Email"
+            label={t('common.email')}
             value={eliteEmail}
             onChange={(event) => setEliteEmail(event.target.value)}
-            placeholder="email@exemple.com"
+            placeholder={t('auth.emailPlaceholder')}
             autoComplete="email"
             required
           />
@@ -557,10 +561,10 @@ export function PricingPage() {
               onClick={closeEliteModal}
               disabled={isEliteSubmitting}
             >
-              Annuler
+              {t('common.cancel')}
             </Button>
             <Button type="submit" isLoading={isEliteSubmitting}>
-              Me prévenir
+              {t('pricing.notifyMe')}
             </Button>
           </div>
         </form>

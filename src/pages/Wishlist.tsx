@@ -66,10 +66,10 @@ export function WishlistPage() {
         }
 
         await fetchWishlist();
-      } catch (loadError) {
-        console.error('Error loading wishlist:', loadError);
-        if (!isCancelled) {
-          setError("Impossible de charger vos favoris pour l'instant.");
+    } catch (loadError) {
+      console.error('Error loading wishlist:', loadError);
+      if (!isCancelled) {
+          setError(t('user.wishlistLoadError'));
         }
       } finally {
         if (!isCancelled) {
@@ -83,7 +83,7 @@ export function WishlistPage() {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id, fetchWishlist]);
+  }, [user?.id, fetchWishlist, t]);
 
   const handleWishlistToggle = async (productId: string) => {
     try {
@@ -91,14 +91,14 @@ export function WishlistPage() {
       setProducts((prev) => prev.filter((product) => product.id !== productId));
     } catch (toggleError) {
       console.error('Error removing from wishlist:', toggleError);
-      setError("Impossible de mettre à jour vos favoris pour l'instant.");
+      setError(t('user.wishlistUpdateError'));
     }
   };
 
   const handleClearWishlist = async () => {
     if (!user?.id) return;
 
-    const shouldClear = window.confirm('Voulez-vous vraiment vider toute votre wishlist ?');
+    const shouldClear = window.confirm(t('user.wishlistClearConfirm'));
     if (!shouldClear) return;
 
     setIsClearing(true);
@@ -118,7 +118,7 @@ export function WishlistPage() {
       clearWishlist();
     } catch (clearAllError) {
       console.error('Error clearing wishlist:', clearAllError);
-      setError("Impossible de vider vos favoris pour l'instant.");
+      setError(t('user.wishlistClearError'));
     } finally {
       setIsClearing(false);
     }
@@ -147,7 +147,7 @@ export function WishlistPage() {
                 onClick={handleClearWishlist}
                 isLoading={isClearing}
               >
-                Vider la wishlist
+                {t('user.wishlistClear')}
               </Button>
             )}
           </div>
@@ -170,8 +170,8 @@ export function WishlistPage() {
               <Heart className="w-6 h-6 text-zinc-400" />
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-semibold text-white">Votre liste est vide</h2>
-              <p className="text-sm text-zinc-500 mt-1">Ajoutez des beats à vos favoris pour les retrouver ici.</p>
+              <h2 className="text-xl font-semibold text-white">{t('user.wishlistEmptyTitle')}</h2>
+              <p className="text-sm text-zinc-500 mt-1">{t('user.wishlistEmptySubtitle')}</p>
             </div>
             <Link to="/beats">
               <Button size="sm" leftIcon={<ArrowLeft className="w-4 h-4" />}>

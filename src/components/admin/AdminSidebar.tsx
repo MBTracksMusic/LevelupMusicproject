@@ -1,6 +1,7 @@
 import { FolderTree, Inbox, LayoutDashboard, LineChart, MessageSquareText, Newspaper, Settings, Sparkles, Swords } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useTranslation } from '../../lib/i18n';
 
 interface AdminNavItem {
   to: string;
@@ -9,65 +10,66 @@ interface AdminNavItem {
   end?: boolean;
 }
 
-const adminNavItems: AdminNavItem[] = [
-  {
-    to: '/admin',
-    label: 'Dashboard',
-    icon: <LayoutDashboard className="w-4 h-4" />,
-    end: true,
-  },
-  {
-    to: '/admin/pilotage',
-    label: 'Pilotage',
-    icon: <LineChart className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/news',
-    label: 'News videos',
-    icon: <Newspaper className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/battles',
-    label: 'Battles',
-    icon: <Swords className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/messages',
-    label: 'Messages',
-    icon: <Inbox className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/forum',
-    label: 'Forum Moderation',
-    icon: <MessageSquareText className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/forum/categories',
-    label: 'Forum Categories',
-    icon: <FolderTree className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/reputation',
-    label: 'Reputation',
-    icon: <Sparkles className="w-4 h-4" />,
-  },
-  {
-    to: '/admin/settings',
-    label: 'Paramètres',
-    icon: <Settings className="w-4 h-4" />,
-  },
-];
-
 interface AdminSidebarProps {
   battlesAwaitingAdminCount?: number | null;
 }
 
 export function AdminSidebar({ battlesAwaitingAdminCount = null }: AdminSidebarProps) {
+  const { t } = useTranslation();
+  const adminNavItems: AdminNavItem[] = [
+    {
+      to: '/admin',
+      label: t('admin.sidebar.dashboard'),
+      icon: <LayoutDashboard className="w-4 h-4" />,
+      end: true,
+    },
+    {
+      to: '/admin/pilotage',
+      label: t('admin.sidebar.pilotage'),
+      icon: <LineChart className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/news',
+      label: t('admin.sidebar.news'),
+      icon: <Newspaper className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/battles',
+      label: t('admin.sidebar.battles'),
+      icon: <Swords className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/messages',
+      label: t('admin.sidebar.messages'),
+      icon: <Inbox className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/forum',
+      label: t('admin.sidebar.forumModeration'),
+      icon: <MessageSquareText className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/forum/categories',
+      label: t('admin.sidebar.forumCategories'),
+      icon: <FolderTree className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/reputation',
+      label: t('admin.sidebar.reputation'),
+      icon: <Sparkles className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/settings',
+      label: t('admin.sidebar.settings'),
+      icon: <Settings className="w-4 h-4" />,
+    },
+  ];
+
   return (
     <aside className="w-full lg:w-64 lg:shrink-0">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 lg:sticky lg:top-24">
         <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-          Admin
+          {t('admin.sidebar.title')}
         </p>
         <nav className="mt-2 flex lg:flex-col gap-2 overflow-x-auto">
           {adminNavItems.map((item) => (

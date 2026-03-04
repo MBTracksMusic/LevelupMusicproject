@@ -2,21 +2,33 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react';
 import type { ProductWithRelations } from '../../lib/supabase/types';
 import { supabase } from '../../lib/supabase/client';
+import { useTranslation } from '../../lib/i18n';
 import { usePlayerStore } from '../../lib/stores/player';
 
-const describeMediaError = (error: MediaError | null) => {
-  if (!error) return 'Playback error';
+const describeMediaError = (
+  error: MediaError | null,
+  translate: (
+    key:
+      | 'audio.playbackError'
+      | 'audio.playbackAborted'
+      | 'audio.playbackNetworkError'
+      | 'audio.playbackDecodeError'
+      | 'audio.playbackSourceNotSupported'
+      | 'audio.playbackUnknownError'
+  ) => string
+) => {
+  if (!error) return translate('audio.playbackError');
   switch (error.code) {
     case MediaError.MEDIA_ERR_ABORTED:
-      return 'Playback aborted';
+      return translate('audio.playbackAborted');
     case MediaError.MEDIA_ERR_NETWORK:
-      return 'Network error while fetching audio';
+      return translate('audio.playbackNetworkError');
     case MediaError.MEDIA_ERR_DECODE:
-      return 'Format/codec not supported (decode error)';
+      return translate('audio.playbackDecodeError');
     case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return 'Audio source not supported or unreachable';
+      return translate('audio.playbackSourceNotSupported');
     default:
-      return 'Unknown media error';
+      return translate('audio.playbackUnknownError');
   }
 };
 
@@ -33,6 +45,7 @@ interface AudioPlayerProps {
 }
 
 export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerProps) {
+  const { t } = useTranslation();
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const hasCountedCurrentTrackRef = useRef(false);
@@ -68,7 +81,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
       const previewUrls = await resolvePreviewUrls(track?.preview_url);
       if (previewUrls.length === 0) {
         setLoadingUrl(false);
-        setErrorMessage('Preview unavailable');
+        setErrorMessage(t('audio.previewUnavailable'));
         return;
       }
 
@@ -86,7 +99,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     return () => {
       isCancelled = true;
     };
-  }, [track?.id, track?.preview_url, setGlobalPlaying]);
+  }, [track?.id, track?.preview_url, setGlobalPlaying, t]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -124,14 +137,14 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
         .catch((err) => {
           console.error('Audio play failed', err);
           setErrorMessage(
-            err instanceof Error ? err.message : 'Playback was blocked by the browser'
+            err instanceof Error ? err.message : t('audio.playbackBlocked')
           );
           setGlobalPlaying(false);
         });
     } else {
       audio.pause();
     }
-  }, [globalIsPlaying, resolvedSource, isReady, setGlobalPlaying]);
+  }, [globalIsPlaying, resolvedSource, isReady, setGlobalPlaying, t]);
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -148,11 +161,11 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     } catch (err) {
       console.error('Audio play failed', err);
       setErrorMessage(
-        err instanceof Error ? err.message : 'Playback was blocked by the browser'
+        err instanceof Error ? err.message : t('audio.playbackBlocked')
       );
       setGlobalPlaying(false);
     }
-  }, [resolvedSource, isReady, globalIsPlaying, setGlobalPlaying]);
+  }, [resolvedSource, isReady, globalIsPlaying, setGlobalPlaying, t]);
 
   const handleTimeUpdate = useCallback(() => {
     if (audioRef.current) {
@@ -182,11 +195,11 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     }
 
     const mediaError = audioRef.current?.error ?? null;
-    const message = describeMediaError(mediaError);
+    const message = describeMediaError(mediaError, (key) => t(key));
     setErrorMessage(message);
     setGlobalPlaying(false);
     setIsReady(false);
-  }, [resolvedSourceCandidates, sourceCandidateIndex, setGlobalPlaying]);
+  }, [resolvedSourceCandidates, sourceCandidateIndex, setGlobalPlaying, t]);
 
   const handleEnded = useCallback(() => {
     setGlobalPlaying(false);
@@ -249,7 +262,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     return (
       <div className="fixed bottom-0 left-0 right-0 h-20 bg-zinc-950 border-t border-zinc-800">
         <div className="max-w-7xl mx-auto h-full flex items-center justify-center">
-          <p className="text-zinc-500 text-sm">Aucun titre selectionne</p>
+          <p className="text-zinc-500 text-sm">{t('audio.noTrackSelected')}</p>
         </div>
       </div>
     );
@@ -299,7 +312,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
           <div className="min-w-0">
             <h4 className="text-white font-medium truncate">{track.title}</h4>
             <p className="text-zinc-400 text-sm truncate">
-              {track.producer?.username || 'Unknown'}
+              {track.producer?.username || t('audio.unknownProducer')}
             </p>
           </div>
         </div>
@@ -317,7 +330,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
             onClick={togglePlay}
             className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={!canPlay}
-            aria-label={globalIsPlaying ? 'Pause' : 'Play'}
+            aria-label={globalIsPlaying ? t('common.pause') : t('common.play')}
           >
             {globalIsPlaying ? (
               <Pause className="w-5 h-5 text-zinc-900" fill="currentColor" />
@@ -377,12 +390,12 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
         )}
         {!loadingUrl && !errorMessage && !hasPreview && (
           <p className="text-xs text-zinc-400 ml-4 truncate" aria-live="polite">
-            Preview unavailable
+            {t('audio.previewUnavailable')}
           </p>
         )}
         {loadingUrl && !errorMessage && (
           <p className="text-xs text-zinc-400 ml-4 truncate" aria-live="polite">
-            Chargement du morceau...
+            {t('audio.trackLoading')}
           </p>
         )}
       </div>

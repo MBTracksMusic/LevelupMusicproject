@@ -30,8 +30,8 @@ export function ResetPasswordPage() {
 
       if (!accessToken || type !== 'recovery') {
         setStatus('error');
-        setStatusMessage('Lien invalide ou expiré. Demandez un nouvel email de réinitialisation.');
-        toast.error('Lien invalide ou expiré.');
+        setStatusMessage(t('auth.resetPasswordInvalidLink'));
+        toast.error(t('auth.resetPasswordInvalidLinkShort'));
         return;
       }
 
@@ -42,8 +42,8 @@ export function ResetPasswordPage() {
 
       if (error) {
         setStatus('error');
-        setStatusMessage(error.message || 'Impossible de valider le lien.');
-        toast.error('Impossible de valider le lien.');
+        setStatusMessage(error.message || t('auth.resetPasswordLinkValidationFailed'));
+        toast.error(t('auth.resetPasswordLinkValidationFailed'));
         return;
       }
 
@@ -86,11 +86,11 @@ export function ResetPasswordPage() {
 
     try {
       await updatePassword(formData.password);
-      toast.success('Mot de passe mis à jour avec succès');
+      toast.success(t('auth.resetPasswordUpdateSuccess'));
       navigate('/login');
     } catch (error) {
       console.error('Reset password error:', error);
-      toast.error('Erreur lors de la mise à jour du mot de passe');
+      toast.error(t('auth.resetPasswordUpdateError'));
     } finally {
       setIsLoading(false);
     }
@@ -106,10 +106,10 @@ export function ResetPasswordPage() {
             </div>
           </Link>
           <h1 className="text-2xl font-bold text-white mb-2">
-            Nouveau mot de passe
+            {t('auth.resetPasswordTitle')}
           </h1>
           <p className="text-zinc-400">
-            Choisissez un nouveau mot de passe sécurisé
+            {t('auth.resetPasswordSubtitle')}
           </p>
         </div>
 
@@ -122,7 +122,7 @@ export function ResetPasswordPage() {
               value={formData.password}
               onChange={handleChange}
               leftIcon={<Lock className="w-5 h-5" />}
-              placeholder="••••••••"
+              placeholder={t('auth.passwordPlaceholder')}
               error={errors.password}
               required
               autoComplete="new-password"
@@ -135,7 +135,7 @@ export function ResetPasswordPage() {
               value={formData.confirmPassword}
               onChange={handleChange}
               leftIcon={<Lock className="w-5 h-5" />}
-              placeholder="••••••••"
+              placeholder={t('auth.passwordPlaceholder')}
               error={errors.confirmPassword}
               required
               autoComplete="new-password"
@@ -148,7 +148,7 @@ export function ResetPasswordPage() {
               isLoading={isLoading || status === 'pending'}
               disabled={status !== 'ready'}
             >
-              Réinitialiser le mot de passe
+              {t('auth.resetPasswordButton')}
             </Button>
             {status === 'error' && (
               <p className="text-sm text-red-400 text-center">{statusMessage}</p>

@@ -1,0 +1,1035 @@
+{
+  "counts": {
+    "migrations": 116,
+    "policies_final": 130,
+    "tables_created": 48,
+    "tables_rls_enabled": 48,
+    "tables_rls_enabled_no_policy": 0,
+    "tables_without_rls": 0,
+    "security_definer_functions_total": 96,
+    "policy_functions_used": 72,
+    "overlap_groups": 15
+  },
+  "tables_rls_enabled_no_policy": [],
+  "tables_without_rls": [],
+  "overlap_groups": [
+    {
+      "table": "public.battle_comments",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can moderate battle comments",
+        "Users can update own comments"
+      ]
+    },
+    {
+      "table": "public.battle_product_snapshots",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can view all battle product snapshots",
+        "Participants can view own battle product snapshots"
+      ]
+    },
+    {
+      "table": "public.battle_votes",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can read all battle votes",
+        "Users can read own battle votes"
+      ]
+    },
+    {
+      "table": "public.battles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can view all battles",
+        "Producers can view own battles"
+      ]
+    },
+    {
+      "table": "public.battles",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can update all battles",
+        "Producers can update own pending battles"
+      ]
+    },
+    {
+      "table": "public.contact_messages",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can read all contact messages",
+        "Authenticated users can read own contact messages"
+      ]
+    },
+    {
+      "table": "public.products",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Buyers can view purchased products",
+        "Producer can view own products"
+      ]
+    },
+    {
+      "table": "public.purchases",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Producers can view sales of their products",
+        "Users can view own purchases"
+      ]
+    },
+    {
+      "table": "public.user_profiles",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "policies": [
+        "Authenticated can insert own profile",
+        "Owner can insert own profile"
+      ]
+    },
+    {
+      "table": "public.user_profiles",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can view all profiles",
+        "Owner can select own profile"
+      ]
+    },
+    {
+      "table": "storage.objects",
+      "command": "DELETE",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can delete watermark assets",
+        "Producers can delete own masters",
+        "Producers can delete their audio",
+        "Producers can delete their covers",
+        "Users can delete own avatars"
+      ]
+    },
+    {
+      "table": "storage.objects",
+      "command": "INSERT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can upload watermark assets",
+        "Producers can upload audio",
+        "Producers can upload covers",
+        "Producers can upload masters",
+        "Users can upload avatars"
+      ]
+    },
+    {
+      "table": "storage.objects",
+      "command": "SELECT",
+      "roles": "anon, authenticated",
+      "policies": [
+        "Anyone can view avatars",
+        "Anyone can view covers",
+        "Public can read watermarked audio"
+      ]
+    },
+    {
+      "table": "storage.objects",
+      "command": "SELECT",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can read watermark assets",
+        "Authenticated users can read beats audio",
+        "Buyers can read own contracts",
+        "Producers can read their audio"
+      ]
+    },
+    {
+      "table": "storage.objects",
+      "command": "UPDATE",
+      "roles": "authenticated",
+      "policies": [
+        "Admins can update watermark assets",
+        "Producers can update own masters",
+        "Producers can update their audio",
+        "Producers can update their covers",
+        "Users can update own avatars"
+      ]
+    }
+  ],
+  "using_true": [
+    {
+      "table": "public.app_settings",
+      "policy": "Anyone can read app settings",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.forum_likes",
+      "policy": "Forum likes are publicly readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.licenses",
+      "policy": "Anyone can read licenses",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.notification_email_log",
+      "policy": "Service role can manage notification email log",
+      "command": "ALL",
+      "roles": "service_role"
+    },
+    {
+      "table": "public.producer_plan_config",
+      "policy": "Producer plan readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.reputation_rules",
+      "policy": "Reputation rules readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.user_reputation",
+      "policy": "User reputation readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    }
+  ],
+  "to_public": [
+    {
+      "table": "public.battle_comments",
+      "policy": "Anyone can view visible comments",
+      "command": "SELECT",
+      "roles": "PUBLIC",
+      "using": "is_hidden = false"
+    },
+    {
+      "table": "public.battles",
+      "policy": "Anyone can view public battles",
+      "command": "SELECT",
+      "roles": "PUBLIC",
+      "using": "status IN ('active', 'voting', 'completed')"
+    },
+    {
+      "table": "public.genres",
+      "policy": "Anyone can view active genres",
+      "command": "SELECT",
+      "roles": "PUBLIC",
+      "using": "is_active = true"
+    },
+    {
+      "table": "public.moods",
+      "policy": "Anyone can view active moods",
+      "command": "SELECT",
+      "roles": "PUBLIC",
+      "using": "is_active = true"
+    },
+    {
+      "table": "public.producer_plans",
+      "policy": "Anyone can view active producer plans",
+      "command": "SELECT",
+      "roles": "PUBLIC",
+      "using": "is_active = true"
+    }
+  ],
+  "no_auth_uid": [
+    {
+      "table": "public.app_settings",
+      "policy": "Anyone can read app settings",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.battle_comments",
+      "policy": "Anyone can view visible comments",
+      "command": "SELECT",
+      "roles": "PUBLIC"
+    },
+    {
+      "table": "public.battle_product_snapshots",
+      "policy": "Anyone can view public battle product snapshots",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.battles",
+      "policy": "Anyone can view public battles",
+      "command": "SELECT",
+      "roles": "PUBLIC"
+    },
+    {
+      "table": "public.elite_interest",
+      "policy": "Elite interest insertable",
+      "command": "INSERT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.elite_waitlist",
+      "policy": "Anonymous can insert elite waitlist",
+      "command": "INSERT",
+      "roles": "anon"
+    },
+    {
+      "table": "public.forum_likes",
+      "policy": "Forum likes are publicly readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.genres",
+      "policy": "Anyone can view active genres",
+      "command": "SELECT",
+      "roles": "PUBLIC"
+    },
+    {
+      "table": "public.licenses",
+      "policy": "Anyone can read licenses",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.moods",
+      "policy": "Anyone can view active moods",
+      "command": "SELECT",
+      "roles": "PUBLIC"
+    },
+    {
+      "table": "public.news_videos",
+      "policy": "Public can read published news videos",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.notification_email_log",
+      "policy": "Service role can manage notification email log",
+      "command": "ALL",
+      "roles": "service_role"
+    },
+    {
+      "table": "public.producer_plan_config",
+      "policy": "Producer plan readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.producer_plans",
+      "policy": "Anyone can view active producer plans",
+      "command": "SELECT",
+      "roles": "PUBLIC"
+    },
+    {
+      "table": "public.products",
+      "policy": "Public can view active products",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.reputation_rules",
+      "policy": "Reputation rules readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.stripe_events",
+      "policy": "Stripe events deny clients",
+      "command": "ALL",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "public.user_profiles",
+      "policy": "Auth service can insert profiles",
+      "command": "INSERT",
+      "roles": "supabase_auth_admin, service_role"
+    },
+    {
+      "table": "public.user_reputation",
+      "policy": "User reputation readable",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "storage.objects",
+      "policy": "Anyone can view avatars",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "storage.objects",
+      "policy": "Anyone can view covers",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    },
+    {
+      "table": "storage.objects",
+      "policy": "Authenticated users can read beats audio",
+      "command": "SELECT",
+      "roles": "authenticated"
+    },
+    {
+      "table": "storage.objects",
+      "policy": "Public can read watermarked audio",
+      "command": "SELECT",
+      "roles": "anon, authenticated"
+    }
+  ],
+  "policy_functions_used": [
+    {
+      "policy_table": "public.admin_action_audit_log",
+      "policy_name": "Admins can read centralized admin action audit log",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.admin_notifications",
+      "policy_name": "Admins can read own notifications",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.admin_notifications",
+      "policy_name": "Admins can update own notifications",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_admin_actions",
+      "policy_name": "Admins can insert ai admin actions",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_admin_actions",
+      "policy_name": "Admins can read ai admin actions",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_admin_actions",
+      "policy_name": "Admins can update ai admin actions",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_training_feedback",
+      "policy_name": "Admins can insert ai training feedback",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_training_feedback",
+      "policy_name": "Admins can read ai training feedback",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.ai_training_feedback",
+      "policy_name": "Admins can update ai training feedback",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.app_settings",
+      "policy_name": "Admins can insert app settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.app_settings",
+      "policy_name": "Admins can update app settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.audio_processing_jobs",
+      "policy_name": "Admins can view audio processing jobs",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_comments",
+      "policy_name": "Admins can moderate battle comments",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_comments",
+      "policy_name": "Admins can view all battle comments",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_comments",
+      "policy_name": "Confirmed users can comment",
+      "function": "public.is_email_verified_user",
+      "security": "DEFINER",
+      "search_path": null,
+      "file": "supabase/migrations/20260222110000_044_allow_email_verified_votes_and_comments.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_product_snapshots",
+      "policy_name": "Admins can view all battle product snapshots",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_votes",
+      "policy_name": "Admins can read all battle votes",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battle_votes",
+      "policy_name": "Confirmed users can vote",
+      "function": "public.is_email_verified_user",
+      "security": "DEFINER",
+      "search_path": null,
+      "file": "supabase/migrations/20260222110000_044_allow_email_verified_votes_and_comments.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battles",
+      "policy_name": "Active producers can create battles",
+      "function": "public.can_create_battle",
+      "security": "DEFINER",
+      "search_path": null,
+      "file": "supabase/migrations/20260303124000_112_add_battles_quota_status_rpc_and_elite_cap.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battles",
+      "policy_name": "Admins can update all battles",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.battles",
+      "policy_name": "Admins can view all battles",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.contact_messages",
+      "policy_name": "Admins can delete contact messages",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.contact_messages",
+      "policy_name": "Admins can read all contact messages",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.contact_messages",
+      "policy_name": "Admins can update contact messages",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_assistant_jobs",
+      "policy_name": "Admins can read forum assistant jobs",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_categories",
+      "policy_name": "Authenticated admins can create forum categories",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_categories",
+      "policy_name": "Authenticated admins can delete forum categories",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_categories",
+      "policy_name": "Authenticated admins can update forum categories",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_categories",
+      "policy_name": "Forum categories readable",
+      "function": "public.forum_has_active_subscription",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260302110000_100_forum_agents_base.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.forum_likes",
+      "policy_name": "Owners or admins can delete forum likes",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_moderation_logs",
+      "policy_name": "Admins can read forum moderation logs",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_post_likes",
+      "policy_name": "Authenticated users can like forum posts",
+      "function": "public.forum_can_write_topic",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260303093000_103_forum_reputation_rules_and_integrations.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.forum_post_likes",
+      "policy_name": "Forum post likes readable",
+      "function": "public.forum_can_access_category",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260303093000_103_forum_reputation_rules_and_integrations.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.forum_post_likes",
+      "policy_name": "Users or admins can unlike forum posts",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_posts",
+      "policy_name": "Forum posts readable",
+      "function": "public.forum_can_access_category",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260303093000_103_forum_reputation_rules_and_integrations.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.forum_posts",
+      "policy_name": "Forum posts readable",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.forum_topics",
+      "policy_name": "Forum topics readable",
+      "function": "public.forum_can_access_category",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260303093000_103_forum_reputation_rules_and_integrations.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.forum_topics",
+      "policy_name": "Forum topics readable",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.monitoring_alert_events",
+      "policy_name": "Admins can read monitoring alert events",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.monitoring_alert_events",
+      "policy_name": "Admins can update monitoring alert events",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.news_videos",
+      "policy_name": "Admins can delete news videos",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.news_videos",
+      "policy_name": "Admins can insert news videos",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.news_videos",
+      "policy_name": "Admins can read all news videos",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.news_videos",
+      "policy_name": "Admins can update news videos",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.products",
+      "policy_name": "Active producers can create products",
+      "function": "public.can_publish_beat",
+      "security": "DEFINER",
+      "search_path": null,
+      "file": "supabase/migrations/20260225111000_067_enforce_beats_quota_insert_update.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.products",
+      "policy_name": "Producers can update own unsold products",
+      "function": "public.can_publish_beat",
+      "security": "DEFINER",
+      "search_path": null,
+      "file": "supabase/migrations/20260225111000_067_enforce_beats_quota_insert_update.sql",
+      "auth_uid_in_body": false
+    },
+    {
+      "policy_table": "public.reputation_events",
+      "policy_name": "Reputation events readable by owner or admin",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.reputation_rules",
+      "policy_name": "Admins can manage reputation rules",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.rpc_rate_limit_counters",
+      "policy_name": "Admins can read rpc rate limit counters",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.rpc_rate_limit_hits",
+      "policy_name": "Admins can read rpc rate limit hits",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.rpc_rate_limit_rules",
+      "policy_name": "Admins can insert rpc rate limit rules",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.rpc_rate_limit_rules",
+      "policy_name": "Admins can read rpc rate limit rules",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.rpc_rate_limit_rules",
+      "policy_name": "Admins can update rpc rate limit rules",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.site_audio_settings",
+      "policy_name": "Admins can delete site audio settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.site_audio_settings",
+      "policy_name": "Admins can insert site audio settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.site_audio_settings",
+      "policy_name": "Admins can update site audio settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.site_audio_settings",
+      "policy_name": "Admins can view site audio settings",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "public.user_profiles",
+      "policy_name": "Admins can view all profiles",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Admins can delete watermark assets",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Admins can read watermark assets",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Admins can update watermark assets",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Admins can upload watermark assets",
+      "function": "public.is_admin",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260201130000_015_grant_admin_role.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can delete own masters",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can delete their audio",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can delete their covers",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can read their audio",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can update own masters",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can update their audio",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can update their covers",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can upload audio",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can upload covers",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    },
+    {
+      "policy_table": "storage.objects",
+      "policy_name": "Producers can upload masters",
+      "function": "public.is_active_producer",
+      "security": "INVOKER",
+      "search_path": null,
+      "file": "supabase/migrations/20260207120000_017_create_storage_buckets.sql",
+      "auth_uid_in_body": true
+    }
+  ]
+}

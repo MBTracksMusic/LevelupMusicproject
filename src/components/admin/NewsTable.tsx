@@ -1,6 +1,8 @@
 import { Edit3, Mail, Trash2, Video } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { useTranslation } from '../../lib/i18n';
+import { formatDateTime } from '../../lib/utils/format';
 
 export interface AdminNewsVideoRow {
   id: string;
@@ -24,11 +26,6 @@ interface NewsTableProps {
   broadcastingId: string | null;
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString('fr-FR');
-}
-
 export function NewsTable({
   rows,
   onEdit,
@@ -37,10 +34,17 @@ export function NewsTable({
   deletingId,
   broadcastingId,
 }: NewsTableProps) {
+  const { t } = useTranslation();
+
+  const formatDate = (value: string | null) => {
+    if (!value) return t('common.notAvailable');
+    return formatDateTime(value);
+  };
+
   if (rows.length === 0) {
     return (
       <div className="border border-dashed border-zinc-700 rounded-xl p-8 text-center">
-        <p className="text-zinc-400">Aucune news vidéo pour le moment.</p>
+        <p className="text-zinc-400">{t('admin.news.table.empty')}</p>
       </div>
     );
   }
@@ -50,11 +54,11 @@ export function NewsTable({
       <table className="w-full min-w-[920px]">
         <thead className="bg-zinc-900/80">
           <tr className="text-left text-xs uppercase tracking-[0.08em] text-zinc-500">
-            <th className="px-4 py-3">Titre</th>
-            <th className="px-4 py-3">Publication</th>
-            <th className="px-4 py-3">Diffusion</th>
-            <th className="px-4 py-3">Créée le</th>
-            <th className="px-4 py-3">Actions</th>
+            <th className="px-4 py-3">{t('admin.news.table.title')}</th>
+            <th className="px-4 py-3">{t('admin.news.table.publication')}</th>
+            <th className="px-4 py-3">{t('admin.news.table.broadcast')}</th>
+            <th className="px-4 py-3">{t('admin.news.table.createdAt')}</th>
+            <th className="px-4 py-3">{t('admin.news.table.actions')}</th>
           </tr>
         </thead>
         <tbody>
@@ -73,16 +77,16 @@ export function NewsTable({
                 </td>
                 <td className="px-4 py-3 align-top">
                   <Badge variant={row.is_published ? 'success' : 'default'}>
-                    {row.is_published ? 'Publié' : 'Brouillon'}
+                    {row.is_published ? t('producer.published') : t('producer.draft')}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 align-top">
                   <div className="space-y-1">
                     <Badge variant={row.broadcast_email ? 'warning' : 'default'}>
-                      {row.broadcast_email ? 'Auto diffusion ON' : 'Auto diffusion OFF'}
+                      {row.broadcast_email ? t('admin.news.table.autoBroadcastOn') : t('admin.news.table.autoBroadcastOff')}
                     </Badge>
                     <p className="text-xs text-zinc-500">
-                      Envoyé: {formatDate(row.broadcast_sent_at)}
+                      {t('admin.news.table.sentAt')}: {formatDate(row.broadcast_sent_at)}
                     </p>
                     {canBroadcast && (
                       <Button
@@ -93,7 +97,7 @@ export function NewsTable({
                         onClick={() => onBroadcast(row)}
                         isLoading={broadcastingId === row.id}
                       >
-                        Diffuser maintenant
+                        {t('admin.news.table.broadcastNow')}
                       </Button>
                     )}
                   </div>
@@ -109,7 +113,7 @@ export function NewsTable({
                       leftIcon={<Edit3 className="w-3.5 h-3.5" />}
                       onClick={() => onEdit(row)}
                     >
-                      Éditer
+                      {t('common.edit')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -119,7 +123,7 @@ export function NewsTable({
                       onClick={() => onDelete(row)}
                       isLoading={deletingId === row.id}
                     >
-                      Supprimer
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </td>

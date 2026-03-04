@@ -6,9 +6,11 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { AdminPriorityCards } from '../components/admin/AdminPriorityCards';
+import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
 import type { Json } from '../lib/supabase/database.types';
+import { formatDateTime } from '../lib/utils/format';
 
 interface ProducerLite {
   id: string;
@@ -119,33 +121,58 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function toStatusLabel(status: BattleStatus) {
-  if (status === 'pending_acceptance') return 'En attente de reponse';
-  if (status === 'awaiting_admin') return 'En attente validation admin';
-  if (status === 'rejected') return 'Refusee';
-  if (status === 'active') return 'Active';
-  if (status === 'voting') return 'Voting (legacy)';
-  if (status === 'completed') return 'Terminee';
-  if (status === 'cancelled') return 'Annulee';
-  if (status === 'approved') return 'Approuvee';
-  return 'Pending';
+function toStatusLabel(status: BattleStatus, t: TranslateFn) {
+  if (status === 'pending_acceptance') return t('battleDetail.statusPendingAcceptance');
+  if (status === 'awaiting_admin') return t('battleDetail.statusAwaitingAdmin');
+  if (status === 'rejected') return t('battleDetail.statusRejected');
+  if (status === 'active') return t('battleDetail.statusActive');
+  if (status === 'voting') return t('battles.legacyVoting');
+  if (status === 'completed') return t('battleDetail.statusCompleted');
+  if (status === 'cancelled') return t('battleDetail.statusCancelled');
+  if (status === 'approved') return t('battleDetail.statusApproved');
+  return t('battleDetail.statusPending');
 }
 
-function toAdminRpcError(message: string) {
-  if (message.includes('admin_required')) return 'Action reservee a un administrateur.';
-  if (message.includes('rate_limit_exceeded')) return 'Trop de requetes admin. Reessaye dans une minute.';
-  if (message.includes('battle_not_found')) return 'Battle introuvable.';
-  if (message.includes('battle_not_waiting_admin_validation')) return 'Battle non eligible a la validation admin.';
-  if (message.includes('cannot_cancel_completed_battle')) return 'Une battle terminee ne peut pas etre annulee.';
-  if (message.includes('battle_cancelled')) return 'Cette battle est deja annulee.';
-  if (message.includes('battle_not_open_for_finalization')) return 'Battle non eligible a la cloture.';
-  if (message.includes('invalid_extension_days')) return 'Extension invalide (1 a 30 jours).';
-  if (message.includes('battle_not_open_for_extension')) return 'Battle non eligible a une extension.';
-  if (message.includes('battle_has_no_voting_end')) return 'Cette battle n\'a pas de fin de vote definie.';
-  if (message.includes('battle_already_expired')) return 'La battle est deja expiree.';
-  if (message.includes('battle_extension_limit_exceeded')) return 'Limite max de duree depassee (60 jours).';
-  if (message.includes('maximum_extensions_reached')) return 'Nombre maximal d\'extensions atteint (5).';
-  return 'Action admin impossible pour le moment.';
+function toAiActionLabel(actionType: AiActionRow['action_type'] | string | null | undefined, t: TranslateFn) {
+  if (actionType === 'battle_validate') return t('admin.battles.actionBattleValidate');
+  if (actionType === 'battle_cancel') return t('admin.battles.actionBattleCancel');
+  if (actionType === 'comment_moderation') return t('admin.battles.actionCommentModeration');
+  if (actionType === 'match_recommendation') return t('admin.battles.actionMatchRecommendation');
+  if (actionType === 'battle_duration_set') return t('admin.battles.actionBattleDurationSet');
+  if (actionType === 'battle_duration_extended') return t('admin.battles.actionBattleDurationExtended');
+  return t('admin.battles.actionFallback');
+}
+
+function toAiStatusLabel(status: AiActionRow['status'] | string | null | undefined, t: TranslateFn) {
+  if (status === 'proposed') return t('admin.battles.statusProposed');
+  if (status === 'executed') return t('admin.battles.statusExecuted');
+  if (status === 'failed') return t('admin.battles.statusFailed');
+  if (status === 'overridden') return t('admin.battles.statusOverridden');
+  return t('common.unknown');
+}
+
+function toAiEntityLabel(entityType: AiActionRow['entity_type'] | string | null | undefined, t: TranslateFn) {
+  if (entityType === 'battle') return t('admin.battles.entityBattle');
+  if (entityType === 'comment') return t('admin.battles.entityComment');
+  if (entityType === 'other') return t('admin.battles.entityOther');
+  return t('common.unknown');
+}
+
+function toAdminRpcError(message: string, t: TranslateFn) {
+  if (message.includes('admin_required')) return t('admin.battles.rpcAdminRequired');
+  if (message.includes('rate_limit_exceeded')) return t('admin.battles.rpcRateLimit');
+  if (message.includes('battle_not_found')) return t('admin.battles.rpcBattleNotFound');
+  if (message.includes('battle_not_waiting_admin_validation')) return t('admin.battles.rpcAwaitingAdminOnly');
+  if (message.includes('cannot_cancel_completed_battle')) return t('admin.battles.rpcCannotCancelCompleted');
+  if (message.includes('battle_cancelled')) return t('admin.battles.rpcAlreadyCancelled');
+  if (message.includes('battle_not_open_for_finalization')) return t('admin.battles.rpcFinalizeUnavailable');
+  if (message.includes('invalid_extension_days')) return t('admin.battles.rpcInvalidExtensionDays');
+  if (message.includes('battle_not_open_for_extension')) return t('admin.battles.rpcExtensionUnavailable');
+  if (message.includes('battle_has_no_voting_end')) return t('admin.battles.rpcMissingVotingEnd');
+  if (message.includes('battle_already_expired')) return t('admin.battles.rpcAlreadyExpired');
+  if (message.includes('battle_extension_limit_exceeded')) return t('admin.battles.rpcDurationLimitExceeded');
+  if (message.includes('maximum_extensions_reached')) return t('admin.battles.rpcMaxExtensionsReached');
+  return t('admin.battles.rpcGenericError');
 }
 
 function getEdgeFunctionHttpStatus(error: unknown): number | null {
@@ -161,7 +188,8 @@ function getEdgeFunctionHttpStatus(error: unknown): number | null {
 function toEdgeFunctionErrorMessage(
   error: unknown,
   functionName: 'ai-evaluate-battle' | 'ai-moderate-comment',
-  projectRef: string | null
+  projectRef: string | null,
+  t: TranslateFn,
 ) {
   const fallbackMessage = error instanceof Error ? error.message : 'unknown_edge_function_error';
   const name = error && typeof error === 'object' && 'name' in error
@@ -171,19 +199,19 @@ function toEdgeFunctionErrorMessage(
   const projectRefHint = projectRef || 'unknown_project_ref';
 
   if (status === 404) {
-    return `Fonction "${functionName}" non deployee (404) sur ${projectRefHint}.`;
+    return t('admin.battles.edgeNotDeployed', { functionName, projectRef: projectRefHint });
   }
 
   if (status === 401) {
-    return `Session invalide/expiree pour "${functionName}" (401). Reconnecte-toi puis reessaye.`;
+    return t('admin.battles.edgeUnauthorized', { functionName });
   }
 
   if (status === 403) {
-    return `Acces refuse a "${functionName}" (403). Compte admin requis.`;
+    return t('admin.battles.edgeForbidden', { functionName });
   }
 
   if (status !== null && status >= 500) {
-    return `Erreur serveur "${functionName}" (${status}). Verifie logs Edge Function et secrets Supabase.`;
+    return t('admin.battles.edgeServerError', { functionName, status });
   }
 
   if (
@@ -191,18 +219,18 @@ function toEdgeFunctionErrorMessage(
     || fallbackMessage.includes('Failed to send a request to the Edge Function')
     || fallbackMessage.includes('Failed to fetch')
   ) {
-    return `Impossible de joindre "${functionName}" (network/CORS/URL). Verifie VITE_SUPABASE_URL et le deploy sur ${projectRefHint}.`;
+    return t('admin.battles.edgeNetworkError', { functionName, projectRef: projectRefHint });
   }
 
   if (name === 'FunctionsRelayError') {
-    return `Relai Supabase en erreur pour "${functionName}". Reessaye puis verifie la sante du projet ${projectRefHint}.`;
+    return t('admin.battles.edgeRelayError', { functionName, projectRef: projectRefHint });
   }
 
   if (name === 'FunctionsHttpError' && status !== null) {
-    return `Erreur HTTP ${status} sur "${functionName}".`;
+    return t('admin.battles.edgeHttpError', { functionName, status });
   }
 
-  return `Erreur "${functionName}": ${fallbackMessage}`;
+  return t('admin.battles.edgeUnknownError', { functionName, message: fallbackMessage });
 }
 
 async function invokeEdgeWithFreshJwt(
@@ -254,29 +282,30 @@ function getProjectRef() {
   }
 }
 
-function formatVotingEnd(value: string | null) {
-  if (!value) return 'Non definie';
-  return new Date(value).toLocaleString();
+function formatVotingEnd(value: string | null, t: TranslateFn) {
+  if (!value) return t('common.notDefined');
+  return formatDateTime(value);
 }
 
-function formatTimeRemaining(value: string | null) {
-  if (!value) return 'N/A';
+function formatTimeRemaining(value: string | null, t: TranslateFn) {
+  if (!value) return t('common.notAvailable');
   const endMs = new Date(value).getTime();
-  if (!Number.isFinite(endMs)) return 'N/A';
+  if (!Number.isFinite(endMs)) return t('common.notAvailable');
   const diff = endMs - Date.now();
-  if (diff <= 0) return 'Expiree';
+  if (diff <= 0) return t('admin.battles.expired');
 
   const totalMinutes = Math.floor(diff / (1000 * 60));
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
 
-  if (days > 0) return `${days}j ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (days > 0) return `${days}${t('battles.daysShort')} ${hours}${t('battles.hoursShort')}`;
+  if (hours > 0) return `${hours}${t('battles.hoursShort')} ${minutes}${t('battles.minutesShort')}`;
+  return `${minutes}${t('battles.minutesShort')}`;
 }
 
 export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPageProps = {}) {
+  const { t } = useTranslation();
   const [battles, setBattles] = useState<AdminBattleRow[]>([]);
   const [comments, setComments] = useState<AdminCommentRow[]>([]);
   const [aiActions, setAiActions] = useState<AiActionRow[]>([]);
@@ -397,7 +426,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
     if (battlesRes.error) {
       console.error('Error loading admin battles:', battlesRes.error);
-      setError('Impossible de charger les battles admin.');
+      setError(t('admin.battles.loadBattlesError'));
       setBattles([]);
       setBattlesPage(0);
       setHasMoreBattles(false);
@@ -412,7 +441,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
       console.error('Error loading admin comments:', commentsRes.error);
       setComments([]);
       if (!battlesRes.error) {
-        setError('Impossible de charger les commentaires admin.');
+        setError(t('admin.battles.loadCommentsError'));
       }
     } else {
       setComments((commentsRes.data as AdminCommentRow[] | null) ?? []);
@@ -422,7 +451,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
       console.error('Error loading ai admin actions:', aiActionsRes.error);
       setAiActions([]);
       if (!battlesRes.error && !commentsRes.error) {
-        setError('Impossible de charger les actions IA.');
+        setError(t('admin.battles.loadAiActionsError'));
       }
     } else {
       setAiActions(((aiActionsRes.data as AiActionRow[] | null) ?? []).map((row) => ({
@@ -435,7 +464,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
       console.error('Error loading admin notifications:', notificationsRes.error);
       setNotifications([]);
       if (!battlesRes.error && !commentsRes.error && !aiActionsRes.error) {
-        setError('Impossible de charger les notifications admin.');
+        setError(t('admin.battles.loadNotificationsError'));
       }
     } else {
       setNotifications(
@@ -447,7 +476,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     }
 
     setIsLoading(false);
-  }, [battlesPageSize]);
+  }, [battlesPageSize, t]);
 
   const loadMoreBattles = useCallback(async () => {
     if (isLoading || isLoadingMoreBattles || !hasMoreBattles) return;
@@ -497,7 +526,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
     if (battlesError) {
       console.error('Error loading more admin battles:', battlesError);
-      setError('Impossible de charger plus de battles admin.');
+      setError(t('admin.battles.loadMoreError'));
       setIsLoadingMoreBattles(false);
       return;
     }
@@ -507,7 +536,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     setBattlesPage(nextPage);
     setHasMoreBattles(pageRows.length === battlesPageSize);
     setIsLoadingMoreBattles(false);
-  }, [battlesPage, battlesPageSize, hasMoreBattles, isLoading, isLoadingMoreBattles]);
+  }, [battlesPage, battlesPageSize, hasMoreBattles, isLoading, isLoadingMoreBattles, t]);
 
   const loadAdminContext = useCallback(async () => {
     const projectRef = getProjectRef();
@@ -730,7 +759,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
     if (fnError) {
       console.error('Edge Function ai-evaluate-battle failed:', fnError);
-      const message = toEdgeFunctionErrorMessage(fnError, 'ai-evaluate-battle', adminContext.projectRef);
+      const message = toEdgeFunctionErrorMessage(fnError, 'ai-evaluate-battle', adminContext.projectRef, t);
       setError(message);
       toast.error(message);
       setEvaluatingBattleId(null);
@@ -749,7 +778,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
     if (fnError) {
       console.error('Edge Function ai-moderate-comment failed:', fnError);
-      const message = toEdgeFunctionErrorMessage(fnError, 'ai-moderate-comment', adminContext.projectRef);
+      const message = toEdgeFunctionErrorMessage(fnError, 'ai-moderate-comment', adminContext.projectRef, t);
       setError(message);
       toast.error(message);
       setEvaluatingCommentId(null);
@@ -768,7 +797,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
       : null;
 
     if (!rpcName) {
-      setError('Recommandation IA non applicable.');
+      setError(t('admin.battles.recommendationNotApplicable'));
       return;
     }
 
@@ -790,7 +819,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
         .eq('id', action.id);
 
       setAiActionKey(null);
-      setError(toAdminRpcError(rpcError.message));
+      setError(toAdminRpcError(rpcError.message, t));
       await loadData();
       return;
     }
@@ -845,7 +874,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     if (updateError) {
       console.error('Error overriding AI action:', updateError);
       setAiActionKey(null);
-      setError('Impossible de refuser la recommandation IA.');
+      setError(t('admin.battles.rejectRecommendationError'));
       return;
     }
 
@@ -874,7 +903,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     const { error: rpcError } = await supabase.rpc(rpcName, { p_battle_id: battleId });
 
     if (rpcError) {
-      setError(toAdminRpcError(rpcError.message));
+      setError(toAdminRpcError(rpcError.message, t));
       setActionKey(null);
       return;
     }
@@ -887,7 +916,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     setError(null);
 
     if (!Number.isInteger(days) || days < 1 || days > 30) {
-      const message = 'Extension invalide (1 a 30 jours).';
+      const message = t('admin.battles.rpcInvalidExtensionDays');
       setError(message);
       toast.error(message);
       return;
@@ -904,14 +933,14 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     });
 
     if (rpcError) {
-      const message = toAdminRpcError(rpcError.message);
+      const message = toAdminRpcError(rpcError.message, t);
       setError(message);
       toast.error(message);
       setExtendActionKey(null);
       return;
     }
 
-    toast.success(`Duree etendue de ${days} jour${days > 1 ? 's' : ''}.`);
+    toast.success(t('admin.battles.extendSuccess', { days, suffix: days > 1 ? 's' : '' }));
     setExtendActionKey(null);
     await loadData();
   };
@@ -929,7 +958,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
     if (updateError) {
       console.error('Error moderating comment:', updateError);
-      setError('Moderation commentaire impossible.');
+      setError(t('admin.battles.commentModerationError'));
       return;
     }
 
@@ -1006,10 +1035,10 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
   };
 
   const getNotificationLabel = (notification: AdminNotificationRow) => {
-    const actionType = asString(notification.payload.action_type) || 'ai_action';
+    const actionType = asString(notification.payload.action_type);
     const confidence = notification.payload.confidence_score;
     const confidenceLabel = typeof confidence === 'number' ? ` (${Math.round(confidence * 100)}%)` : '';
-    return `${actionType}${confidenceLabel}`;
+    return `${toAiActionLabel(actionType, t)}${confidenceLabel}`;
   };
 
   if (adminContext.isAdmin === null) {
@@ -1024,10 +1053,10 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-white">Acces interdit</h1>
-          <p className="text-zinc-400">Vous n'avez pas les droits administrateur.</p>
+          <h1 className="text-2xl font-bold text-white">{t('errors.forbidden')}</h1>
+          <p className="text-zinc-400">{t('admin.battles.accessDeniedBody')}</p>
           <Link to="/battles">
-            <Button>Retour</Button>
+            <Button>{t('common.back')}</Button>
           </Link>
         </div>
       </div>
@@ -1041,12 +1070,12 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
           <div>
             <h1 className="text-3xl font-bold text-white inline-flex items-center gap-2">
               <ShieldAlert className="w-6 h-6" />
-              Admin Battles
+              {t('admin.battles.title')}
             </h1>
-            <p className="text-zinc-400 mt-1">Validation, moderation, refus et score d'engagement.</p>
+            <p className="text-zinc-400 mt-1">{t('admin.battles.subtitle')}</p>
           </div>
           <Link to="/battles">
-            <Button variant="outline">Retour Battles</Button>
+            <Button variant="outline">{t('admin.battles.backBattles')}</Button>
           </Link>
         </div>
 
@@ -1058,17 +1087,17 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
         {import.meta.env.DEV && (
           <Card className="bg-zinc-900/70 border border-zinc-800 text-zinc-300 text-xs space-y-1">
-            <p className="text-zinc-200 font-medium">Debug Admin Context</p>
-            <p>project_ref: {adminContext.projectRef || 'unknown'}</p>
-            <p>auth_uid: {adminContext.userId || 'none'}</p>
-            <p>profile_role: {adminContext.dbRole || 'unknown'}</p>
-            <p>is_admin(): {adminContext.isAdmin === null ? 'unknown' : String(adminContext.isAdmin)}</p>
-            {adminContext.error && <p className="text-amber-300">context_error: {adminContext.error}</p>}
+            <p className="text-zinc-200 font-medium">{t('admin.battles.debugTitle')}</p>
+            <p>{t('admin.battles.debugProjectRef')}: {adminContext.projectRef || t('common.unknown')}</p>
+            <p>{t('admin.battles.debugAuthUid')}: {adminContext.userId || t('common.none')}</p>
+            <p>{t('admin.battles.debugProfileRole')}: {adminContext.dbRole || t('common.unknown')}</p>
+            <p>{t('admin.battles.debugIsAdmin')}: {adminContext.isAdmin === null ? t('common.unknown') : String(adminContext.isAdmin)}</p>
+            {adminContext.error && <p className="text-amber-300">{t('admin.battles.debugContextError')}: {adminContext.error}</p>}
           </Card>
         )}
 
         <section className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Urgences</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">{t('admin.battles.emergencies')}</p>
           <AdminPriorityCards
             awaitingAdminCount={awaitingAdminCount}
             expiringCount={expiringSoonBattles.length}
@@ -1078,16 +1107,16 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
         <Card className="space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-white">Expiring Soon (24h)</h2>
+            <h2 className="text-lg font-semibold text-white">{t('admin.battles.expiringSoon')}</h2>
             <Badge variant={expiringSoonBattles.length > 0 ? 'warning' : 'default'}>
               {expiringSoonBattles.length}
             </Badge>
           </div>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : expiringSoonBattles.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune battle proche de l'expiration.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noExpiringSoon')}</p>
           ) : (
             <ul className="space-y-2">
               {expiringSoonBattles.slice(0, 8).map((battle) => (
@@ -1096,7 +1125,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                     <div>
                       <p className="text-zinc-100 font-medium">{battle.title}</p>
                       <p className="text-xs text-zinc-400">
-                        Fin vote: {formatVotingEnd(battle.voting_ends_at)} • {formatTimeRemaining(battle.voting_ends_at)}
+                        {t('admin.battles.voteEndLabel')}: {formatVotingEnd(battle.voting_ends_at, t)} • {formatTimeRemaining(battle.voting_ends_at, t)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1106,7 +1135,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                         isLoading={extendActionKey === `extend:${battle.id}:1`}
                         onClick={() => extendBattleDuration(battle.id, 1, extensionReasonByBattleId[battle.id] ?? null)}
                       >
-                        +1j
+                        {t('admin.battles.extensionPreset', { days: 1, unit: t('battles.daysShort') })}
                       </Button>
                       <Button
                         size="sm"
@@ -1114,7 +1143,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                         isLoading={extendActionKey === `extend:${battle.id}:3`}
                         onClick={() => extendBattleDuration(battle.id, 3, extensionReasonByBattleId[battle.id] ?? null)}
                       >
-                        +3j
+                        {t('admin.battles.extensionPreset', { days: 3, unit: t('battles.daysShort') })}
                       </Button>
                       <Button
                         size="sm"
@@ -1122,10 +1151,10 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                         isLoading={extendActionKey === `extend:${battle.id}:7`}
                         onClick={() => extendBattleDuration(battle.id, 7, extensionReasonByBattleId[battle.id] ?? null)}
                       >
-                        +7j
+                        {t('admin.battles.extensionPreset', { days: 7, unit: t('battles.daysShort') })}
                       </Button>
                       <Link to={`/battles/${battle.slug}`}>
-                        <Button size="sm" variant="ghost">Ouvrir</Button>
+                        <Button size="sm" variant="ghost">{t('common.open')}</Button>
                       </Link>
                     </div>
                   </div>
@@ -1137,49 +1166,47 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
         <Card className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-white">Battles</h2>
+            <h2 className="text-lg font-semibold text-white">{t('admin.battles.battlesTitle')}</h2>
             <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-zinc-500" />
               <Button size="sm" variant={filter === 'all' ? 'primary' : 'outline'} onClick={() => setFilter('all')}>
-                Toutes
+                {t('common.all')}
               </Button>
               <Button
                 size="sm"
                 variant={filter === 'pending_acceptance' ? 'primary' : 'outline'}
                 onClick={() => setFilter('pending_acceptance')}
               >
-                pending_acceptance
+                {t('battleDetail.statusPendingAcceptance')}
               </Button>
               <Button
                 size="sm"
                 variant={filter === 'awaiting_admin' ? 'primary' : 'outline'}
                 onClick={() => setFilter('awaiting_admin')}
               >
-                awaiting_admin
+                {t('battleDetail.statusAwaitingAdmin')}
               </Button>
               <Button
                 size="sm"
                 variant={filter === 'rejected' ? 'primary' : 'outline'}
                 onClick={() => setFilter('rejected')}
               >
-                rejected
+                {t('battleDetail.statusRejected')}
               </Button>
             </div>
           </div>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : visibleBattles.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune battle sur ce filtre.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noBattleForFilter')}</p>
           ) : (
             <ul className="space-y-3">
               {visibleBattles.map((battle) => {
                 const latestRecommendation = latestBattleRecommendationByBattleId.get(battle.id);
                 const recommendationDecision = latestRecommendation ? asRecord(latestRecommendation.ai_decision) : {};
-                const recommendationAction = latestRecommendation?.action_type === 'battle_cancel'
-                  ? 'Annuler'
-                  : latestRecommendation?.action_type === 'battle_validate'
-                  ? 'Valider'
+                const recommendationAction = latestRecommendation
+                  ? toAiActionLabel(latestRecommendation.action_type, t)
                   : null;
                 const recommendationReason = asString(recommendationDecision.reason)
                   || asString(recommendationDecision.reasons);
@@ -1195,24 +1222,24 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                     <div className="space-y-1">
                       <p className="text-white font-semibold">{battle.title}</p>
                       <p className="text-sm text-zinc-400">
-                        {battle.producer1?.username || 'P1'} vs {battle.producer2?.username || 'P2'}
+                        {battle.producer1?.username || t('battleDetail.notAssigned')} {t('battles.vs')} {battle.producer2?.username || t('battleDetail.notAssigned')}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Votes: {battle.votes_producer1} - {battle.votes_producer2}
+                        {t('battles.votes')}: {battle.votes_producer1} - {battle.votes_producer2}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Fin vote: {formatVotingEnd(battle.voting_ends_at)}
-                        {battle.voting_ends_at ? ` • ${formatTimeRemaining(battle.voting_ends_at)}` : ''}
+                        {t('admin.battles.voteEndLabel')}: {formatVotingEnd(battle.voting_ends_at, t)}
+                        {battle.voting_ends_at ? ` • ${formatTimeRemaining(battle.voting_ends_at, t)}` : ''}
                       </p>
                       {battle.custom_duration_days !== null && (
                         <p className="text-xs text-zinc-500">
-                          Duree custom: {battle.custom_duration_days} jour{battle.custom_duration_days > 1 ? 's' : ''}
+                          {t('admin.battles.customDuration', { days: battle.custom_duration_days })}
                         </p>
                       )}
                     </div>
 
                     <div className="flex items-center flex-wrap gap-2">
-                      <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status)}</Badge>
+                      <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status, t)}</Badge>
 
                       {battle.status === 'awaiting_admin' && (
                         <Button
@@ -1221,7 +1248,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={actionKey === `admin_validate_battle:${battle.id}`}
                           onClick={() => runBattleRpc('admin_validate_battle', battle.id)}
                         >
-                          Valider
+                          {t('admin.battles.validate')}
                         </Button>
                       )}
 
@@ -1232,7 +1259,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={actionKey === `admin_cancel_battle:${battle.id}`}
                           onClick={() => runBattleRpc('admin_cancel_battle', battle.id)}
                         >
-                          Annuler
+                          {t('common.cancel')}
                         </Button>
                       )}
 
@@ -1243,7 +1270,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={actionKey === `finalize_battle:${battle.id}`}
                           onClick={() => runBattleRpc('finalize_battle', battle.id)}
                         >
-                          Forcer cloture
+                          {t('admin.battles.forceClose')}
                         </Button>
                       )}
 
@@ -1253,7 +1280,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           variant="ghost"
                           onClick={() => setSelectedProducerId(battle.producer2?.id || null)}
                         >
-                          Voir refus
+                          {t('admin.battles.viewRefusals')}
                         </Button>
                       )}
 
@@ -1263,23 +1290,23 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           variant="ghost"
                           onClick={() => setSelectedProducerId(battle.producer2?.id || null)}
                         >
-                          Voir score
+                          {t('admin.battles.viewScore')}
                         </Button>
                       )}
 
                       <Link to={`/battles/${battle.slug}`}>
-                        <Button size="sm" variant="ghost">Ouvrir</Button>
+                        <Button size="sm" variant="ghost">{t('common.open')}</Button>
                       </Link>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                     <div className="rounded border border-zinc-800 p-3 bg-zinc-900/60">
-                      <p className="text-zinc-400">Producer2 refus</p>
+                      <p className="text-zinc-400">{t('admin.battles.producer2Refusals')}</p>
                       <p className="text-white font-semibold">{battle.producer2?.battle_refusal_count ?? 0}</p>
                     </div>
                     <div className="rounded border border-zinc-800 p-3 bg-zinc-900/60">
-                      <p className="text-zinc-400">Score engagement Producer2</p>
+                      <p className="text-zinc-400">{t('admin.battles.producer2EngagementScore')}</p>
                       <p className="text-white font-semibold">{battle.producer2?.engagement_score ?? 0}</p>
                     </div>
                   </div>
@@ -1287,30 +1314,30 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                   {battle.status === 'awaiting_admin' && (
                     <div className="rounded border border-sky-900 bg-sky-950/30 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <p className="text-sm text-sky-200 font-medium">Recommandation IA</p>
+                        <p className="text-sm text-sky-200 font-medium">{t('admin.battles.aiRecommendation')}</p>
                         <Button
                           size="sm"
                           variant="outline"
                           isLoading={evaluatingBattleId === battle.id}
                           onClick={() => evaluateBattleWithAi(battle.id)}
                         >
-                          Analyser IA
+                          {t('admin.battles.analyzeAi')}
                         </Button>
                       </div>
 
                       {latestRecommendation ? (
                         <div className="space-y-2">
                           <p className="text-sm text-zinc-200">
-                            Suggestion: <span className="font-semibold">{recommendationAction || latestRecommendation.action_type}</span>
+                            {t('admin.battles.suggestion')}: <span className="font-semibold">{recommendationAction}</span>
                             {latestRecommendation.confidence_score !== null && (
                               <span className="text-zinc-400"> ({Math.round(latestRecommendation.confidence_score * 100)}%)</span>
                             )}
                           </p>
                           <p className="text-xs text-zinc-500">
-                            Status action: {latestRecommendation.status} • {new Date(latestRecommendation.created_at).toLocaleString()}
+                            {t('admin.battles.actionStatus')}: {toAiStatusLabel(latestRecommendation.status, t)} • {formatDateTime(latestRecommendation.created_at)}
                           </p>
                           {recommendationReason && (
-                            <p className="text-xs text-zinc-400">Raison: {recommendationReason}</p>
+                            <p className="text-xs text-zinc-400">{t('admin.battles.reason')}: {recommendationReason}</p>
                           )}
 
                           {latestRecommendation.status === 'proposed' && (
@@ -1321,7 +1348,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                                 isLoading={aiActionKey === `manual:${latestRecommendation.id}`}
                                 onClick={() => applyBattleRecommendation(latestRecommendation, 'manual')}
                               >
-                                Appliquer
+                                {t('admin.battles.apply')}
                               </Button>
                               <Button
                                 size="sm"
@@ -1329,7 +1356,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                                 isLoading={aiActionKey === `reject:${latestRecommendation.id}`}
                                 onClick={() => rejectBattleRecommendation(latestRecommendation)}
                               >
-                                Refuser
+                                {t('admin.battles.reject')}
                               </Button>
                               <Button
                                 size="sm"
@@ -1338,22 +1365,22 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                                 isLoading={aiActionKey === `auto:${latestRecommendation.id}`}
                                 onClick={() => applyBattleRecommendation(latestRecommendation, 'auto')}
                               >
-                                Laisser l'IA decider
+                                {t('admin.battles.letAiDecide')}
                               </Button>
                             </div>
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm text-zinc-400">Aucune recommandation IA pour cette battle.</p>
+                        <p className="text-sm text-zinc-400">{t('admin.battles.noAiRecommendation')}</p>
                       )}
                     </div>
                   )}
 
                   {(battle.status === 'active' || battle.status === 'voting') && (
                     <div className="rounded border border-emerald-900 bg-emerald-950/20 p-3 space-y-3">
-                      <p className="text-sm text-emerald-200 font-medium">Extension duree de vote</p>
+                      <p className="text-sm text-emerald-200 font-medium">{t('admin.battles.voteDurationExtension')}</p>
                       <p className="text-xs text-zinc-400">
-                        Fin actuelle: {formatVotingEnd(battle.voting_ends_at)} • {formatTimeRemaining(battle.voting_ends_at)}
+                        {t('admin.battles.currentVoteEnd')}: {formatVotingEnd(battle.voting_ends_at, t)} • {formatTimeRemaining(battle.voting_ends_at, t)}
                       </p>
 
                       <div className="flex flex-wrap gap-2">
@@ -1363,7 +1390,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={extendActionKey === `extend:${battle.id}:1`}
                           onClick={() => extendBattleDuration(battle.id, 1, extensionReasonByBattleId[battle.id] ?? null)}
                         >
-                          +1j
+                          {t('admin.battles.extensionPreset', { days: 1, unit: t('battles.daysShort') })}
                         </Button>
                         <Button
                           size="sm"
@@ -1371,7 +1398,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={extendActionKey === `extend:${battle.id}:3`}
                           onClick={() => extendBattleDuration(battle.id, 3, extensionReasonByBattleId[battle.id] ?? null)}
                         >
-                          +3j
+                          {t('admin.battles.extensionPreset', { days: 3, unit: t('battles.daysShort') })}
                         </Button>
                         <Button
                           size="sm"
@@ -1379,7 +1406,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           isLoading={extendActionKey === `extend:${battle.id}:7`}
                           onClick={() => extendBattleDuration(battle.id, 7, extensionReasonByBattleId[battle.id] ?? null)}
                         >
-                          +7j
+                          {t('admin.battles.extensionPreset', { days: 7, unit: t('battles.daysShort') })}
                         </Button>
                       </div>
 
@@ -1392,7 +1419,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           onChange={(event) =>
                             setExtensionDaysByBattleId((prev) => ({ ...prev, [battle.id]: event.target.value }))
                           }
-                          placeholder="Jours (1-30)"
+                          placeholder={t('admin.battles.daysPlaceholder')}
                           className="h-9 rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
                         />
                         <input
@@ -1401,7 +1428,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           onChange={(event) =>
                             setExtensionReasonByBattleId((prev) => ({ ...prev, [battle.id]: event.target.value }))
                           }
-                          placeholder="Raison (optionnelle)"
+                          placeholder={t('admin.battles.reasonPlaceholder')}
                           className="h-9 rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
                         />
                         <Button
@@ -1418,7 +1445,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                             );
                           }}
                         >
-                          Etendre
+                          {t('admin.battles.extend')}
                         </Button>
                       </div>
                     </div>
@@ -1426,7 +1453,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
 
                   {battle.status === 'rejected' && battle.rejection_reason && (
                     <p className="text-sm text-red-300 bg-red-900/20 border border-red-800 rounded px-3 py-2">
-                      Motif du refus: {battle.rejection_reason}
+                      {t('producerBattles.rejectionReasonPrefix', { reason: battle.rejection_reason })}
                     </p>
                   )}
                 </li>
@@ -1443,28 +1470,28 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                 isLoading={isLoadingMoreBattles}
                 onClick={() => void loadMoreBattles()}
               >
-                Load more
+                {t('admin.battles.loadMore')}
               </Button>
             </div>
           )}
         </Card>
 
         <section className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Moderation</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">{t('admin.battles.moderation')}</p>
         </section>
 
         <Card className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-white">Notifications IA</h2>
+            <h2 className="text-lg font-semibold text-white">{t('admin.battles.aiNotifications')}</h2>
             <Badge variant={unreadNotificationsCount > 0 ? 'warning' : 'default'}>
-              {unreadNotificationsCount} non lues
+              {t('admin.battles.unreadCount', { count: unreadNotificationsCount })}
             </Badge>
           </div>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : notifications.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune notification admin.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noNotifications')}</p>
           ) : (
             <ul className="space-y-2">
               {notifications.slice(0, 8).map((notification) => {
@@ -1477,16 +1504,16 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                       <div>
                         <p className="text-zinc-200 font-medium">
                           {getNotificationLabel(notification)}
-                          {!notification.is_read && <span className="text-amber-300"> • NEW</span>}
+                          {!notification.is_read && <span className="text-amber-300"> • {t('admin.battles.newBadge')}</span>}
                         </p>
-                        <p className="text-zinc-500 text-xs">{new Date(notification.created_at).toLocaleString()}</p>
+                        <p className="text-zinc-500 text-xs">{formatDateTime(notification.created_at)}</p>
                         {targetUrl && (
                           <Link to={targetUrl} className="text-xs text-sky-300 hover:text-sky-200 inline-block mt-1">
-                            Ouvrir la cible
+                            {t('admin.battles.openTarget')}
                           </Link>
                         )}
                         {linkedActionId && (
-                          <p className="text-zinc-500 text-xs mt-1">Action: {linkedActionId}</p>
+                          <p className="text-zinc-500 text-xs mt-1">{t('common.action')}: {linkedActionId}</p>
                         )}
                       </div>
                       {!notification.is_read && (
@@ -1495,7 +1522,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                           variant="outline"
                           onClick={() => markNotificationRead(notification.id)}
                         >
-                          Marquer lu
+                          {t('admin.battles.markRead')}
                         </Button>
                       )}
                     </div>
@@ -1507,20 +1534,20 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
         </Card>
 
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">AI Inbox</h2>
+          <h2 className="text-lg font-semibold text-white">{t('admin.battles.aiInbox')}</h2>
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : proposedAiActions.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune action IA en attente.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noPendingAiActions')}</p>
           ) : (
             <ul className="space-y-2 text-sm">
               {proposedAiActions.slice(0, 10).map((action) => (
                 <li key={action.id} className="border border-zinc-800 rounded p-2 bg-zinc-900/40">
                   <p className="text-zinc-200">
-                    {action.action_type} • {action.entity_type}:{action.entity_id}
+                    {toAiActionLabel(action.action_type, t)} • {toAiEntityLabel(action.entity_type, t)}: {action.entity_id}
                   </p>
                   <p className="text-zinc-500 text-xs">
-                    {action.confidence_score !== null ? `Confiance ${Math.round(action.confidence_score * 100)}%` : 'Confiance n/a'} • {new Date(action.created_at).toLocaleString()}
+                    {action.confidence_score !== null ? t('admin.battles.confidence', { value: Math.round(action.confidence_score * 100) }) : t('admin.battles.confidenceNotAvailable')} • {formatDateTime(action.created_at)}
                   </p>
                 </li>
               ))}
@@ -1529,12 +1556,12 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
         </Card>
 
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Commentaires</h2>
+          <h2 className="text-lg font-semibold text-white">{t('battles.comments')}</h2>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : comments.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucun commentaire.</p>
+            <p className="text-zinc-500 text-sm">{t('battles.noComments')}</p>
           ) : (
             <ul className="space-y-3">
               {comments.map((comment) => {
@@ -1547,12 +1574,12 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
                       <p className="text-sm text-zinc-300">
-                        {comment.user?.username || 'Utilisateur'} sur {comment.battle?.title || comment.battle_id}
+                        {comment.user?.username || t('user.profile')} {t('admin.battles.onBattle')} {comment.battle?.title || comment.battle_id}
                       </p>
-                      <p className="text-xs text-zinc-500">{new Date(comment.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-zinc-500">{formatDateTime(comment.created_at)}</p>
                       {latestAction && (
                         <p className="text-xs text-zinc-500 mt-1">
-                          IA: {aiClassification || 'n/a'} • {latestAction.status}
+                          {t('admin.battles.aiShort')}: {aiClassification || t('common.notAvailable')} • {toAiStatusLabel(latestAction.status, t)}
                           {latestAction.confidence_score !== null && ` • ${Math.round(latestAction.confidence_score * 100)}%`}
                         </p>
                       )}
@@ -1564,16 +1591,22 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                         isLoading={evaluatingCommentId === comment.id}
                         onClick={() => evaluateCommentWithAi(comment.id)}
                       >
-                        Analyser IA
+                        {t('admin.battles.analyzeAi')}
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => toggleCommentModeration(comment)}>
-                        {comment.is_hidden ? 'Restaurer' : 'Masquer'}
+                        {comment.is_hidden ? t('admin.forum.restore') : t('admin.forum.hide')}
                       </Button>
                     </div>
                   </div>
 
                   <p className={`text-sm ${comment.is_hidden ? 'text-zinc-500 italic' : 'text-zinc-200'}`}>
-                    {comment.is_hidden ? `Commentaire masque (${comment.hidden_reason || 'admin'}).` : comment.content}
+                    {comment.is_hidden
+                      ? t('admin.battles.hiddenComment', {
+                          reason: comment.hidden_reason === 'hidden_by_admin'
+                            ? t('admin.battles.hiddenByAdminReason')
+                            : (comment.hidden_reason || t('admin.battles.hiddenByAdminReason')),
+                        })
+                      : comment.content}
                   </p>
                 </li>
               );
@@ -1583,16 +1616,16 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
         </Card>
 
         <section className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">Analyse</p>
+          <p className="text-xs uppercase tracking-[0.14em] text-rose-400">{t('admin.battles.analysis')}</p>
         </section>
 
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Historique des refus</h2>
+          <h2 className="text-lg font-semibold text-white">{t('admin.battles.rejectionHistory')}</h2>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : rejectionHistory.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucun refus enregistre.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noRejections')}</p>
           ) : (
             <ul className="space-y-3">
               {rejectionHistory
@@ -1601,7 +1634,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                   <li key={`rejection-${battle.id}`} className="border border-zinc-800 rounded-lg bg-zinc-900/50 p-3">
                     <p className="text-sm text-white font-medium">{battle.title}</p>
                     <p className="text-xs text-zinc-400">
-                      {battle.producer2?.username || 'Producteur'} - {battle.rejected_at ? new Date(battle.rejected_at).toLocaleString() : 'date inconnue'}
+                      {battle.producer2?.username || t('nav.producers')} - {battle.rejected_at ? formatDateTime(battle.rejected_at) : t('common.unknown')}
                     </p>
                     <p className="text-sm text-red-300 mt-1">{battle.rejection_reason}</p>
                   </li>
@@ -1611,12 +1644,12 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
         </Card>
 
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Scores engagement producteurs</h2>
+          <h2 className="text-lg font-semibold text-white">{t('admin.battles.engagementScores')}</h2>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : engagementRows.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucun score disponible.</p>
+            <p className="text-zinc-500 text-sm">{t('admin.battles.noScores')}</p>
           ) : (
             <ul className="space-y-2">
               {engagementRows.map((producer) => (
@@ -1630,10 +1663,14 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
                 >
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="text-white font-medium">{producer.username || producer.id}</p>
-                    <p className="text-zinc-300">Score: {producer.engagement_score}</p>
+                    <p className="text-zinc-300">{t('admin.battles.scoreLabel', { score: producer.engagement_score })}</p>
                   </div>
                   <p className="text-zinc-500 mt-1">
-                    Refus: {producer.battle_refusal_count} | Participations: {producer.battles_participated} | Completees: {producer.battles_completed}
+                    {t('admin.battles.producerStats', {
+                      refusals: producer.battle_refusal_count,
+                      participated: producer.battles_participated,
+                      completed: producer.battles_completed,
+                    })}
                   </p>
                 </li>
               ))}

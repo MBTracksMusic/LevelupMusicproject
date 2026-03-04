@@ -53,7 +53,7 @@ export function CartPage() {
 
   const handleCheckout = async () => {
     if (!isSingleItemCheckout) {
-      setCheckoutError('Pour le moment, un seul beat peut etre achete par paiement.');
+      setCheckoutError(t('checkout.singleItemOnly'));
       return;
     }
 
@@ -67,7 +67,7 @@ export function CartPage() {
       const accessToken = sessionData.session?.access_token;
 
       if (refreshError || !accessToken) {
-        throw new Error(refreshError?.message || 'Session expirée, merci de vous reconnecter.');
+        throw new Error(refreshError?.message || t('checkout.sessionExpired'));
       }
 
       const { data, error } = await supabase.functions.invoke('create-checkout', {
@@ -98,14 +98,14 @@ export function CartPage() {
           }
         }
 
-        throw new Error(apiError || backendError || error.message || 'Impossible de démarrer le paiement.');
+        throw new Error(apiError || backendError || error.message || t('checkout.paymentStartError'));
       }
 
       const url = (data as { url?: string })?.url;
       if (url) {
         window.location.href = url;
       } else {
-        throw new Error('URL de paiement introuvable.');
+        throw new Error(t('checkout.paymentUrlMissing'));
       }
     } catch (err) {
       setCheckoutError((err as Error).message);
@@ -179,11 +179,11 @@ export function CartPage() {
                         {item.product?.title || t('errors.productNotAvailable')}
                       </h3>
                       <p className="text-sm text-zinc-400 truncate">
-                        {item.product?.producer?.username || 'Unknown'}
+                        {item.product?.producer?.username || t('checkout.unknownProducer')}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                        {item.product?.product_type === 'kit' ? 'Kit' : 'Beat'}
-                        {item.product?.bpm && <span>{item.product.bpm} BPM</span>}
+                        {item.product?.product_type === 'kit' ? t('checkout.itemKit') : t('checkout.itemBeat')}
+                        {item.product?.bpm && <span>{item.product.bpm} {t('products.bpm')}</span>}
                         {item.product?.key_signature && <span>{item.product.key_signature}</span>}
                         <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-rose-300">
                           {item.license_type}
@@ -225,7 +225,7 @@ export function CartPage() {
 
             {items.length > 1 && (
               <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                Pour le moment, un seul beat peut etre achete par paiement.
+                {t('checkout.singleItemOnly')}
               </div>
             )}
 

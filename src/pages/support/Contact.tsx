@@ -5,6 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { useAuth } from '../../lib/auth/hooks';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 
 type ContactCategory = 'support' | 'battle' | 'payment' | 'partnership' | 'other';
@@ -15,15 +16,8 @@ interface ContactSubmitResponse {
   error?: string;
 }
 
-const categoryOptions: { value: ContactCategory; label: string }[] = [
-  { value: 'support', label: 'Support général' },
-  { value: 'battle', label: 'Battles' },
-  { value: 'payment', label: 'Paiement' },
-  { value: 'partnership', label: 'Partenariat' },
-  { value: 'other', label: 'Autre' },
-];
-
 export function ContactPage() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const isAuthenticated = Boolean(user);
   const defaultName = profile?.username || '';
@@ -35,6 +29,13 @@ export function ContactPage() {
   const [name, setName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const categoryOptions: { value: ContactCategory; label: string }[] = [
+    { value: 'support', label: t('support.contact.categorySupport') },
+    { value: 'battle', label: t('support.contact.categoryBattle') },
+    { value: 'payment', label: t('support.contact.categoryPayment') },
+    { value: 'partnership', label: t('support.contact.categoryPartnership') },
+    { value: 'other', label: t('support.contact.categoryOther') },
+  ];
 
   const isValid = useMemo(() => {
     if (!subject.trim() || subject.trim().length < 3) return false;
@@ -80,18 +81,18 @@ export function ContactPage() {
 
     if (error) {
       const details = (data as ContactSubmitResponse | null)?.error;
-      toast.error(details || error.message || 'Envoi impossible pour le moment.');
+      toast.error(details || error.message || t('support.contact.submitError'));
       setIsSubmitting(false);
       return;
     }
 
     if (data?.ok !== true) {
-      toast.error(data?.error || 'Réponse serveur invalide.');
+      toast.error(data?.error || t('support.contact.invalidResponse'));
       setIsSubmitting(false);
       return;
     }
 
-    toast.success('Message envoyé. Notre équipe vous répondra rapidement.');
+    toast.success(t('support.contact.submitSuccess'));
     resetForm();
     setIsSubmitting(false);
   };
@@ -100,10 +101,8 @@ export function ContactPage() {
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-3xl mx-auto px-4 space-y-6">
         <div className="space-y-3">
-          <h1 className="text-3xl font-bold text-white">Contact</h1>
-          <p className="text-zinc-400">
-            Une question sur la plateforme, un paiement ou une battle ? Envoyez-nous un message.
-          </p>
+          <h1 className="text-3xl font-bold text-white">{t('support.contact.title')}</h1>
+          <p className="text-zinc-400">{t('support.contact.subtitle')}</p>
         </div>
 
         <Card className="p-5">
@@ -111,18 +110,18 @@ export function ContactPage() {
             {!isAuthenticated && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="Nom"
+                  label={t('common.name')}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="Votre nom"
+                  placeholder={t('support.contact.namePlaceholder')}
                   required
                 />
                 <Input
-                  label="Email"
+                  label={t('common.email')}
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="email@exemple.com"
+                  placeholder={t('support.contact.emailPlaceholder')}
                   required
                 />
               </div>
@@ -130,42 +129,42 @@ export function ContactPage() {
 
             {isAuthenticated && (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 text-sm text-zinc-300">
-                Message envoyé en tant que <span className="text-white">{defaultEmail}</span>.
+                {t('support.contact.authenticatedNotice', { email: defaultEmail })}
               </div>
             )}
 
             <Select
-              label="Catégorie"
+              label={t('common.category')}
               value={category}
               onChange={(event) => setCategory(event.target.value as ContactCategory)}
               options={categoryOptions}
             />
 
             <Input
-              label="Sujet"
+              label={t('common.subject')}
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
-              placeholder="Sujet de votre message"
+              placeholder={t('support.contact.subjectPlaceholder')}
               required
             />
 
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="contact-message">
-                Message
+                {t('common.message')}
               </label>
               <textarea
                 id="contact-message"
                 className="w-full min-h-[150px] bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Décrivez votre demande..."
+                placeholder={t('support.contact.messagePlaceholder')}
                 required
               />
             </div>
 
             <div className="flex justify-end">
               <Button type="submit" isLoading={isSubmitting} disabled={!isValid}>
-                Envoyer
+                {t('common.send')}
               </Button>
             </div>
           </form>

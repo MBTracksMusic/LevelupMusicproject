@@ -5,10 +5,12 @@ import { ChevronLeft, ChevronRight, Crown, Lock, MessageSquarePlus, Pin, ShieldC
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import { formatRankTier } from '../components/reputation/ReputationBadge';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { useAuth } from '../lib/auth/hooks';
+import { useTranslation } from '../lib/i18n';
 import { getForumFunctionErrorCode, getForumFunctionErrorMessage, useForumActions, useForumTopics } from '../lib/forum/hooks';
 import { useMyReputation } from '../lib/reputation/hooks';
 import { meetsRankRequirement } from '../lib/reputation/utils';
@@ -17,6 +19,7 @@ import { formatRelativeTime } from '../lib/utils/format';
 const PAGE_SIZE = 20;
 
 export function ForumCategoryPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { categorySlug } = useParams<{ categorySlug: string }>();
   const { user } = useAuth();
@@ -35,11 +38,11 @@ export function ForumCategoryPage() {
   const isRankLocked = category ? !meetsRankRequirement(reputation?.rank_tier, category.required_rank_tier) : false;
 
   const paginationLabel = useMemo(() => {
-    if (totalCount === 0) return '0 topic';
+    if (totalCount === 0) return t('forum.paginationTopicsZero');
     const from = (page - 1) * PAGE_SIZE + 1;
     const to = Math.min(page * PAGE_SIZE, totalCount);
-    return `${from}-${to} sur ${totalCount} topics`;
-  }, [page, totalCount]);
+    return t('forum.paginationTopics', { from, to, total: totalCount });
+  }, [page, t, totalCount]);
 
   const resetCreateForm = () => {
     setTitle('');
@@ -54,7 +57,7 @@ export function ForumCategoryPage() {
     const trimmedContent = content.trim();
 
     if (!trimmedTitle || !trimmedContent) {
-      toast.error('Le titre et le premier message sont obligatoires.');
+      toast.error(t('forum.firstMessageRequiredError'));
       return;
     }
 
@@ -68,20 +71,20 @@ export function ForumCategoryPage() {
       resetCreateForm();
       setIsCreateOpen(false);
       if (topic.status === 'review') {
-        toast.success('Topic cree et place en attente de moderation.');
+        toast.success(t('forum.createTopicPending'));
       } else {
-        toast.success('Topic cree.');
+        toast.success(t('forum.createTopicSuccess'));
       }
       navigate(`/forum/${topic.category_slug}/${topic.topic_slug}`);
     } catch (createError) {
       console.error('Failed to create forum topic', createError);
       const errorCode = getForumFunctionErrorCode(createError);
       if (errorCode === 'blocked') {
-        toast.error('Contenu refuse.');
+        toast.error(t('forum.contentRejected'));
         return;
       }
 
-      toast.error(getForumFunctionErrorMessage(createError, 'Impossible de creer ce topic.'));
+      toast.error(getForumFunctionErrorMessage(createError, t('forum.createTopicError')));
     }
   };
 
@@ -91,46 +94,46 @@ export function ForumCategoryPage() {
         <div className="space-y-4">
           <Link to="/forum" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ChevronLeft className="h-4 w-4" />
-            Retour au forum
+            {t('forum.backToForum')}
           </Link>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-bold text-white">{category?.name || 'Categorie forum'}</h1>
+                <h1 className="text-3xl font-bold text-white">{category?.name || t('forum.categoryFallbackTitle')}</h1>
                 {category?.is_premium_only && (
                   <Badge variant="premium">
                     <Crown className="h-3 w-3" />
-                    Premium
+                    {t('forum.premium')}
                   </Badge>
                 )}
                 {category?.is_competitive && (
                   <Badge variant="info">
                     <Swords className="h-3 w-3" />
-                    Competitif
+                    {t('forum.competitive')}
                   </Badge>
                 )}
                 {category?.required_rank_tier && (
                   <Badge variant="warning">
                     <ShieldCheck className="h-3 w-3" />
-                    Rang min. {category.required_rank_tier}
+                    {t('forum.minimumRank', { rank: formatRankTier(category.required_rank_tier, t) })}
                   </Badge>
                 )}
               </div>
               <p className="text-zinc-400">
-                {category?.description || 'Parcourez les discussions les plus recentes.'}
+                {category?.description || t('forum.categoryFallbackDescription')}
               </p>
               {category && (
                 <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
-                  <span>XP x{category.xp_multiplier ?? 1}</span>
-                  <span>Moderation {category.moderation_strictness ?? 'normal'}</span>
-                  <span>{category.allow_links === false ? 'Liens interdits' : 'Liens autorises'}</span>
-                  <span>{category.allow_media === false ? 'Media interdits' : 'Media autorises'}</span>
+                  <span>{t('forum.xpMultiplier', { value: category.xp_multiplier ?? 1 })}</span>
+                  <span>{t('forum.moderationLabel', { value: category.moderation_strictness ?? t('forum.moderationNormal') })}</span>
+                  <span>{category.allow_links === false ? t('forum.linksForbidden') : t('forum.linksAllowed')}</span>
+                  <span>{category.allow_media === false ? t('forum.mediaForbidden') : t('forum.mediaAllowed')}</span>
                 </div>
               )}
             </div>
             {user && !isRankLocked && (
               <Button leftIcon={<MessageSquarePlus className="h-4 w-4" />} onClick={() => setIsCreateOpen(true)}>
-                Nouveau topic
+                {t('forum.newTopic')}
               </Button>
             )}
           </div>
@@ -139,7 +142,7 @@ export function ForumCategoryPage() {
         {isRankLocked && category?.required_rank_tier && (
           <Card className="border-amber-900 bg-amber-950/20">
             <CardContent className="text-sm text-amber-300">
-              Cette categorie est reservee au rang {category.required_rank_tier} minimum.
+              {t('forum.categoryLockedNotice', { rank: formatRankTier(category.required_rank_tier, t) })}
             </CardContent>
           </Card>
         )}
@@ -147,7 +150,7 @@ export function ForumCategoryPage() {
         <div className="flex items-center justify-between text-sm text-zinc-400">
           <span>{paginationLabel}</span>
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
 
@@ -170,7 +173,7 @@ export function ForumCategoryPage() {
         {!isLoading && !error && topics.length === 0 && (
           <Card className="border-zinc-800">
             <CardContent className="py-12 text-center text-zinc-400">
-              Aucun topic dans cette categorie pour le moment.
+              {t('forum.emptyCategory')}
             </CardContent>
           </Card>
         )}
@@ -186,20 +189,21 @@ export function ForumCategoryPage() {
                       {topic.is_pinned && (
                         <Badge variant="info">
                           <Pin className="h-3 w-3" />
-                          Epingle
+                          {t('forum.pinned')}
                         </Badge>
                       )}
                       {topic.is_locked && (
                         <Badge variant="warning">
                           <Lock className="h-3 w-3" />
-                          Verrouille
+                          {t('forum.topicLocked')}
                         </Badge>
                       )}
                     </div>
                     <CardDescription>
-                      Par {topic.author?.username || `Membre ${topic.user_id.slice(0, 8)}`} •
-                      {' '}
-                      cree {formatRelativeTime(topic.created_at)}
+                      {t('forum.authorOnly', {
+                        author: topic.author?.username || t('forum.memberFallback', { id: topic.user_id.slice(0, 8) }),
+                      })} •{' '}
+                      {t('forum.createdAt', { date: formatRelativeTime(topic.created_at) })}
                     </CardDescription>
                     {topic.author && (
                       <ReputationBadge
@@ -211,8 +215,8 @@ export function ForumCategoryPage() {
                     )}
                   </div>
                   <div className="text-right text-sm text-zinc-400">
-                    <div>{topic.post_count} reponses</div>
-                    <div>Dernier message {formatRelativeTime(topic.last_post_at)}</div>
+                    <div>{t('forum.repliesCount', { count: topic.post_count })}</div>
+                    <div>{t('forum.lastMessage', { date: formatRelativeTime(topic.last_post_at) })}</div>
                   </div>
                 </CardHeader>
               </Card>
@@ -228,10 +232,10 @@ export function ForumCategoryPage() {
               disabled={page <= 1}
               leftIcon={<ChevronLeft className="h-4 w-4" />}
             >
-              Page precedente
+              {t('forum.previousPage')}
             </Button>
             <span className="text-sm text-zinc-400">
-              Page {page} / {totalPages}
+              {t('common.page')} {page} / {totalPages}
             </span>
             <Button
               variant="outline"
@@ -239,7 +243,7 @@ export function ForumCategoryPage() {
               disabled={page >= totalPages}
               rightIcon={<ChevronRight className="h-4 w-4" />}
             >
-              Page suivante
+              {t('forum.nextPage')}
             </Button>
           </div>
         )}
@@ -252,21 +256,21 @@ export function ForumCategoryPage() {
           setIsCreateOpen(false);
           resetCreateForm();
         }}
-        title="Nouveau topic"
-        description="Le premier message sera publie immediatement dans la discussion."
+        title={t('forum.newTopicModalTitle')}
+        description={t('forum.newTopicModalDescription')}
         size="lg"
       >
         <form onSubmit={handleCreateTopic} className="space-y-4">
           <Input
-            label="Titre"
+            label={t('forum.titleLabel')}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Ex: Comment compresser un master sans casser les transients ?"
+            placeholder={t('forum.createTopicPlaceholder')}
             disabled={isSubmitting}
           />
           <div>
             <label htmlFor="forum-topic-content" className="block text-sm font-medium text-zinc-300 mb-1.5">
-              Premier message
+              {t('forum.firstMessageLabel')}
             </label>
             <textarea
               id="forum-topic-content"
@@ -275,7 +279,7 @@ export function ForumCategoryPage() {
               disabled={isSubmitting}
               rows={8}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white placeholder-zinc-500 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
-              placeholder="Exposez clairement votre question ou votre retour d'experience."
+              placeholder={t('forum.replyPlaceholder')}
             />
           </div>
           <div className="flex justify-end gap-3">
@@ -288,10 +292,10 @@ export function ForumCategoryPage() {
                 resetCreateForm();
               }}
             >
-              Annuler
+              {t('common.cancel')}
             </Button>
             <Button type="submit" isLoading={isSubmitting}>
-              Publier le topic
+              {t('forum.publishTopic')}
             </Button>
           </div>
         </form>

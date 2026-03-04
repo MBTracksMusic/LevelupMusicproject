@@ -3,8 +3,10 @@ import toast from 'react-hot-toast';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { formatRankTier } from '../../components/reputation/ReputationBadge';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
-import { slugify } from '../../lib/utils/format';
+import { formatDateTime, slugify } from '../../lib/utils/format';
 import type { ReputationRankTier } from '../../lib/supabase/types';
 
 type ForumCategoryRow = {
@@ -52,6 +54,7 @@ const EMPTY_FORM: CategoryFormState = {
 };
 
 export function AdminForumCategoriesPage() {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<ForumCategoryRow[]>([]);
   const [form, setForm] = useState<CategoryFormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -80,7 +83,7 @@ export function AdminForumCategoriesPage() {
 
     if (error) {
       console.error('Error loading forum categories', error);
-      toast.error('Impossible de charger les categories forum.');
+      toast.error(t('admin.forumCategories.loadError'));
       setCategories([]);
       setIsLoading(false);
       return;
@@ -88,7 +91,7 @@ export function AdminForumCategoriesPage() {
 
     setCategories((data as unknown as ForumCategoryRow[] | null) ?? []);
     setIsLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadCategories();
@@ -105,17 +108,17 @@ export function AdminForumCategoriesPage() {
     const xpMultiplier = Number.parseFloat(form.xpMultiplier);
 
     if (!name) {
-      toast.error('Le nom de la categorie est requis.');
+      toast.error(t('admin.forumCategories.nameRequired'));
       return;
     }
 
     if (!slug) {
-      toast.error('Impossible de generer un slug valide.');
+      toast.error(t('admin.forumCategories.slugError'));
       return;
     }
 
     if (!Number.isFinite(xpMultiplier) || xpMultiplier <= 0) {
-      toast.error('Multiplicateur XP invalide.');
+      toast.error(t('admin.forumCategories.invalidXpMultiplier'));
       return;
     }
 
@@ -137,7 +140,7 @@ export function AdminForumCategoriesPage() {
 
     if (error) {
       console.error('Error saving forum category', error);
-      toast.error('Enregistrement impossible.');
+      toast.error(t('admin.forumCategories.saveError'));
       setActionKey(null);
       return;
     }
@@ -153,7 +156,7 @@ export function AdminForumCategoriesPage() {
       });
     }
 
-    toast.success(editingId ? 'Categorie mise a jour.' : 'Categorie creee.');
+    toast.success(editingId ? t('admin.forumCategories.updated') : t('admin.forumCategories.created'));
     resetForm();
     setActionKey(null);
   };
@@ -184,8 +187,8 @@ export function AdminForumCategoriesPage() {
       console.error('Error deleting forum category', error);
       toast.error(
         error.message.includes('category_has_topics')
-          ? 'Suppression impossible: cette categorie contient deja des topics.'
-          : 'Suppression impossible.'
+          ? t('admin.forumCategories.deleteBlocked')
+          : t('admin.forumCategories.deleteError')
       );
       setActionKey(null);
       return;
@@ -195,7 +198,7 @@ export function AdminForumCategoriesPage() {
     if (editingId === categoryId) {
       resetForm();
     }
-    toast.success('Categorie supprimee.');
+    toast.success(t('admin.forumCategories.deleted'));
     setActionKey(null);
   };
 
@@ -204,32 +207,32 @@ export function AdminForumCategoriesPage() {
       <Card className="p-4 sm:p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-white">Forum Categories</h2>
+            <h2 className="text-xl font-semibold text-white">{t('admin.forumCategories.title')}</h2>
             <p className="text-zinc-400 text-sm mt-1">
-              Categories structurees, multiplicateurs XP et regles competitives.
+              {t('admin.forumCategories.subtitle')}
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadCategories()}>
-            Actualiser
+            {t('common.refresh')}
           </Button>
         </div>
       </Card>
 
       <Card className="p-4 sm:p-5">
         <h3 className="text-lg font-semibold text-white mb-4">
-          {editingId ? 'Modifier la categorie' : 'Nouvelle categorie'}
+          {editingId ? t('admin.forumCategories.editTitle') : t('admin.forumCategories.newTitle')}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Input
-              label="Nom"
+              label={t('common.name')}
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="General"
+              placeholder={t('admin.forumCategories.namePlaceholder')}
               disabled={isSubmitting}
             />
             <Input
-              label="Position"
+              label={t('admin.forumCategories.positionLabel')}
               type="number"
               value={form.position}
               onChange={(event) => setForm((prev) => ({ ...prev, position: event.target.value }))}
@@ -240,13 +243,13 @@ export function AdminForumCategoriesPage() {
 
           <div>
             <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="forum-category-description">
-              Description
+              {t('common.description')}
             </label>
             <textarea
               id="forum-category-description"
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Description courte de la categorie"
+              placeholder={t('admin.forumCategories.descriptionPlaceholder')}
               disabled={isSubmitting}
               rows={4}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -255,7 +258,7 @@ export function AdminForumCategoriesPage() {
 
           <div className="grid gap-4 md:grid-cols-3">
             <Input
-              label="Multiplicateur XP"
+              label={t('admin.forumCategories.xpMultiplierLabel')}
               type="number"
               step="0.1"
               min="0.1"
@@ -265,7 +268,7 @@ export function AdminForumCategoriesPage() {
             />
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="forum-category-strictness">
-                Moderation
+                {t('admin.forumCategories.moderationLabel')}
               </label>
               <select
                 id="forum-category-strictness"
@@ -275,14 +278,14 @@ export function AdminForumCategoriesPage() {
                 }
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-white focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
               >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
+                <option value="low">{t('myMessages.priorityLow')}</option>
+                <option value="normal">{t('myMessages.priorityNormal')}</option>
+                <option value="high">{t('myMessages.priorityHigh')}</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="forum-category-rank">
-                Rang requis
+                {t('admin.forumCategories.requiredRankLabel')}
               </label>
               <select
                 id="forum-category-rank"
@@ -292,22 +295,22 @@ export function AdminForumCategoriesPage() {
                 }
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-white focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
               >
-                <option value="">Aucun</option>
-                <option value="bronze">Bronze</option>
-                <option value="silver">Silver</option>
-                <option value="gold">Gold</option>
-                <option value="platinum">Platinum</option>
-                <option value="diamond">Diamond</option>
+                <option value="">{t('common.none')}</option>
+                <option value="bronze">{formatRankTier('bronze', t)}</option>
+                <option value="silver">{formatRankTier('silver', t)}</option>
+                <option value="gold">{formatRankTier('gold', t)}</option>
+                <option value="platinum">{formatRankTier('platinum', t)}</option>
+                <option value="diamond">{formatRankTier('diamond', t)}</option>
               </select>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             {[
-              ['isPremiumOnly', 'Categorie premium'],
-              ['isCompetitive', 'Categorie competitive'],
-              ['allowLinks', 'Autoriser les liens'],
-              ['allowMedia', 'Autoriser les medias'],
+              ['isPremiumOnly', t('admin.forumCategories.premiumLabel')],
+              ['isCompetitive', t('admin.forumCategories.competitiveLabel')],
+              ['allowLinks', t('admin.forumCategories.allowLinksLabel')],
+              ['allowMedia', t('admin.forumCategories.allowMediaLabel')],
             ].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm text-zinc-300">
                 <input
@@ -325,11 +328,11 @@ export function AdminForumCategoriesPage() {
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" isLoading={isSubmitting}>
-              {editingId ? 'Enregistrer' : 'Creer la categorie'}
+              {editingId ? t('common.save') : t('admin.forumCategories.createAction')}
             </Button>
             {editingId && (
               <Button type="button" variant="outline" onClick={resetForm} disabled={isSubmitting}>
-                Annuler
+                {t('common.cancel')}
               </Button>
             )}
           </div>
@@ -337,11 +340,11 @@ export function AdminForumCategoriesPage() {
       </Card>
 
       <Card className="p-4 sm:p-5">
-        <h3 className="text-lg font-semibold text-white mb-4">Categories existantes</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">{t('admin.forumCategories.existingTitle')}</h3>
         {isLoading ? (
-          <p className="text-zinc-400">Chargement...</p>
+          <p className="text-zinc-400">{t('common.loading')}</p>
         ) : sortedCategories.length === 0 ? (
-          <p className="text-zinc-500">Aucune categorie.</p>
+          <p className="text-zinc-500">{t('admin.forumCategories.empty')}</p>
         ) : (
           <div className="space-y-3">
             {sortedCategories.map((category) => (
@@ -349,30 +352,50 @@ export function AdminForumCategoriesPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="space-y-1">
                     <p className="text-sm text-zinc-500">
-                      {category.slug} • position {category.position} • {new Date(category.created_at).toLocaleString('fr-FR')}
+                      {t('admin.forumCategories.summaryLine', {
+                        slug: category.slug,
+                        position: category.position,
+                        date: formatDateTime(category.created_at),
+                      })}
                     </p>
                     <h4 className="text-white font-medium">{category.name}</h4>
                     {category.description && (
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{category.description}</p>
                     )}
                     <p className="text-xs text-zinc-500">
-                      XP x{category.xp_multiplier} • moderation {category.moderation_strictness} •
-                      {' '}
-                      {category.is_competitive ? 'competitive' : 'standard'} •
-                      {' '}
-                      {category.required_rank_tier ? `rang ${category.required_rank_tier}` : 'rang libre'}
+                      {t('admin.forumCategories.rulesLine', {
+                        xp: category.xp_multiplier,
+                        moderation:
+                          category.moderation_strictness === 'low'
+                            ? t('myMessages.priorityLow')
+                            : category.moderation_strictness === 'high'
+                              ? t('myMessages.priorityHigh')
+                              : t('myMessages.priorityNormal'),
+                        mode: category.is_competitive
+                          ? t('forum.competitive')
+                          : t('admin.forumCategories.standardMode'),
+                        rank: category.required_rank_tier
+                          ? formatRankTier(category.required_rank_tier, t)
+                          : t('admin.forumCategories.openRank'),
+                      })}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      {category.is_premium_only ? 'premium' : 'accessible'} •
-                      {' '}
-                      {category.allow_links ? 'liens ON' : 'liens OFF'} •
-                      {' '}
-                      {category.allow_media ? 'media ON' : 'media OFF'}
+                      {t('admin.forumCategories.flagsLine', {
+                        access: category.is_premium_only
+                          ? t('forum.premium')
+                          : t('admin.forumCategories.accessible'),
+                        links: category.allow_links
+                          ? t('admin.forumCategories.linksOn')
+                          : t('admin.forumCategories.linksOff'),
+                        media: category.allow_media
+                          ? t('admin.forumCategories.mediaOn')
+                          : t('admin.forumCategories.mediaOff'),
+                      })}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <Button type="button" variant="outline" size="sm" onClick={() => startEdit(category)}>
-                      Modifier
+                      {t('common.edit')}
                     </Button>
                     <Button
                       type="button"
@@ -381,7 +404,7 @@ export function AdminForumCategoriesPage() {
                       isLoading={actionKey === `delete:${category.id}`}
                       onClick={() => void deleteCategory(category.id)}
                     >
-                      Supprimer
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </div>

@@ -1,5 +1,6 @@
 import { AlertTriangle, Flame } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
+import { useTranslation } from '../../../lib/i18n';
 import type { AdminPilotageDeltas } from './types';
 
 interface AdminPilotageAlertsProps {
@@ -46,14 +47,17 @@ function AlertCard({ alert }: { alert: DashboardAlert }) {
 }
 
 export function AdminPilotageAlerts({ deltas, beatsPublished30d }: AdminPilotageAlertsProps) {
+  const { t } = useTranslation();
   const alerts: DashboardAlert[] = [];
 
   if (deltas.users_growth_30d_pct !== null && deltas.users_growth_30d_pct < -20) {
     alerts.push({
       key: 'users-growth-critical',
       level: 'critical',
-      title: 'Baisse critique des utilisateurs',
-      description: `La croissance utilisateurs 30j est a ${deltas.users_growth_30d_pct.toFixed(2)}%.`,
+      title: t('admin.pilotage.usersGrowthCriticalTitle'),
+      description: t('admin.pilotage.usersGrowthCriticalDescription', {
+        value: deltas.users_growth_30d_pct.toFixed(2),
+      }),
     });
   }
 
@@ -61,8 +65,10 @@ export function AdminPilotageAlerts({ deltas, beatsPublished30d }: AdminPilotage
     alerts.push({
       key: 'revenue-growth-critical',
       level: 'critical',
-      title: 'Baisse critique du revenu',
-      description: `La croissance revenu beats 30j est a ${deltas.revenue_growth_30d_pct.toFixed(2)}%.`,
+      title: t('admin.pilotage.revenueGrowthCriticalTitle'),
+      description: t('admin.pilotage.revenueGrowthCriticalDescription', {
+        value: deltas.revenue_growth_30d_pct.toFixed(2),
+      }),
     });
   }
 
@@ -70,8 +76,8 @@ export function AdminPilotageAlerts({ deltas, beatsPublished30d }: AdminPilotage
     alerts.push({
       key: 'beats-30d-warning',
       level: 'warning',
-      title: 'Aucune publication beat sur 30 jours',
-      description: 'Aucun beat publie sur les 30 derniers jours.',
+      title: t('admin.pilotage.noBeats30dTitle'),
+      description: t('admin.pilotage.noBeats30dDescription'),
     });
   }
 
@@ -81,7 +87,7 @@ export function AdminPilotageAlerts({ deltas, beatsPublished30d }: AdminPilotage
 
   return (
     <div className="space-y-3">
-      <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Alertes</p>
+      <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{t('admin.pilotage.alertsLabel')}</p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {alerts.map((alert) => (
           <AlertCard key={alert.key} alert={alert} />

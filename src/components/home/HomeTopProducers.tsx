@@ -4,6 +4,7 @@ import { ArrowRight, Flame, Users } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 
@@ -18,11 +19,8 @@ interface RankedProducer {
   wins: number;
 }
 
-function pluralizeWins(wins: number) {
-  return wins > 1 ? 'victoires' : 'victoire';
-}
-
 export function HomeTopProducers() {
+  const { t } = useTranslation();
   const [producers, setProducers] = useState<RankedProducer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -100,13 +98,13 @@ export function HomeTopProducers() {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Flame className="w-5 h-5 text-orange-400" />
-              <h2 className="text-3xl font-bold text-white">Top producteurs</h2>
+              <h2 className="text-3xl font-bold text-white">{t('home.topProducers')}</h2>
             </div>
-            <p className="text-zinc-400">Top 10 par nombre de victoires en battles</p>
+            <p className="text-zinc-400">{t('home.topProducersSubtitle')}</p>
           </div>
           <Link to="/producers">
             <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Voir tous les producteurs
+              {t('home.viewAllProducers')}
             </Button>
           </Link>
         </div>
@@ -122,7 +120,7 @@ export function HomeTopProducers() {
             ))}
           </div>
         ) : producers.length === 0 ? (
-          <Card className="text-zinc-400">Aucun resultat pour le classement des producteurs.</Card>
+          <Card className="text-zinc-400">{t('home.noTopProducers')}</Card>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {producers.map((producer) => {
@@ -132,7 +130,7 @@ export function HomeTopProducers() {
                     {producer.avatar_url ? (
                       <img
                         src={producer.avatar_url}
-                        alt={producer.username || 'Producteur'}
+                        alt={producer.username || t('home.unknownProducer')}
                         className="w-16 h-16 rounded-full object-cover mx-auto border-2 border-zinc-800"
                       />
                     ) : (
@@ -142,12 +140,12 @@ export function HomeTopProducers() {
                     )}
                   </div>
                   <p className="font-semibold text-white truncate">
-                    {producer.username || 'Producteur'}
+                    {producer.username || t('home.unknownProducer')}
                   </p>
                   <div className="flex items-center justify-center">
                     <Badge variant="premium">
                       <Flame className="w-3 h-3" />
-                      {producer.wins} {pluralizeWins(producer.wins)}
+                      {producer.wins} {producer.wins > 1 ? t('home.winPlural') : t('home.winSingular')}
                     </Badge>
                   </div>
                 </Card>

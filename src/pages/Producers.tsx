@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import { supabase } from '../lib/supabase/client';
+import { useTranslation } from '../lib/i18n';
 
 interface ProducerListItem {
   user_id: string;
@@ -15,6 +16,7 @@ interface ProducerListItem {
 }
 
 export function ProducersPage() {
+  const { t } = useTranslation();
   const [producers, setProducers] = useState<ProducerListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -57,8 +59,8 @@ export function ProducersPage() {
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-7xl mx-auto px-4">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Producteurs actifs</h1>
-          <p className="text-zinc-400">Decouvrez les producteurs actuellement abonnes.</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('producersPage.title')}</h1>
+          <p className="text-zinc-400">{t('producersPage.subtitle')}</p>
         </div>
 
         {isLoading ? (
@@ -73,7 +75,7 @@ export function ProducersPage() {
           </div>
         ) : producers.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-zinc-400">Aucun producteur actif pour le moment.</p>
+            <p className="text-zinc-400">{t('producersPage.empty')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -84,7 +86,7 @@ export function ProducersPage() {
                     {producer.avatar_url ? (
                       <img
                         src={producer.avatar_url}
-                        alt={producer.username || 'Producteur'}
+                        alt={producer.username || t('producersPage.unknownProducer')}
                         className="w-14 h-14 rounded-full object-cover"
                       />
                     ) : (
@@ -93,11 +95,11 @@ export function ProducersPage() {
                       </div>
                     )}
                     <h2 className="text-lg font-semibold text-white truncate">
-                      {producer.username || 'Producteur'}
+                      {producer.username || t('producersPage.unknownProducer')}
                     </h2>
                   </div>
                   <p className="text-sm text-zinc-400 line-clamp-3">
-                    {producer.bio || 'Aucune biographie disponible.'}
+                    {producer.bio || t('producersPage.noBio')}
                   </p>
                 </div>
               );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Play } from 'lucide-react';
 import { supabase } from '../../lib/supabase/client';
+import { useTranslation } from '../../lib/i18n';
 import { Button } from '../ui/Button';
 
 interface HomeNewsVideoRow {
@@ -94,6 +95,7 @@ function computeFallbackThumbnail(source: VideoSource) {
 }
 
 export function HomeNewsVideos() {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<HomeNewsVideoRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -151,12 +153,12 @@ export function HomeNewsVideos() {
     <section className="py-16 bg-zinc-950 border-t border-zinc-900">
       <div className="max-w-7xl mx-auto px-4">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-white">News vidéos</h2>
-          <p className="text-zinc-400 mt-2">Les dernières annonces publiées par l’équipe.</p>
+          <h2 className="text-3xl font-bold text-white">{t('home.newsVideosTitle')}</h2>
+          <p className="text-zinc-400 mt-2">{t('home.newsVideosSubtitle')}</p>
         </div>
 
         {isLoading ? (
-          <div className="text-zinc-500">Chargement des annonces...</div>
+          <div className="text-zinc-500">{t('home.newsVideosLoading')}</div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {items.map(({ row, source, thumbnail }) => {
@@ -184,7 +186,7 @@ export function HomeNewsVideos() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm">
-                          URL vidéo non supportée.
+                          {t('home.newsVideosUnsupportedUrl')}
                         </div>
                       )
                     ) : (
@@ -198,7 +200,7 @@ export function HomeNewsVideos() {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm">
-                            Thumbnail indisponible
+                            {t('home.newsVideosThumbnailUnavailable')}
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
@@ -207,7 +209,7 @@ export function HomeNewsVideos() {
                             leftIcon={<Play className="w-4 h-4" />}
                             onClick={() => setActiveId(row.id)}
                           >
-                            Lire
+                            {t('home.read')}
                           </Button>
                         </div>
                       </>

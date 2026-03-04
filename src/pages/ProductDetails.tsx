@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Pause, Play, ShoppingCart } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useTranslation } from '../lib/i18n';
+import { getLocalizedName } from '../lib/i18n/localized';
 import { supabase } from '../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
@@ -13,7 +14,7 @@ import { useCartStore } from '../lib/stores/cart';
 import { useAuth } from '../lib/auth/hooks';
 
 export function ProductDetailsPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { isAuthenticated } = useAuth();
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
@@ -32,7 +33,7 @@ export function ProductDetailsPage() {
 
     const loadProduct = async () => {
       if (!slug) {
-        setError('Titre introuvable.');
+        setError(t('productDetails.missingSlug'));
         setIsLoading(false);
         return;
       }
@@ -87,7 +88,7 @@ export function ProductDetailsPage() {
       } catch (e) {
         if (!isCancelled) {
           console.error('Error loading product details', e);
-          setError('Impossible de charger ce titre.');
+          setError(t('productDetails.loadError'));
           setProduct(null);
         }
       } finally {
@@ -101,7 +102,7 @@ export function ProductDetailsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [slug, routePrefix]);
+  }, [slug, routePrefix, t]);
 
   const isCurrentTrack = currentTrack?.id === product?.id;
   const hasPreview = Boolean(product?.preview_url?.trim());
@@ -153,11 +154,11 @@ export function ProductDetailsPage() {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
         <div className="max-w-5xl mx-auto px-4 text-center py-20">
-          <h1 className="text-3xl font-bold text-white mb-3">Titre introuvable</h1>
-          <p className="text-zinc-400 mb-6">{error || "Ce titre n'existe pas ou n'est plus disponible."}</p>
+          <h1 className="text-3xl font-bold text-white mb-3">{t('productDetails.notFoundTitle')}</h1>
+          <p className="text-zinc-400 mb-6">{error || t('productDetails.notFoundDescription')}</p>
           <Link to="/beats" className="inline-flex items-center gap-2 text-rose-400 hover:text-rose-300">
             <ArrowLeft className="w-4 h-4" />
-            Retour aux beats
+            {t('productDetails.backToBeats')}
           </Link>
         </div>
       </div>
@@ -172,7 +173,7 @@ export function ProductDetailsPage() {
           className="inline-flex items-center gap-2 text-zinc-400 hover:text-white mb-6"
         >
           <ArrowLeft className="w-4 h-4" />
-          Retour
+          {t('productDetails.backToCatalog')}
         </Link>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -185,17 +186,17 @@ export function ProductDetailsPage() {
           </div>
 
           <div>
-            <p className="text-sm text-zinc-500 mb-2">{product.producer?.username || 'Unknown'}</p>
+            <p className="text-sm text-zinc-500 mb-2">{product.producer?.username || t('productDetails.unknownProducer')}</p>
             <h1 className="text-4xl font-bold text-white mb-3">{product.title}</h1>
             <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400 mb-6">
-              {product.bpm && <span>{product.bpm} BPM</span>}
+              {product.bpm && <span>{product.bpm} {t('products.bpm')}</span>}
               {product.key_signature && <span>{product.key_signature}</span>}
-              {product.genre?.name && <span>{product.genre.name}</span>}
-              {product.mood?.name && <span>{product.mood.name}</span>}
+              {product.genre && <span>{getLocalizedName(product.genre, language)}</span>}
+              {product.mood && <span>{getLocalizedName(product.mood, language)}</span>}
             </div>
 
             <p className="text-zinc-300 leading-relaxed mb-8">
-              {product.description || 'Aucune description fournie.'}
+              {product.description || t('productDetails.noDescription')}
             </p>
 
             <div className="flex items-center gap-3 mb-6">
@@ -203,7 +204,7 @@ export function ProductDetailsPage() {
                 onClick={handlePlay}
                 disabled={!hasPreview}
                 className="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:scale-105 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label={hasPreview ? (isPlayingCurrent ? 'Pause' : 'Play') : 'Preview unavailable'}
+                aria-label={hasPreview ? (isPlayingCurrent ? t('common.pause') : t('common.play')) : t('audio.previewUnavailable')}
               >
                 {isPlayingCurrent ? (
                   <Pause className="w-5 h-5 text-zinc-900" fill="currentColor" />
@@ -216,7 +217,7 @@ export function ProductDetailsPage() {
             </div>
 
             {!hasPreview && (
-              <p className="mb-6 text-sm text-zinc-500">Preview unavailable</p>
+              <p className="mb-6 text-sm text-zinc-500">{t('audio.previewUnavailable')}</p>
             )}
 
             {!product.is_sold && isAuthenticated && (

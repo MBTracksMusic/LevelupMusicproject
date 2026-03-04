@@ -1,23 +1,46 @@
-export function formatPrice(cents: number, currency = 'EUR'): string {
+const LANGUAGE_LOCALE_MAP = {
+  fr: 'fr-FR',
+  en: 'en-US',
+  de: 'de-DE',
+} as const;
+
+function resolveActiveLocale(locale?: string): string {
+  if (locale) return locale;
+
+  if (typeof document !== 'undefined') {
+    const documentLanguage = document.documentElement.lang.trim().toLowerCase();
+    if (documentLanguage in LANGUAGE_LOCALE_MAP) {
+      return LANGUAGE_LOCALE_MAP[documentLanguage as keyof typeof LANGUAGE_LOCALE_MAP];
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.language) {
+    return navigator.language;
+  }
+
+  return LANGUAGE_LOCALE_MAP.en;
+}
+
+export function formatPrice(cents: number, currency = 'EUR', locale?: string): string {
   const amount = cents / 100;
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat(resolveActiveLocale(locale), {
     style: 'currency',
     currency,
   }).format(amount);
 }
 
-export function formatDate(date: string | Date, locale = 'fr-FR'): string {
+export function formatDate(date: string | Date, locale?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(resolveActiveLocale(locale), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   }).format(d);
 }
 
-export function formatDateTime(date: string | Date, locale = 'fr-FR'): string {
+export function formatDateTime(date: string | Date, locale?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat(locale, {
+  return new Intl.DateTimeFormat(resolveActiveLocale(locale), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -26,12 +49,13 @@ export function formatDateTime(date: string | Date, locale = 'fr-FR'): string {
   }).format(d);
 }
 
-export function formatRelativeTime(date: string | Date, locale = 'fr-FR'): string {
+export function formatRelativeTime(date: string | Date, locale?: string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
+  const resolvedLocale = resolveActiveLocale(locale);
 
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(resolvedLocale, { numeric: 'auto' });
 
   if (diffInSeconds < 60) {
     return rtf.format(-diffInSeconds, 'second');
@@ -57,12 +81,12 @@ export function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function formatNumber(num: number, locale = 'fr-FR'): string {
-  return new Intl.NumberFormat(locale).format(num);
+export function formatNumber(num: number, locale?: string): string {
+  return new Intl.NumberFormat(resolveActiveLocale(locale)).format(num);
 }
 
-export function formatCompactNumber(num: number, locale = 'fr-FR'): string {
-  return new Intl.NumberFormat(locale, {
+export function formatCompactNumber(num: number, locale?: string): string {
+  return new Intl.NumberFormat(resolveActiveLocale(locale), {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(num);

@@ -103,7 +103,7 @@ export function BattlesPage() {
         setBattles(withProducers as BattleWithRelations[]);
       } catch (error) {
         console.error('Error fetching battles:', error);
-        setError('Impossible de charger les battles pour le moment.');
+        setError(t('battles.loadError'));
         setBattles([]);
       } finally {
         setIsLoading(false);
@@ -111,7 +111,7 @@ export function BattlesPage() {
     }
 
     fetchBattles();
-  }, [filter]);
+  }, [filter, t]);
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
@@ -138,7 +138,7 @@ export function BattlesPage() {
             variant={filter === 'voting' ? 'primary' : 'outline'}
             onClick={() => setFilter('voting')}
           >
-            Voting legacy
+            {t('battles.legacyVoting')}
           </Button>
         </div>
 
@@ -150,7 +150,7 @@ export function BattlesPage() {
 
         {!isEmailVerified && user && (
           <div className="bg-amber-900/20 border border-amber-800 rounded-lg p-4 mb-8">
-            <p className="text-amber-400 text-sm">Confirmez votre email pour voter et commenter.</p>
+            <p className="text-amber-400 text-sm">{t('battles.verifyEmailToInteract')}</p>
           </div>
         )}
 
@@ -182,7 +182,7 @@ export function BattlesPage() {
         ) : battles.length === 0 ? (
           <div className="text-center py-20">
             <Trophy className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
-            <p className="text-zinc-400 text-lg">Aucune battle pour le moment</p>
+            <p className="text-zinc-400 text-lg">{t('battles.empty')}</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -217,9 +217,9 @@ function BattleCard({ battle }: BattleCardProps) {
 
     if (hours > 24) {
       const days = Math.floor(hours / 24);
-      return `${days}j ${hours % 24}h`;
+      return `${days}${t('battles.daysShort')} ${hours % 24}${t('battles.hoursShort')}`;
     }
-    return `${hours}h ${minutes}m`;
+    return `${hours}${t('battles.hoursShort')} ${minutes}${t('battles.minutesShort')}`;
   };
 
   return (
@@ -244,10 +244,10 @@ function BattleCard({ battle }: BattleCardProps) {
               }
             >
               {battle.status === 'active' || battle.status === 'voting'
-                ? 'En cours'
+                ? t('battles.statusActive')
                 : battle.status === 'completed'
                 ? t('battles.ended')
-                : 'A venir'}
+                : t('battles.upcomingBattles')}
             </Badge>
           </div>
         </div>
@@ -267,7 +267,7 @@ function BattleCard({ battle }: BattleCardProps) {
             )}
             <div>
               <p className="font-semibold text-white text-lg">
-                {battle.producer1?.username || 'Producteur 1'}
+                {battle.producer1?.username || t('battles.producer1')}
               </p>
               {battle.producer1 && (
                 <ReputationBadge
@@ -291,7 +291,7 @@ function BattleCard({ battle }: BattleCardProps) {
             {battle.status === 'completed' && battle.winner && (
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-4 h-4" />
-                <span className="text-sm">{battle.winner.username || 'Gagnant'}</span>
+                <span className="text-sm">{battle.winner.username || t('battles.winnerFallback')}</span>
               </div>
             )}
           </div>
@@ -299,7 +299,7 @@ function BattleCard({ battle }: BattleCardProps) {
           <div className="flex-1 flex items-center justify-end gap-4">
             <div className="text-right">
               <p className="font-semibold text-white text-lg">
-                {battle.producer2?.username || 'Producteur 2'}
+                {battle.producer2?.username || t('battles.producer2')}
               </p>
               {battle.producer2 && (
                 <div className="flex justify-end">
@@ -346,7 +346,7 @@ function BattleCard({ battle }: BattleCardProps) {
             </div>
             <div className="flex justify-between mt-2 text-sm text-zinc-500">
               <span>{percent1.toFixed(0)}%</span>
-              <span>{totalVotes} votes total</span>
+              <span>{t('battles.totalVotes', { count: totalVotes })}</span>
               <span>{percent2.toFixed(0)}%</span>
             </div>
           </div>

@@ -46,6 +46,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
 import { useAuth } from './lib/auth/hooks';
+import { useTranslation } from './lib/i18n';
 import { AdminMessagesPage } from './pages/admin/AdminMessages';
 import { AdminReputationPage } from './pages/admin/AdminReputation';
 
@@ -224,10 +225,12 @@ function AppContent() {
 }
 
 function NotFound() {
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center">
       <h1 className="text-6xl font-bold text-white mb-4">404</h1>
-      <p className="text-zinc-400 text-lg">Page non trouvee</p>
+      <p className="text-zinc-400 text-lg">{t('errors.notFound')}</p>
     </div>
   );
 }

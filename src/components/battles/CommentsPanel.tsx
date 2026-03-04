@@ -7,6 +7,7 @@ import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import type { Json } from '../../lib/supabase/database.types';
+import { formatDateTime } from '../../lib/utils/format';
 
 interface BattleCommentItem {
   id: string;
@@ -65,7 +66,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
     if (fetchError) {
       console.error('Error fetching battle comments:', fetchError);
       setComments([]);
-      setError('Impossible de charger les commentaires.');
+      setError(t('battles.commentLoadError'));
       setIsLoading(false);
       return;
     }
@@ -95,8 +96,8 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
   }, [loadComments]);
 
   const commentPermissionMessage = useMemo(() => {
-    if (!user) return 'Connectez-vous pour commenter.';
-    if (!isEmailVerified) return 'Votre email doit etre confirme pour commenter.';
+    if (!user) return t('battles.commentLoginRequired');
+    if (!isEmailVerified) return t('battles.commentVerifyEmailRequired');
     if (!commentsOpen) return t('battles.votingClosed');
     return null;
   }, [commentsOpen, isEmailVerified, t, user]);
@@ -106,12 +107,12 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
 
     const clean = content.trim();
     if (!clean) {
-      setError('Le commentaire est vide.');
+      setError(t('battles.commentEmpty'));
       return;
     }
 
     if (clean.length > 1000) {
-      setError('Le commentaire depasse 1000 caracteres.');
+      setError(t('battles.commentTooLong'));
       return;
     }
 
@@ -128,7 +129,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
 
     if (insertError) {
       console.error('Error inserting battle comment:', insertError);
-      setError('Ajout du commentaire impossible.');
+      setError(t('battles.commentAddError'));
       setIsSubmitting(false);
       return;
     }
@@ -146,7 +147,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
 
     if (deleteError) {
       console.error('Error deleting battle comment:', deleteError);
-      setError('Suppression du commentaire impossible.');
+      setError(t('battles.commentDeleteError'));
       return;
     }
 
@@ -156,7 +157,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
   const saveEdit = async (commentId: string) => {
     const clean = editingContent.trim();
     if (!clean) {
-      setError('Le commentaire est vide.');
+      setError(t('battles.commentEmpty'));
       return;
     }
 
@@ -167,7 +168,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
 
     if (updateError) {
       console.error('Error updating battle comment:', updateError);
-      setError('Mise a jour impossible.');
+      setError(t('battles.commentUpdateError'));
       return;
     }
 
@@ -190,7 +191,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
 
     if (modError) {
       console.error('Error moderating battle comment:', modError);
-      setError('Moderation impossible.');
+      setError(t('battles.commentModerationError'));
       return;
     }
 
@@ -315,9 +316,9 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-white">
-                      {comment.user?.username || 'Utilisateur'}
+                      {comment.user?.username || t('common.userLabel')}
                     </p>
-                    <p className="text-xs text-zinc-500">{new Date(comment.created_at).toLocaleString()}</p>
+                    <p className="text-xs text-zinc-500">{formatDateTime(comment.created_at)}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -337,7 +338,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
                           }}
                           leftIcon={<Pencil className="w-3 h-3" />}
                         >
-                          Modifier
+                          {t('common.edit')}
                         </Button>
                         <Button
                           size="sm"
@@ -345,7 +346,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
                           onClick={() => deleteComment(comment.id)}
                           leftIcon={<Trash2 className="w-3 h-3" />}
                         >
-                          Supprimer
+                          {t('common.delete')}
                         </Button>
                       </>
                     )}
@@ -357,7 +358,7 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
                         leftIcon={<ShieldAlert className="w-3 h-3" />}
                         onClick={() => toggleModeration(comment)}
                       >
-                        {comment.is_hidden ? 'Restaurer' : 'Masquer'}
+                        {comment.is_hidden ? t('admin.forum.restore') : t('admin.forum.hide')}
                       </Button>
                     )}
                   </div>
@@ -372,16 +373,18 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
                     />
                     <div className="flex items-center gap-2 justify-end">
                       <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                        Annuler
+                        {t('common.cancel')}
                       </Button>
                       <Button size="sm" onClick={() => saveEdit(comment.id)}>
-                        Enregistrer
+                        {t('common.save')}
                       </Button>
                     </div>
                   </div>
                 ) : comment.is_hidden ? (
                   <p className="text-sm text-zinc-500 italic">
-                    Commentaire masque{comment.hidden_reason ? ` (${comment.hidden_reason})` : ''}.
+                    {t('battles.hiddenComment', {
+                      reason: comment.hidden_reason || t('battles.hiddenByAdmin'),
+                    })}
                   </p>
                 ) : (
                   <p className="text-sm text-zinc-200 whitespace-pre-wrap">{comment.content}</p>

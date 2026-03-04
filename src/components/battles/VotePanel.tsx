@@ -19,13 +19,13 @@ const isVotingOpen = (status: BattleWithRelations['status']) => status === 'acti
 
 function toVoteMessage(message: string, t: TranslateFn) {
   if (message.includes('already_voted')) return t('battles.alreadyVoted');
-  if (message.includes('vote_not_allowed_unverified_email')) return 'Votre email doit etre confirme pour voter.';
+  if (message.includes('vote_not_allowed_unverified_email')) return t('battles.voteVerifyEmailRequired');
   if (message.includes('vote_not_allowed_unconfirmed_user')) return t('battles.mustBeConfirmed');
-  if (message.includes('participants_cannot_vote')) return 'Les participants ne peuvent pas voter dans leur propre battle.';
+  if (message.includes('participants_cannot_vote')) return t('battles.participantsCannotVote');
   if (message.includes('battle_not_open_for_voting')) return t('battles.votingClosed');
-  if (message.includes('invalid_vote_target')) return 'Choix de vote invalide.';
-  if (message.includes('auth_required')) return 'Connexion requise pour voter.';
-  return 'Vote impossible pour le moment.';
+  if (message.includes('invalid_vote_target')) return t('battles.invalidVoteTarget');
+  if (message.includes('auth_required')) return t('battles.voteLoginRequired');
+  return t('battles.voteUnavailable');
 }
 
 export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
@@ -38,10 +38,10 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   const voteDisabledReason = useMemo(() => {
-    if (!user) return 'Connectez-vous pour voter.';
-    if (!isEmailVerified) return 'Votre email doit etre confirme pour voter.';
+    if (!user) return t('battles.voteLoginRequired');
+    if (!isEmailVerified) return t('battles.voteVerifyEmailRequired');
     if (!isVotingOpen(battle.status)) return t('battles.votingClosed');
-    if (!battle.producer1_id || !battle.producer2_id) return 'Battle non prete pour les votes.';
+    if (!battle.producer1_id || !battle.producer2_id) return t('battles.voteBattleNotReady');
     return null;
   }, [battle.producer1_id, battle.producer2_id, battle.status, isEmailVerified, t, user]);
 
@@ -101,7 +101,7 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
       setUserVote(votedForProducerId);
       await onVoteSuccess?.();
     } catch (voteErr) {
-      const message = voteErr instanceof Error ? voteErr.message : 'Vote impossible';
+      const message = voteErr instanceof Error ? voteErr.message : t('battles.voteUnavailable');
       setError(toVoteMessage(message, t));
     } finally {
       setIsSubmitting(false);
@@ -126,8 +126,8 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
           <span>
             {t('battles.alreadyVoted')} -{' '}
             {userVote === battle.producer1_id
-              ? (battle.producer1?.username || 'Producteur 1')
-              : (battle.producer2?.username || 'Producteur 2')}
+              ? (battle.producer1?.username || t('battleDetail.producer1Fallback'))
+              : (battle.producer2?.username || t('battleDetail.producer2Fallback'))}
           </span>
         </div>
       )}
@@ -139,14 +139,18 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
             isLoading={isSubmitting}
             onClick={() => submitVote(battle.producer1_id)}
           >
-            Voter {battle.producer1?.username || 'Producteur 1'}
+            {t('battles.voteFor', {
+              name: battle.producer1?.username || t('battleDetail.producer1Fallback'),
+            })}
           </Button>
           <Button
             variant="outline"
             isLoading={isSubmitting}
             onClick={() => battle.producer2_id && submitVote(battle.producer2_id)}
           >
-            Voter {battle.producer2?.username || 'Producteur 2'}
+            {t('battles.voteFor', {
+              name: battle.producer2?.username || t('battleDetail.producer2Fallback'),
+            })}
           </Button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase/client';
 import { useAuth } from '../auth/hooks';
+import { useTranslation } from '../i18n';
 import type { ReputationRankTier, UserReputation } from '../supabase/types';
 
 export interface LeaderboardEntry {
@@ -20,6 +21,7 @@ export interface LeaderboardEntry {
 
 export function useMyReputation() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [reputation, setReputation] = useState<UserReputation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,14 +45,14 @@ export function useMyReputation() {
     if (fetchError) {
       console.error('Error loading user reputation:', fetchError);
       setReputation(null);
-      setError('Impossible de charger votre reputation.');
+      setError(t('user.reputationLoadError'));
       setIsLoading(false);
       return;
     }
 
     setReputation((data as UserReputation | null) ?? null);
     setIsLoading(false);
-  }, [user?.id]);
+  }, [t, user?.id]);
 
   useEffect(() => {
     void refresh();
@@ -60,6 +62,7 @@ export function useMyReputation() {
 }
 
 export function useLeaderboard(period: 'week' | 'month', source: 'overall' | 'forum' | 'battle') {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,14 +80,14 @@ export function useLeaderboard(period: 'week' | 'month', source: 'overall' | 'fo
     if (rpcError) {
       console.error('Error loading leaderboard:', rpcError);
       setEntries([]);
-      setError('Impossible de charger le classement.');
+      setError(t('leaderboard.empty'));
       setIsLoading(false);
       return;
     }
 
     setEntries((data as LeaderboardEntry[] | null) ?? []);
     setIsLoading(false);
-  }, [period, source]);
+  }, [period, source, t]);
 
   useEffect(() => {
     void refresh();

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
+import { useTranslation } from '../../../lib/i18n';
 import { supabase } from '../../../lib/supabase/client';
 import { AdminPilotageAlerts } from './AdminPilotageAlerts';
 import { AdminPilotageCharts } from './AdminPilotageCharts';
@@ -107,6 +108,7 @@ function LoadingState() {
 }
 
 export function AdminPilotagePage() {
+  const { t } = useTranslation();
   const [metrics, setMetrics] = useState<AdminPilotageMetrics>(EMPTY_METRICS);
   const [deltas, setDeltas] = useState<AdminPilotageDeltas>(EMPTY_DELTAS);
   const [businessMetrics, setBusinessMetrics] = useState<AdminBusinessMetrics>(EMPTY_BUSINESS);
@@ -142,7 +144,7 @@ export function AdminPilotagePage() {
           deltasError: deltasRes.error,
           businessError: businessRes.error,
         });
-        setError("Impossible de charger les donnees du dashboard.");
+        setError(t('admin.pilotage.loadError'));
         return;
       }
 
@@ -152,11 +154,11 @@ export function AdminPilotagePage() {
       setBusinessMetrics(parseBusinessMetrics(businessRes.data));
     } catch (err) {
       console.error('Unexpected pilotage loading failure:', err);
-      setError("Impossible de charger les donnees du dashboard.");
+      setError(t('admin.pilotage.loadError'));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadDashboard();
@@ -170,8 +172,8 @@ export function AdminPilotagePage() {
   return (
     <div className="space-y-4">
       <Card className="p-4 sm:p-5 border-zinc-800">
-        <h2 className="text-xl font-semibold text-white">Pilotage</h2>
-        <p className="text-zinc-400 text-sm mt-1">Indicateurs cles du site</p>
+        <h2 className="text-xl font-semibold text-white">{t('admin.pilotage.title')}</h2>
+        <p className="text-zinc-400 text-sm mt-1">{t('admin.pilotage.subtitle')}</p>
       </Card>
 
       {isLoading ? (
@@ -181,7 +183,7 @@ export function AdminPilotagePage() {
           <p className="text-red-300">{error}</p>
           <div className="mt-4">
             <Button variant="outline" onClick={() => void loadDashboard()}>
-              Reessayer
+              {t('admin.pilotage.retry')}
             </Button>
           </div>
         </Card>
@@ -192,11 +194,11 @@ export function AdminPilotagePage() {
             fallback={(
               <Card className="p-6 border-red-800 bg-red-900/20">
                 <p className="text-red-300">
-                  Une erreur d affichage est survenue sur les indicateurs.
+                  {t('admin.pilotage.kpiError')}
                 </p>
                 <div className="mt-4">
                   <Button variant="outline" onClick={() => void loadDashboard()}>
-                    Reessayer
+                    {t('admin.pilotage.retry')}
                   </Button>
                 </div>
               </Card>
@@ -214,7 +216,7 @@ export function AdminPilotagePage() {
             fallback={(
               <Card className="p-6 border-amber-800 bg-amber-900/20">
                 <p className="text-amber-300">
-                  Les graphes ne peuvent pas s afficher pour le moment.
+                  {t('admin.pilotage.chartsError')}
                 </p>
               </Card>
             )}

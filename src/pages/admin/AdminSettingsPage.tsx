@@ -3,8 +3,10 @@ import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { Json } from '../../lib/supabase/database.types';
+import { formatDateTime } from '../../lib/utils/format';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';
 const SITE_AUDIO_SETTINGS_TABLE = 'site_audio_settings';
@@ -69,6 +71,7 @@ const asFiniteNumber = (value: string) => {
 const adminDb = supabase as any;
 
 export function AdminSettingsPage() {
+  const { t } = useTranslation();
   const [socialForm, setSocialForm] = useState<SocialLinksForm>(EMPTY_FORM);
   const [isSocialLoading, setIsSocialLoading] = useState(true);
   const [isSocialSaving, setIsSocialSaving] = useState(false);
@@ -85,11 +88,11 @@ export function AdminSettingsPage() {
 
   const currentWatermarkPath = siteAudioSettings?.watermark_audio_path ?? null;
   const lastUpdatedLabel = useMemo(() => {
-    if (!siteAudioSettings?.updated_at) return 'Jamais';
+    if (!siteAudioSettings?.updated_at) return t('admin.settingsPage.never');
     const parsed = new Date(siteAudioSettings.updated_at);
-    if (Number.isNaN(parsed.getTime())) return 'Inconnue';
-    return parsed.toLocaleString('fr-FR');
-  }, [siteAudioSettings?.updated_at]);
+    if (Number.isNaN(parsed.getTime())) return t('common.unknown');
+    return formatDateTime(parsed);
+  }, [siteAudioSettings?.updated_at, t]);
 
   useEffect(() => {
     const loadSocialLinks = async () => {
@@ -102,7 +105,7 @@ export function AdminSettingsPage() {
 
       if (error) {
         console.error('admin social settings load error', error);
-        toast.error('Impossible de charger les liens sociaux.');
+        toast.error(t('admin.settingsPage.socialLoadError'));
         setIsSocialLoading(false);
         return;
       }
@@ -127,7 +130,7 @@ export function AdminSettingsPage() {
 
       if (error) {
         console.error('admin site audio settings load error', error);
-        toast.error('Impossible de charger la configuration watermark.');
+        toast.error(t('admin.settingsPage.watermarkLoadError'));
         setIsWatermarkLoading(false);
         return;
       }
@@ -146,7 +149,7 @@ export function AdminSettingsPage() {
     };
 
     void Promise.all([loadSocialLinks(), loadSiteAudioSettings()]);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -192,7 +195,7 @@ export function AdminSettingsPage() {
     };
 
     if (!isAllowedUrl(nextForm.twitter) || !isAllowedUrl(nextForm.instagram) || !isAllowedUrl(nextForm.youtube)) {
-      toast.error('Utilisez uniquement des URLs http(s).');
+      toast.error(t('admin.settingsPage.urlsHttpOnly'));
       return;
     }
 
@@ -210,13 +213,13 @@ export function AdminSettingsPage() {
 
     if (error) {
       console.error('admin social settings save error', error);
-      toast.error('Impossible d’enregistrer les liens sociaux.');
+      toast.error(t('admin.settingsPage.socialSaveError'));
       setIsSocialSaving(false);
       return;
     }
 
     setSocialForm(nextForm);
-    toast.success('Liens sociaux mis à jour.');
+    toast.success(t('admin.settingsPage.socialSaveSuccess'));
     setIsSocialSaving(false);
   };
 
@@ -229,12 +232,12 @@ export function AdminSettingsPage() {
     const maxInterval = asFiniteNumber(watermarkForm.max_interval_sec);
 
     if (gainDb === null || minInterval === null || maxInterval === null) {
-      toast.error('Les réglages watermark doivent être numériques.');
+      toast.error(t('admin.settingsPage.watermarkNumericError'));
       return;
     }
 
     if (minInterval < 1 || maxInterval < minInterval) {
-      toast.error('Les intervalles watermark sont invalides.');
+      toast.error(t('admin.settingsPage.watermarkIntervalError'));
       return;
     }
 
@@ -266,7 +269,7 @@ export function AdminSettingsPage() {
 
     if (error) {
       console.error('admin site audio settings save error', error);
-      toast.error('Impossible d’enregistrer la configuration watermark.');
+      toast.error(t('admin.settingsPage.watermarkSaveError'));
       setIsWatermarkSaving(false);
       return;
     }
@@ -282,7 +285,7 @@ export function AdminSettingsPage() {
       });
     }
 
-    toast.success('Configuration watermark mise à jour.');
+    toast.success(t('admin.settingsPage.watermarkSaveSuccess'));
     setIsWatermarkSaving(false);
   };
 
@@ -299,7 +302,7 @@ export function AdminSettingsPage() {
 
     if (error) {
       console.error('admin-upload-watermark invoke error', error);
-      toast.error('Impossible d’uploader le sample watermark.');
+      toast.error(t('admin.settingsPage.uploadError'));
       setIsUploadingWatermark(false);
       return;
     }
@@ -320,7 +323,7 @@ export function AdminSettingsPage() {
     }
 
     setSelectedWatermarkFile(null);
-    toast.success('Sample watermark uploadé.');
+    toast.success(t('admin.settingsPage.uploadSuccess'));
     setIsUploadingWatermark(false);
   };
 
@@ -334,7 +337,7 @@ export function AdminSettingsPage() {
 
     if (error) {
       console.error('enqueue-preview-reprocess invoke error', error);
-      toast.error('Impossible d’enfiler la régénération globale.');
+      toast.error(t('admin.settingsPage.reprocessError'));
       setIsEnqueueingReprocess(false);
       return;
     }
@@ -343,16 +346,16 @@ export function AdminSettingsPage() {
     const count = Number.isFinite(payload.enqueued_count) ? Number(payload.enqueued_count) : 0;
     const skipped = Number.isFinite(payload.skipped_count) ? Number(payload.skipped_count) : 0;
     setReprocessStats({ enqueued: count, skipped });
-    toast.success(`Jobs enqueued: ${count} • skipped: ${skipped}`);
+    toast.success(t('admin.settingsPage.reprocessSuccess', { count, skipped }));
     setIsEnqueueingReprocess(false);
   };
 
   return (
     <div className="space-y-6">
       <Card className="p-6 border-zinc-800">
-        <h2 className="text-xl font-semibold text-white">Watermark global</h2>
+        <h2 className="text-xl font-semibold text-white">{t('admin.settingsPage.watermarkTitle')}</h2>
         <p className="text-zinc-400 text-sm mt-1">
-          Configurez le sample admin, les paramètres d’injection et l’enqueue global du reprocess.
+          {t('admin.settingsPage.watermarkSubtitle')}
         </p>
 
         <form onSubmit={handleWatermarkSettingsSave} className="mt-6 space-y-4">
@@ -364,14 +367,14 @@ export function AdminSettingsPage() {
               disabled={isWatermarkLoading || isWatermarkSaving}
               className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
             />
-            Watermark global activé
+            {t('admin.settingsPage.enabledLabel')}
           </label>
 
           <div className="grid gap-4 md:grid-cols-3">
             <Input
               type="number"
               step="0.1"
-              label="Gain (dB)"
+              label={t('admin.settingsPage.gainLabel')}
               value={watermarkForm.gain_db}
               onChange={(event) => setWatermarkForm((prev) => ({ ...prev, gain_db: event.target.value }))}
               disabled={isWatermarkLoading || isWatermarkSaving}
@@ -380,7 +383,7 @@ export function AdminSettingsPage() {
               type="number"
               min="1"
               step="1"
-              label="Interval min (sec)"
+              label={t('admin.settingsPage.minIntervalLabel')}
               value={watermarkForm.min_interval_sec}
               onChange={(event) => setWatermarkForm((prev) => ({ ...prev, min_interval_sec: event.target.value }))}
               disabled={isWatermarkLoading || isWatermarkSaving}
@@ -389,7 +392,7 @@ export function AdminSettingsPage() {
               type="number"
               min="1"
               step="1"
-              label="Interval max (sec)"
+              label={t('admin.settingsPage.maxIntervalLabel')}
               value={watermarkForm.max_interval_sec}
               onChange={(event) => setWatermarkForm((prev) => ({ ...prev, max_interval_sec: event.target.value }))}
               disabled={isWatermarkLoading || isWatermarkSaving}
@@ -398,22 +401,22 @@ export function AdminSettingsPage() {
 
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-300 space-y-1">
             <p>
-              <span className="text-zinc-500">Sample courant:</span>{' '}
-              <span className="break-all">{currentWatermarkPath ?? 'Aucun sample uploadé'}</span>
+              <span className="text-zinc-500">{t('admin.settingsPage.currentSampleLabel')}:</span>{' '}
+              <span className="break-all">{currentWatermarkPath ?? t('admin.settingsPage.noSample')}</span>
             </p>
             {watermarkPreviewUrl && (
               <audio controls src={watermarkPreviewUrl} className="w-full rounded-md" />
             )}
             <p>
-              <span className="text-zinc-500">Dernière mise à jour:</span> {lastUpdatedLabel}
+              <span className="text-zinc-500">{t('admin.settingsPage.lastUpdatedLabel')}:</span> {lastUpdatedLabel}
             </p>
             {reprocessStats && (
               <>
                 <p>
-                  <span className="text-zinc-500">Jobs enqueued:</span> {reprocessStats.enqueued}
+                  <span className="text-zinc-500">{t('admin.settingsPage.jobsEnqueuedLabel')}:</span> {reprocessStats.enqueued}
                 </p>
                 <p>
-                  <span className="text-zinc-500">Jobs skipped (already up to date):</span> {reprocessStats.skipped}
+                  <span className="text-zinc-500">{t('admin.settingsPage.jobsSkippedLabel')}:</span> {reprocessStats.skipped}
                 </p>
               </>
             )}
@@ -422,7 +425,7 @@ export function AdminSettingsPage() {
           <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
             <div>
               <label htmlFor="watermark-file" className="block text-sm font-medium text-zinc-300 mb-1.5">
-                Upload sample watermark
+                {t('admin.settingsPage.uploadLabel')}
               </label>
               <input
                 id="watermark-file"
@@ -440,13 +443,13 @@ export function AdminSettingsPage() {
               isLoading={isUploadingWatermark}
               disabled={!selectedWatermarkFile || isUploadingWatermark}
             >
-              Uploader le sample
+              {t('admin.settingsPage.uploadAction')}
             </Button>
           </div>
 
           <div className="flex flex-wrap gap-3 pt-2">
             <Button type="submit" isLoading={isWatermarkLoading || isWatermarkSaving}>
-              Enregistrer les réglages
+              {t('admin.settingsPage.saveWatermark')}
             </Button>
             <Button
               type="button"
@@ -455,47 +458,47 @@ export function AdminSettingsPage() {
               isLoading={isEnqueueingReprocess}
               disabled={isEnqueueingReprocess}
             >
-              Régénérer toutes les previews
+              {t('admin.settingsPage.reprocessAction')}
             </Button>
           </div>
         </form>
       </Card>
 
       <Card className="p-6 border-zinc-800">
-        <h2 className="text-xl font-semibold text-white">Paramètres sociaux</h2>
+        <h2 className="text-xl font-semibold text-white">{t('admin.settingsPage.socialTitle')}</h2>
         <p className="text-zinc-400 text-sm mt-1">
-          Configurez les liens Twitter, Instagram et YouTube affichés dans le footer.
+          {t('admin.settingsPage.socialSubtitle')}
         </p>
 
         <form onSubmit={handleSocialSave} className="mt-6 space-y-4">
           <Input
             type="url"
-            label="Twitter URL"
+            label={t('admin.settingsPage.twitterLabel')}
             value={socialForm.twitter}
             onChange={(event) => setSocialForm((prev) => ({ ...prev, twitter: event.target.value }))}
-            placeholder="https://twitter.com/..."
+            placeholder={t('admin.settingsPage.twitterPlaceholder')}
             disabled={isSocialLoading || isSocialSaving}
           />
           <Input
             type="url"
-            label="Instagram URL"
+            label={t('admin.settingsPage.instagramLabel')}
             value={socialForm.instagram}
             onChange={(event) => setSocialForm((prev) => ({ ...prev, instagram: event.target.value }))}
-            placeholder="https://instagram.com/..."
+            placeholder={t('admin.settingsPage.instagramPlaceholder')}
             disabled={isSocialLoading || isSocialSaving}
           />
           <Input
             type="url"
-            label="YouTube URL"
+            label={t('admin.settingsPage.youtubeLabel')}
             value={socialForm.youtube}
             onChange={(event) => setSocialForm((prev) => ({ ...prev, youtube: event.target.value }))}
-            placeholder="https://youtube.com/@..."
+            placeholder={t('admin.settingsPage.youtubePlaceholder')}
             disabled={isSocialLoading || isSocialSaving}
           />
 
           <div className="pt-2">
             <Button type="submit" isLoading={isSocialLoading || isSocialSaving}>
-              Enregistrer
+              {t('common.save')}
             </Button>
           </div>
         </form>

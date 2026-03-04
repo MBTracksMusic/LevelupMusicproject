@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Music, BarChart3, ShoppingBag, UploadCloud, Trash2 } from 'lucide-react';
-import { useTranslation } from '../lib/i18n';
+import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
 import { PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { Database, Product, ProducerTier } from '../lib/supabase/types';
-import { formatPrice } from '../lib/utils/format';
+import { formatDate, formatPrice } from '../lib/utils/format';
 import { extractStoragePathFromCandidate } from '../lib/utils/storage';
 
 interface ProducerStatsRow {
@@ -47,16 +47,21 @@ const getRpcErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const getProductLifecycleLabel = (product: Product, draftLabel: string, publishedLabel: string) => {
-  if (product.status === 'archived') return 'Archivé';
+const getProductLifecycleLabel = (
+  product: Product,
+  draftLabel: string,
+  publishedLabel: string,
+  archivedLabel: string,
+) => {
+  if (product.status === 'archived') return archivedLabel;
   return product.is_published ? publishedLabel : draftLabel;
 };
 
 const hasProtectedProductHistory = (product: ProducerProduct) =>
   product.sales_count > 0 || product.terminated_battle_count > 0;
 
-const getProtectedHistoryMessage = () =>
-  'Ce produit a participe a une battle terminee ou a des ventes. Vous pouvez seulement le masquer.';
+const getProtectedHistoryMessage = (t: TranslateFn) =>
+  t('producerDashboard.protectedHistoryMessage');
 
 const toProducerTier = (value: unknown): ProducerTier => {
   if (value === 'starter' || value === 'pro' || value === 'elite') return value;
@@ -68,22 +73,49 @@ const EXPIRED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled', 'incompl
 const getSubscriptionDateLabel = (
   subscriptionStatus: string | null | undefined,
   cancelAtPeriodEnd: boolean | null | undefined,
+  t: TranslateFn,
 ) => {
   const normalizedStatus = (subscriptionStatus ?? '').toLowerCase();
 
   if (normalizedStatus === 'active') {
-    return cancelAtPeriodEnd ? 'Fin d’accès' : 'Prochain prélèvement';
+    return cancelAtPeriodEnd
+      ? t('subscription.dateLabelAccessEnds')
+      : t('subscription.dateLabelNextCharge');
   }
 
   if (EXPIRED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
-    return 'Abonnement expiré le';
+    return t('subscription.dateLabelExpiredAt');
   }
 
-  return 'Prochaine échéance';
+  return t('subscription.dateLabelNextDue');
 };
 
-const formatSubscriptionDate = (value: string | number | Date | null | undefined) => {
-  if (value === null || value === undefined) return 'N/A';
+const getSubscriptionStatusLabel = (
+  subscriptionStatus: string | null | undefined,
+  t: TranslateFn,
+): string => {
+  const normalizedStatus = (subscriptionStatus ?? '').trim().toLowerCase();
+
+  if (!normalizedStatus) return t('subscription.noSubscription');
+  if (normalizedStatus === 'active') return t('subscription.statusActive');
+  if (normalizedStatus === 'trialing') return t('subscription.statusTrialing');
+  if (normalizedStatus === 'past_due') return t('subscription.statusPastDue');
+  if (normalizedStatus === 'unpaid') return t('subscription.statusUnpaid');
+  if (normalizedStatus === 'incomplete') return t('subscription.statusIncomplete');
+  if (normalizedStatus === 'incomplete_expired') return t('subscription.statusIncompleteExpired');
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
+    return t('subscription.statusCanceled');
+  }
+  if (normalizedStatus === 'paused') return t('subscription.statusPaused');
+
+  return subscriptionStatus ?? t('subscription.noSubscription');
+};
+
+const formatSubscriptionDate = (
+  value: string | number | Date | null | undefined,
+  t: TranslateFn,
+) => {
+  if (value === null || value === undefined) return t('common.notAvailable');
 
   let parsedDate: Date | null = null;
 
@@ -94,11 +126,11 @@ const formatSubscriptionDate = (value: string | number | Date | null | undefined
     parsedDate = new Date(timestampMs);
   } else if (typeof value === 'string') {
     const trimmedValue = value.trim();
-    if (!trimmedValue) return 'N/A';
+    if (!trimmedValue) return t('common.notAvailable');
 
     if (/^-?\d+$/.test(trimmedValue)) {
       const numericTimestamp = Number(trimmedValue);
-      if (!Number.isFinite(numericTimestamp)) return 'N/A';
+      if (!Number.isFinite(numericTimestamp)) return t('common.notAvailable');
       const timestampMs = Math.abs(numericTimestamp) < 1_000_000_000_000
         ? numericTimestamp * 1000
         : numericTimestamp;
@@ -108,8 +140,8 @@ const formatSubscriptionDate = (value: string | number | Date | null | undefined
     }
   }
 
-  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return 'N/A';
-  return parsedDate.toLocaleDateString('fr-FR');
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return t('common.notAvailable');
+  return formatDate(parsedDate);
 };
 
 export function ProducerDashboardPage() {
@@ -323,7 +355,7 @@ export function ProducerDashboardPage() {
             console.error('Error loading advanced producer stats', advancedStatsError);
             if (!isCancelled) {
               setAdvancedStats(null);
-              setAdvancedError('Statistiques avancées indisponibles pour le moment.');
+              setAdvancedError(t('producerDashboard.advancedStatsUnavailable'));
             }
           } else if (!isCancelled) {
             const row = (advancedData as AdvancedProducerStatsRow[] | null)?.[0] ?? null;
@@ -351,7 +383,7 @@ export function ProducerDashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [hasAdvancedAccess, profile?.id]);
+  }, [hasAdvancedAccess, profile?.id, t]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -398,25 +430,27 @@ export function ProducerDashboardPage() {
   }, [profile?.id]);
   const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
   const COVER_BUCKET = import.meta.env.VITE_SUPABASE_COVER_BUCKET || 'beats-covers';
-  const producerSubscriptionStatus = producerSubscription?.subscription_status ?? 'Aucun abonnement';
-  const nextBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end);
+  const producerSubscriptionStatus = producerSubscription?.subscription_status ?? null;
+  const producerSubscriptionStatusLabel = getSubscriptionStatusLabel(producerSubscriptionStatus, t);
+  const nextBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end, t);
   const subscriptionDateLabel = getSubscriptionDateLabel(
     producerSubscription?.subscription_status,
     producerSubscription?.cancel_at_period_end,
+    t,
   );
   const autoRenewLabel = producerSubscription
-    ? (producerSubscription.cancel_at_period_end ? 'Non' : 'Oui')
+    ? (producerSubscription.cancel_at_period_end ? t('common.no') : t('common.yes'))
     : '-';
   const hasStripePortalAccess = Boolean(producerSubscription?.stripe_subscription_id);
   const cancellationTimingMessage = producerSubscription
     ? (producerSubscription.cancel_at_period_end
-      ? `Annulation programmée. Accès actif jusqu’au ${nextBillingDate}.`
-      : `Vous pouvez annuler à tout moment. L’annulation sera effective le ${nextBillingDate}.`)
-    : 'Aucun abonnement Stripe lié.';
+      ? t('producerDashboard.cancellationScheduled', { date: nextBillingDate })
+      : t('producerDashboard.cancellationAnytime', { date: nextBillingDate }))
+    : t('producerDashboard.noLinkedSubscription');
 
   const handleManageSubscription = async () => {
     if (!hasStripePortalAccess) {
-      setPortalError('Aucun abonnement Stripe lié.');
+      setPortalError(t('producerDashboard.noLinkedSubscription'));
       return;
     }
 
@@ -428,7 +462,7 @@ export function ProducerDashboardPage() {
       const accessToken = sessionData.session?.access_token;
 
       if (!accessToken) {
-        throw new Error('Session expirée. Merci de vous reconnecter.');
+        throw new Error(t('producerDashboard.sessionExpired'));
       }
 
       const returnUrl = `${window.location.origin}/producer`;
@@ -462,9 +496,9 @@ export function ProducerDashboardPage() {
           }
         }
 
-        const rawError = apiError || contextError || error.message || "Impossible d'ouvrir le portail Stripe.";
+        const rawError = apiError || contextError || error.message || t('producerDashboard.portalOpenError');
         if (rawError.includes('no_stripe_customer')) {
-          setPortalError('Aucun abonnement Stripe lié.');
+          setPortalError(t('producerDashboard.noLinkedSubscription'));
           return;
         }
         throw new Error(rawError);
@@ -472,7 +506,7 @@ export function ProducerDashboardPage() {
 
       const portalUrl = (data as { url?: string } | null)?.url;
       if (!portalUrl) {
-        throw new Error('URL du portail de facturation introuvable.');
+        throw new Error(t('producerDashboard.portalUrlMissing'));
       }
 
       window.location.assign(portalUrl);
@@ -482,10 +516,10 @@ export function ProducerDashboardPage() {
       const isFunctionNetworkError = rawMessage.includes('Failed to send a request to the Edge Function');
       setPortalError(
         isFunctionNetworkError
-          ? "Impossible de joindre la fonction Stripe Portal. Vérifiez que 'create-portal-session' est déployée."
+          ? t('producerDashboard.portalFunctionUnavailable')
           : error instanceof Error
             ? error.message
-            : "Impossible d'ouvrir le portail d'abonnement."
+            : t('producerDashboard.portalSubscriptionError')
       );
     } finally {
       setIsPortalLoading(false);
@@ -532,12 +566,12 @@ export function ProducerDashboardPage() {
         salesCount: product.sales_count,
         terminatedBattleCount: product.terminated_battle_count,
       });
-      window.alert(getProtectedHistoryMessage());
+      window.alert(getProtectedHistoryMessage(t));
       return;
     }
 
     const confirm = window.confirm(
-      `Supprimer définitivement "${product.title}" ? Cette action retire aussi les fichiers et les favoris associés.`
+      t('producerDashboard.deleteConfirm', { title: product.title })
     );
     if (!confirm) return;
 
@@ -561,12 +595,12 @@ export function ProducerDashboardPage() {
       setViewsCount((prev) => Math.max(0, prev - (product.play_count || 0)));
     } catch (e) {
       console.error('Error deleting product', e);
-      const message = getRpcErrorMessage(e, 'Suppression impossible pour le moment.');
+      const message = getRpcErrorMessage(e, t('producerDashboard.deleteError'));
       setError(
         message.includes('beat_has_sales')
           || message.includes('product_has_sales')
           || message.includes('product_has_terminated_battle')
-          ? getProtectedHistoryMessage()
+          ? getProtectedHistoryMessage(t)
           : message
       );
     } finally {
@@ -607,7 +641,7 @@ export function ProducerDashboardPage() {
       }
     } catch (e) {
       console.error('Error removing product from sale', e);
-      setError(getRpcErrorMessage(e, 'Retrait de la vente impossible pour le moment.'));
+      setError(getRpcErrorMessage(e, t('producerDashboard.archiveError')));
     } finally {
       setRemovingId(null);
     }
@@ -616,7 +650,7 @@ export function ProducerDashboardPage() {
   const createNewVersion = async (product: ProducerProduct) => {
     const nextVersion = Math.max(product.version_number || product.version || 1, 1) + 1;
     const confirm = window.confirm(
-      `Créer une nouvelle version brouillon (${nextVersion}) de "${product.title}" ? Le beat actuel restera inchangé.`
+      t('producerDashboard.versionConfirm', { version: nextVersion, title: product.title })
     );
     if (!confirm) return;
 
@@ -627,7 +661,7 @@ export function ProducerDashboardPage() {
       navigate(`/producer/upload?cloneFrom=${encodeURIComponent(product.id)}`);
     } catch (e) {
       console.error('Error creating new product version', e);
-      setError(getRpcErrorMessage(e, 'Creation de nouvelle version impossible pour le moment.'));
+      setError(getRpcErrorMessage(e, t('producerDashboard.versionError')));
     } finally {
       setVersioningId(null);
     }
@@ -651,7 +685,7 @@ export function ProducerDashboardPage() {
               to="/producer/battles"
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-zinc-200 border border-zinc-700 hover:border-zinc-500 hover:text-white transition"
             >
-              Mes battles
+              {t('producerDashboard.myBattles')}
             </Link>
             <UploadBeatButton label={t('producer.uploadBeat')} />
           </div>
@@ -660,23 +694,23 @@ export function ProducerDashboardPage() {
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard icon={Music} label={t('producer.products')} value={productCount} />
           <StatCard icon={ShoppingBag} label={t('producer.sales')} value={salesCount} />
-          <StatCard icon={BarChart3} label="Lectures" value={viewsCount} />
+          <StatCard icon={BarChart3} label={t('producerDashboard.plays')} value={viewsCount} />
           <StatCard icon={Music} label={t('producer.earnings')} value={formatPrice(revenueCents)} />
         </section>
 
         <section className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 shadow-xl">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Abonnement producteur</h2>
-            <span className="text-xs text-zinc-400 uppercase tracking-wide">Stripe</span>
+            <h2 className="text-xl font-semibold">{t('producerDashboard.subscriptionTitle')}</h2>
+            <span className="text-xs text-zinc-400 uppercase tracking-wide">{t('producerDashboard.stripe')}</span>
           </div>
           {isSubscriptionLoading ? (
             <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <StatCard icon={Music} label="Statut" value={producerSubscriptionStatus} />
+                <StatCard icon={Music} label={t('common.status')} value={producerSubscriptionStatusLabel} />
                 <StatCard icon={ShoppingBag} label={subscriptionDateLabel} value={nextBillingDate} />
-                <StatCard icon={BarChart3} label="Renouvellement auto" value={autoRenewLabel} />
+                <StatCard icon={BarChart3} label={t('subscription.autoRenew')} value={autoRenewLabel} />
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -687,7 +721,7 @@ export function ProducerDashboardPage() {
                   disabled={isPortalLoading || !hasStripePortalAccess}
                   className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-rose-500 to-orange-500 shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {isPortalLoading ? 'Ouverture...' : 'Gérer mon abonnement'}
+                  {isPortalLoading ? t('producerDashboard.opening') : t('producerDashboard.manageSubscription')}
                 </button>
               </div>
 
@@ -701,8 +735,8 @@ export function ProducerDashboardPage() {
         {hasAdvancedAccess && (
           <section className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Statistiques avancées</h2>
-              <span className="text-xs text-zinc-400 uppercase tracking-wide">PRO / ELITE</span>
+              <h2 className="text-xl font-semibold">{t('producerDashboard.advancedStats')}</h2>
+              <span className="text-xs text-zinc-400 uppercase tracking-wide">{t('producerDashboard.proElite')}</span>
             </div>
             {isAdvancedLoading && <p className="text-zinc-400 text-sm">{t('common.loading')}</p>}
             {!isAdvancedLoading && advancedError && (
@@ -710,12 +744,12 @@ export function ProducerDashboardPage() {
             )}
             {!isAdvancedLoading && !advancedError && advancedStats && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard icon={Music} label="Beats publiés" value={advancedStats.published_beats} />
-                <StatCard icon={ShoppingBag} label="Ventes complétées" value={advancedStats.completed_sales} />
-                <StatCard icon={BarChart3} label="Battles / mois" value={advancedStats.monthly_battles_created} />
+                <StatCard icon={Music} label={t('producerDashboard.publishedBeats')} value={advancedStats.published_beats} />
+                <StatCard icon={ShoppingBag} label={t('producerDashboard.completedSales')} value={advancedStats.completed_sales} />
+                <StatCard icon={BarChart3} label={t('producerDashboard.battlesPerMonth')} value={advancedStats.monthly_battles_created} />
                 <StatCard
                   icon={BarChart3}
-                  label="Ventes / beat publié"
+                  label={t('producerDashboard.salesPerBeat')}
                   value={advancedStats.sales_per_published_beat.toFixed(2)}
                 />
               </div>
@@ -734,7 +768,7 @@ export function ProducerDashboardPage() {
           )}
           {!isLoading && !error && products.length === 0 && (
             <p className="text-zinc-400 text-sm">
-              {profile?.is_producer_active ? 'Aucun produit pour le moment.' : t('producer.subscriptionRequired')}
+              {profile?.is_producer_active ? t('producerDashboard.noProducts') : t('producer.subscriptionRequired')}
             </p>
           )}
           {!isLoading && !error && products.length > 0 && (
@@ -744,9 +778,13 @@ export function ProducerDashboardPage() {
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{`${product.title} V${product.version_number || product.version}`}</p>
                     <p className="text-zinc-500">
-                      {product.bpm ? `${product.bpm} BPM` : '—'} ·{' '}
-                      {product.key_signature || '—'} · {getProductLifecycleLabel(product, t('producer.draft'), t('producer.published'))} ·{' '}
-                      {product.sales_count} vente{product.sales_count > 1 ? 's' : ''} · {product.active_battle_count} battle{product.active_battle_count > 1 ? 's' : ''} active{product.active_battle_count > 1 ? 's' : ''} · {product.terminated_battle_count} battle{product.terminated_battle_count > 1 ? 's' : ''} terminee{product.terminated_battle_count > 1 ? 's' : ''}
+                      {product.bpm ? `${product.bpm} ${t('products.bpm')}` : '—'} ·{' '}
+                      {product.key_signature || '—'} · {getProductLifecycleLabel(product, t('producer.draft'), t('producer.published'), t('producerDashboard.archived'))} ·{' '}
+                      {t('producerDashboard.productSummary', {
+                        sales: product.sales_count,
+                        activeBattles: product.active_battle_count,
+                        completedBattles: product.terminated_battle_count,
+                      })}
                     </p>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap justify-end">
@@ -759,7 +797,7 @@ export function ProducerDashboardPage() {
                           onClick={() => editProduct(product)}
                           className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-sky-500/30 text-sky-200 hover:text-sky-100 hover:border-sky-400/70 bg-sky-500/10 transition"
                         >
-                          {product.active_battle_count > 0 ? 'Modifier (sans audio)' : 'Modifier'}
+                          {product.active_battle_count > 0 ? t('producerDashboard.editWithoutAudio') : t('common.edit')}
                         </button>
                         <button
                           onClick={() => deleteProduct(product)}
@@ -767,7 +805,7 @@ export function ProducerDashboardPage() {
                           className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-500/30 text-red-300 hover:text-red-100 hover:border-red-400/70 bg-red-500/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Trash2 className="w-4 h-4" />
-                          {deletingId === product.id ? 'Suppression...' : 'Supprimer'}
+                          {deletingId === product.id ? t('producerDashboard.deleting') : t('common.delete')}
                         </button>
                       </>
                     ) : (
@@ -778,17 +816,21 @@ export function ProducerDashboardPage() {
                           className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-500/30 text-amber-200 hover:text-amber-100 hover:border-amber-400/70 bg-amber-500/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {removingId === product.id
-                            ? 'Masquage...'
+                            ? t('producerDashboard.hiding')
                             : product.status === 'archived'
-                              ? 'Deja masque'
-                              : 'Masquer le produit'}
+                              ? t('producerDashboard.alreadyHidden')
+                              : t('producerDashboard.hideProduct')}
                         </button>
                         <button
                           onClick={() => createNewVersion(product)}
                           disabled={versioningId === product.id}
                           className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-rose-500/30 text-rose-200 hover:text-rose-100 hover:border-rose-400/70 bg-rose-500/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {versioningId === product.id ? 'Creation...' : `Creer V${Math.max(product.version_number || product.version || 1, 1) + 1}`}
+                          {versioningId === product.id
+                            ? t('producerDashboard.creating')
+                            : t('producerDashboard.createVersion', {
+                              version: Math.max(product.version_number || product.version || 1, 1) + 1,
+                            })}
                         </button>
                       </>
                     )}

@@ -1,11 +1,9 @@
 /*
-  # Grant admin role to specific user (email: ludovic.ousselin@gmail.com)
+  # Add admin role helper + admin profile read policy (schema-only)
 
-  Chosen approach (Option B): leverage existing user_profiles.role enum (user_role) already used across the app.
-  - Set role = 'admin' for the target user.
-  - Add helper function public.is_admin(p_user_id) (SECURITY INVOKER, safe search_path).
-  - Add RLS policy to let admins read all profiles without loosening other permissions.
-  - Idempotent guards: only runs if user_profiles exists and user is found.
+  Security note:
+  - This migration intentionally does NOT assign admin role to any user.
+  - Admin assignment must be handled manually outside migrations.
 */
 
 BEGIN;
@@ -30,49 +28,6 @@ BEGIN
       AND up.role = 'admin'
   );
 END;
-$$;
-
-DO $$
-DECLARE
-  target_email text := 'ludovic.ousselin@gmail.com';
-  u_id uuid;
-  table_exists boolean;
-BEGIN
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_name = 'user_profiles'
-  ) INTO table_exists;
-
-  IF NOT table_exists THEN
-    RAISE NOTICE 'Table public.user_profiles not found; skipping admin assignment.';
-    RETURN;
-  END IF;
-
-  SELECT id INTO u_id
-  FROM auth.users
-  WHERE lower(email) = lower(target_email)
-  LIMIT 1;
-
-  IF u_id IS NULL THEN
-    RAISE NOTICE 'No auth.users row found for %; skipping admin assignment.', target_email;
-    RETURN;
-  END IF;
-
-  UPDATE public.user_profiles
-  SET role = 'admin',
-      updated_at = now()
-  WHERE id = u_id;
-
-  IF NOT FOUND THEN
-    -- If profile row missing, create it minimally (rare case)
-    INSERT INTO public.user_profiles (id, email, role, created_at, updated_at)
-    VALUES (u_id, target_email, 'admin', now(), now())
-    ON CONFLICT (id) DO UPDATE
-      SET role = EXCLUDED.role,
-          email = EXCLUDED.email,
-          updated_at = now();
-  END IF;
-END
 $$;
 
 -- Add a read policy for admins to view all profiles (without changing existing restrictions for others)

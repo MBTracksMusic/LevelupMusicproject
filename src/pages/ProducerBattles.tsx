@@ -7,8 +7,10 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { useAuth } from '../lib/auth/hooks';
+import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
+import { formatDate } from '../lib/utils/format';
 
 interface ProducerOption {
   id: string;
@@ -71,34 +73,34 @@ function toRpcErrorMessage(error: {
   code?: string;
   details?: string | null;
   message?: string;
-}) {
+}, t: TranslateFn) {
   const code = error.code || 'unknown_code';
   const message = error.message || 'Unknown error';
   const details = error.details ? ` (${error.details})` : '';
   const technical = `[${code}] ${message}${details}`;
 
-  if (message.includes('rejection_reason_required')) return 'La raison du refus est obligatoire.';
-  if (message.includes('response_already_recorded')) return 'Une reponse a deja ete enregistree.';
-  if (message.includes('battle_not_waiting_for_response')) return 'Cette battle n\'attend plus de reponse.';
-  if (message.includes('only_invited_producer_can_respond')) return 'Seul le producteur invite peut repondre.';
-  if (message.includes('battle_not_found')) return 'Battle introuvable.';
+  if (message.includes('rejection_reason_required')) return t('producerBattles.rejectionReasonRequired');
+  if (message.includes('response_already_recorded')) return t('producerBattles.responseAlreadyRecorded');
+  if (message.includes('battle_not_waiting_for_response')) return t('producerBattles.noLongerAwaitingResponse');
+  if (message.includes('only_invited_producer_can_respond')) return t('producerBattles.onlyInvitedProducer');
+  if (message.includes('battle_not_found')) return t('producerBattles.battleNotFound');
   if (message.includes('auth_required') || code === '42501') {
-    return `Session invalide ou expiree. Reconnectez-vous puis reessayez. ${technical}`;
+    return t('producerBattles.sessionExpired', { technical });
   }
 
-  return `Action impossible pour le moment. ${technical}`;
+  return t('producerBattles.actionUnavailable', { technical });
 }
 
-function toStatusLabel(status: BattleStatus) {
-  if (status === 'pending_acceptance') return 'En attente de reponse';
-  if (status === 'awaiting_admin') return 'En attente validation admin';
-  if (status === 'rejected') return 'Refusee';
-  if (status === 'active') return 'Active';
-  if (status === 'voting') return 'Voting (legacy)';
-  if (status === 'completed') return 'Terminee';
-  if (status === 'cancelled') return 'Annulee';
-  if (status === 'approved') return 'Approuvee';
-  return 'Pending';
+function toStatusLabel(status: BattleStatus, t: TranslateFn) {
+  if (status === 'pending_acceptance') return t('battleDetail.statusPendingAcceptance');
+  if (status === 'awaiting_admin') return t('battleDetail.statusAwaitingAdmin');
+  if (status === 'rejected') return t('battleDetail.statusRejected');
+  if (status === 'active') return t('battleDetail.statusActive');
+  if (status === 'voting') return t('battles.legacyVoting');
+  if (status === 'completed') return t('battleDetail.statusCompleted');
+  if (status === 'cancelled') return t('battleDetail.statusCancelled');
+  if (status === 'approved') return t('battleDetail.statusApproved');
+  return t('battleDetail.statusPending');
 }
 
 function slugifyBattleTitle(value: string) {
@@ -115,7 +117,7 @@ function toBattleInsertErrorMessage(error: {
   code?: string;
   details?: string | null;
   message?: string;
-}, quotaStatus: BattleQuotaStatus | null) {
+}, quotaStatus: BattleQuotaStatus | null, t: TranslateFn) {
   const code = error.code || 'unknown_code';
   const message = error.message || 'Unknown error';
   const details = error.details ? ` (${error.details})` : '';
@@ -127,17 +129,18 @@ function toBattleInsertErrorMessage(error: {
     || message.includes('permission denied');
 
   if (isRlsError && quotaStatus && quotaStatus.can_create === false) {
-    return `Creation refusee: quota mensuel atteint ou plan non autorise pour les battles. ${technical}`;
+    return t('producerBattles.insertQuotaBlocked', { technical });
   }
 
   if (isRlsError) {
-    return `Creation refusee par les regles de securite. Verifiez que le producteur invite est actif et que les produits selectionnes appartiennent bien a chaque producteur. ${technical}`;
+    return t('producerBattles.insertSecurityBlocked', { technical });
   }
 
-  return `Creation de la battle impossible. ${technical}`;
+  return t('producerBattles.insertUnavailable', { technical });
 }
 
 export function ProducerBattlesPage() {
+  const { t } = useTranslation();
   const { profile } = useAuth();
 
   const [producers, setProducers] = useState<ProducerOption[]>([]);
@@ -164,26 +167,26 @@ export function ProducerBattlesPage() {
 
   const producerOptions = useMemo(
     () => [
-      { value: '', label: 'Choisir un producteur' },
+      { value: '', label: t('producerBattles.chooseProducer') },
       ...producers.map((p) => ({ value: p.id, label: p.username || p.id })),
     ],
-    [producers]
+    [producers, t]
   );
 
   const product1Options = useMemo(
     () => [
-      { value: '', label: 'Choisir un produit' },
+      { value: '', label: t('producerBattles.chooseProduct') },
       ...myProducts.map((p) => ({ value: p.id, label: p.title })),
     ],
-    [myProducts]
+    [myProducts, t]
   );
 
   const product2Options = useMemo(
     () => [
-      { value: '', label: 'Choisir un produit' },
+      { value: '', label: t('producerBattles.chooseProduct') },
       ...producer2Products.map((p) => ({ value: p.id, label: p.title })),
     ],
-    [producer2Products]
+    [producer2Products, t]
   );
 
   const loadQuotaStatus = useCallback(async () => {
@@ -201,7 +204,10 @@ export function ProducerBattlesPage() {
       });
       setQuotaStatus(null);
       setQuotaError(
-        `Impossible de charger le quota battles. [${quotaFetchError.code || 'unknown_code'}] ${quotaFetchError.message}`
+        t('producerBattles.loadQuotaError', {
+          code: quotaFetchError.code || 'unknown_code',
+          message: quotaFetchError.message,
+        })
       );
       setIsQuotaLoading(false);
       return null;
@@ -212,7 +218,7 @@ export function ProducerBattlesPage() {
     setQuotaError(null);
     setIsQuotaLoading(false);
     return quotaRow;
-  }, [profile?.id]);
+  }, [profile?.id, t]);
 
   const loadBattles = useCallback(async () => {
     if (!profile?.id) return;
@@ -256,7 +262,7 @@ export function ProducerBattlesPage() {
 
     if (createdRes.error) {
       console.error('Error fetching producer battles:', createdRes.error);
-      setError('Impossible de charger vos battles.');
+      setError(t('producerBattles.loadCreatedError'));
       setBattles([]);
     } else {
       setBattles((createdRes.data as ManagedBattle[] | null) ?? []);
@@ -266,12 +272,12 @@ export function ProducerBattlesPage() {
       console.error('Error fetching incoming battle responses:', incomingRes.error);
       setIncomingBattles([]);
       if (!createdRes.error) {
-        setError('Impossible de charger les battles en attente de reponse.');
+        setError(t('producerBattles.loadIncomingError'));
       }
     } else {
       setIncomingBattles((incomingRes.data as IncomingBattle[] | null) ?? []);
     }
-  }, [profile?.id]);
+  }, [profile?.id, t]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -362,12 +368,12 @@ export function ProducerBattlesPage() {
     if (!profile?.id) return;
 
     if (!form.title.trim()) {
-      setError('Le titre est requis.');
+      setError(t('producerBattles.titleRequired'));
       return;
     }
 
     if (!form.producer2Id) {
-      setError('Le producteur invite est requis.');
+      setError(t('producerBattles.invitedProducerRequired'));
       return;
     }
 
@@ -376,7 +382,7 @@ export function ProducerBattlesPage() {
 
     const latestQuota = await loadQuotaStatus();
     if (latestQuota && !latestQuota.can_create) {
-      setError('Quota battles atteint pour ce mois ou plan non autorise. Passez au plan superieur pour continuer.');
+      setError(t('producerBattles.quotaReachedError'));
       setIsSaving(false);
       return;
     }
@@ -404,7 +410,7 @@ export function ProducerBattlesPage() {
         details: insertError.details,
       });
       const refreshedQuota = await loadQuotaStatus();
-      setError(toBattleInsertErrorMessage(insertError, refreshedQuota));
+      setError(toBattleInsertErrorMessage(insertError, refreshedQuota, t));
       setIsSaving(false);
       return;
     }
@@ -428,7 +434,7 @@ export function ProducerBattlesPage() {
     const reason = (rejectReasons[battleId] || '').trim();
     if (!accept && !reason) {
       setRespondingId(null);
-      setError('La raison du refus est obligatoire.');
+      setError(t('producerBattles.rejectionReasonRequired'));
       return;
     }
 
@@ -447,7 +453,7 @@ export function ProducerBattlesPage() {
         details: rpcError.details,
       });
       setRespondingId(null);
-      setError(toRpcErrorMessage(rpcError));
+      setError(toRpcErrorMessage(rpcError, t));
       return;
     }
 
@@ -461,11 +467,11 @@ export function ProducerBattlesPage() {
       <div className="max-w-6xl mx-auto px-4 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">Gestion Battles Producteur</h1>
-            <p className="text-zinc-400 mt-1">Creation, acceptation/refus, suivi de validation admin.</p>
+            <h1 className="text-3xl font-bold text-white">{t('producerBattles.title')}</h1>
+            <p className="text-zinc-400 mt-1">{t('producerBattles.subtitle')}</p>
           </div>
           <Link to="/battles">
-            <Button variant="outline">Voir la liste publique</Button>
+            <Button variant="outline">{t('producerBattles.publicList')}</Button>
           </Link>
         </div>
 
@@ -479,26 +485,26 @@ export function ProducerBattlesPage() {
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-white inline-flex items-center gap-2">
             <Swords className="w-4 h-4" />
-            Creer une battle (pending_acceptance)
+            {t('producerBattles.createSectionTitle')}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Titre"
+              label={t('producerBattles.titleLabel')}
               value={form.title}
               onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Ex: Clash Boom Bap"
+              placeholder={t('producerBattles.titlePlaceholder')}
             />
 
             <Input
-              label="Description"
+              label={t('common.description')}
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Description courte"
+              placeholder={t('producerBattles.descriptionPlaceholder')}
             />
 
             <Select
-              label="Producteur 2"
+              label={t('producerBattles.producer2Label')}
               value={form.producer2Id}
               onChange={(event) =>
                 setForm((prev) => ({
@@ -511,14 +517,14 @@ export function ProducerBattlesPage() {
             />
 
             <Select
-              label="Produit 1 (vous)"
+              label={t('producerBattles.product1Label')}
               value={form.product1Id}
               onChange={(event) => setForm((prev) => ({ ...prev, product1Id: event.target.value }))}
               options={product1Options}
             />
 
             <Select
-              label="Produit 2 (adversaire)"
+              label={t('producerBattles.product2Label')}
               value={form.product2Id}
               onChange={(event) => setForm((prev) => ({ ...prev, product2Id: event.target.value }))}
               options={product2Options}
@@ -529,20 +535,24 @@ export function ProducerBattlesPage() {
           <div className="flex flex-col gap-3 border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
             <p className="text-sm text-zinc-300">
               {quotaStatus
-                ? `Battles ce mois: ${quotaStatus.used_this_month}/${quotaStatus.max_per_month ?? 'Illimite'}`
+                ? t('producerBattles.quotaSummary', {
+                  used: quotaStatus.used_this_month,
+                  max: quotaStatus.max_per_month ?? t('common.unlimited'),
+                })
                 : isQuotaLoading
-                ? 'Chargement du quota battles...'
-                : 'Quota battles indisponible pour le moment.'}
+                ? t('producerBattles.loadingQuota')
+                : t('producerBattles.quotaUnavailable')}
             </p>
             {quotaStatus && !quotaStatus.can_create && (
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <p className="text-sm text-amber-300">
-                  Quota atteint ou plan actuel non autorise. Reinitialisation le{' '}
-                  {new Date(quotaStatus.reset_at).toLocaleDateString()}.
+                  {t('producerBattles.quotaReachedNotice', {
+                    date: formatDate(quotaStatus.reset_at),
+                  })}
                 </p>
                 {quotaStatus.tier !== 'elite' && (
                   <Link to="/pricing">
-                    <Button variant="outline">Voir les offres</Button>
+                    <Button variant="outline">{t('producerBattles.viewPlans')}</Button>
                   </Link>
                 )}
               </div>
@@ -554,7 +564,7 @@ export function ProducerBattlesPage() {
                 isLoading={isSaving}
                 disabled={quotaStatus !== null && !quotaStatus.can_create}
               >
-                Creer
+                {t('common.create')}
               </Button>
             </div>
           </div>
@@ -563,13 +573,13 @@ export function ProducerBattlesPage() {
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-white inline-flex items-center gap-2">
             <MailQuestion className="w-4 h-4" />
-            Battles en attente de reponse (vous etes invite)
+            {t('producerBattles.incomingTitle')}
           </h2>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : incomingBattles.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune invitation en attente.</p>
+            <p className="text-zinc-500 text-sm">{t('producerBattles.noIncoming')}</p>
           ) : (
             <ul className="space-y-3">
               {incomingBattles.map((battle) => (
@@ -578,19 +588,21 @@ export function ProducerBattlesPage() {
                     <div>
                       <p className="text-white font-semibold">{battle.title}</p>
                       <p className="text-zinc-400 text-sm">
-                        Invite par {battle.producer1?.username || 'Producteur'}
+                        {t('producerBattles.invitedBy', {
+                          name: battle.producer1?.username || t('producerBattles.producerFallback'),
+                        })}
                       </p>
                       <p className="text-zinc-500 text-xs mt-1">
-                        {battle.product1?.title || 'Produit 1 non defini'} vs {battle.product2?.title || 'Produit 2 non defini'}
+                        {battle.product1?.title || t('producerBattles.product1Undefined')} {t('battles.vs')} {battle.product2?.title || t('producerBattles.product2Undefined')}
                       </p>
                     </div>
 
-                    <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status)}</Badge>
+                    <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status, t)}</Badge>
                   </div>
 
                   <div className="space-y-2">
                     <Input
-                      label="Raison du refus (obligatoire si refus)"
+                      label={t('producerBattles.rejectionReasonLabel')}
                       value={rejectReasons[battle.id] || ''}
                       onChange={(event) =>
                         setRejectReasons((prev) => ({
@@ -598,7 +610,7 @@ export function ProducerBattlesPage() {
                           [battle.id]: event.target.value,
                         }))
                       }
-                      placeholder="Expliquez brièvement le refus"
+                      placeholder={t('producerBattles.rejectionReasonPlaceholder')}
                     />
                     <div className="flex flex-wrap gap-2 justify-end">
                       <Button
@@ -608,7 +620,7 @@ export function ProducerBattlesPage() {
                         leftIcon={<CheckCircle2 className="w-4 h-4" />}
                         onClick={() => respondToBattle(battle.id, true)}
                       >
-                        Accepter
+                        {t('producerBattles.accept')}
                       </Button>
                       <Button
                         size="sm"
@@ -617,7 +629,7 @@ export function ProducerBattlesPage() {
                         leftIcon={<XCircle className="w-4 h-4" />}
                         onClick={() => respondToBattle(battle.id, false)}
                       >
-                        Refuser
+                        {t('producerBattles.reject')}
                       </Button>
                     </div>
                   </div>
@@ -628,12 +640,12 @@ export function ProducerBattlesPage() {
         </Card>
 
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-white">Mes battles creees (producer1)</h2>
+          <h2 className="text-lg font-semibold text-white">{t('producerBattles.createdTitle')}</h2>
 
           {isLoading ? (
-            <p className="text-zinc-400 text-sm">Chargement...</p>
+            <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
           ) : battles.length === 0 ? (
-            <p className="text-zinc-500 text-sm">Aucune battle pour le moment.</p>
+            <p className="text-zinc-500 text-sm">{t('battles.empty')}</p>
           ) : (
             <ul className="space-y-3">
               {battles.map((battle) => (
@@ -642,30 +654,33 @@ export function ProducerBattlesPage() {
                     <div>
                       <p className="text-white font-semibold">{battle.title}</p>
                       <p className="text-zinc-400 text-sm">
-                        {battle.product1?.title || 'Produit 1 manquant'} vs {battle.product2?.title || 'Produit 2 manquant'}
+                        {battle.product1?.title || t('producerBattles.product1Missing')} {t('battles.vs')} {battle.product2?.title || t('producerBattles.product2Missing')}
                       </p>
                       <p className="text-zinc-500 text-xs mt-1">
-                        Votes: {battle.votes_producer1} - {battle.votes_producer2}
+                        {t('producerBattles.votes', {
+                          producer1: battle.votes_producer1,
+                          producer2: battle.votes_producer2,
+                        })}
                       </p>
                     </div>
 
                     <div className="flex flex-wrap gap-2 items-center">
-                      <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status)}</Badge>
+                      <Badge variant={badgeByStatus[battle.status]}>{toStatusLabel(battle.status, t)}</Badge>
                       <Link to={`/battles/${battle.slug}`}>
-                        <Button size="sm" variant="ghost">Ouvrir</Button>
+                        <Button size="sm" variant="ghost">{t('common.open')}</Button>
                       </Link>
                     </div>
                   </div>
 
                   {battle.status === 'rejected' && battle.rejection_reason && (
                     <p className="text-sm text-red-300 bg-red-900/20 border border-red-800 rounded px-3 py-2">
-                      Motif du refus: {battle.rejection_reason}
+                      {t('producerBattles.rejectionReasonPrefix', { reason: battle.rejection_reason })}
                     </p>
                   )}
 
                   {battle.status === 'awaiting_admin' && (
                     <p className="text-sm text-sky-300 bg-sky-900/20 border border-sky-800 rounded px-3 py-2">
-                      Battle acceptee par producer2, en attente de validation admin.
+                      {t('producerBattles.awaitingAdminNotice')}
                     </p>
                   )}
                 </li>

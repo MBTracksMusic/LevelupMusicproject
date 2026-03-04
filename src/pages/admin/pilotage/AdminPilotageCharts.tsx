@@ -1,4 +1,5 @@
 import { Card } from '../../../components/ui/Card';
+import { useTranslation } from '../../../lib/i18n';
 import type { AdminMetricsTimeseries, MetricsTimeseriesPoint } from './types';
 
 interface AdminPilotageChartsProps {
@@ -42,6 +43,7 @@ function formatDateLabel(date: string) {
 }
 
 function ChartCard({ title, subtitle, points, strokeColor }: ChartCardProps) {
+  const { t } = useTranslation();
   const polyline = buildPolyline(points);
   const firstLabel = points[0]?.date ? formatDateLabel(points[0].date) : '';
   const midLabel = points[Math.floor(points.length / 2)]?.date
@@ -56,7 +58,7 @@ function ChartCard({ title, subtitle, points, strokeColor }: ChartCardProps) {
       <div className="h-72 mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
         {points.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-zinc-500">
-            Aucune donnee
+            {t('admin.pilotage.chartNoData')}
           </div>
         ) : (
           <div className="h-full flex flex-col">
@@ -64,7 +66,7 @@ function ChartCard({ title, subtitle, points, strokeColor }: ChartCardProps) {
               viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
               preserveAspectRatio="none"
               className="flex-1 w-full"
-              aria-label={`${title} sur 30 jours`}
+              aria-label={t('admin.pilotage.chartAria', { title })}
             >
               <rect x="0" y="0" width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" />
               <polyline
@@ -89,23 +91,24 @@ function ChartCard({ title, subtitle, points, strokeColor }: ChartCardProps) {
 }
 
 export function AdminPilotageCharts({ timeseries }: AdminPilotageChartsProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
       <ChartCard
-        title="Utilisateurs"
-        subtitle="Nouveaux utilisateurs par jour (30j)"
+        title={t('admin.pilotage.usersChartTitle')}
+        subtitle={t('admin.pilotage.usersChartSubtitle')}
         points={timeseries.users_30d}
         strokeColor="#22c55e"
       />
       <ChartCard
-        title="Revenus beats"
-        subtitle="Revenu journalier en cents (30j)"
+        title={t('admin.pilotage.revenueChartTitle')}
+        subtitle={t('admin.pilotage.revenueChartSubtitle')}
         points={timeseries.revenue_30d}
         strokeColor="#f97316"
       />
       <ChartCard
-        title="Beats publies"
-        subtitle="Publications journalieres (30j)"
+        title={t('admin.pilotage.beatsChartTitle')}
+        subtitle={t('admin.pilotage.beatsChartSubtitle')}
         points={timeseries.beats_30d}
         strokeColor="#3b82f6"
       />

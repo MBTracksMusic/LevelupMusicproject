@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { Database } from '../../lib/supabase/types';
 import { NewsForm, type NewsFormValues } from '../../components/admin/NewsForm';
@@ -50,6 +51,7 @@ function parseNewsRow(row: unknown): NewsRow | null {
 }
 
 export function AdminNewsPage() {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<NewsRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,7 +75,7 @@ export function AdminNewsPage() {
 
     if (error) {
       console.error('Error loading news videos:', error);
-      toast.error('Impossible de charger les news vidéos.');
+      toast.error(t('admin.news.loadError'));
       setRows([]);
       setIsLoading(false);
       return;
@@ -85,7 +87,7 @@ export function AdminNewsPage() {
 
     setRows(parsed);
     setIsLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadNews();
@@ -109,26 +111,29 @@ export function AdminNewsPage() {
 
       if (error) {
         const payload = data as { error?: string } | null;
-        const message = payload?.error || error.message || 'Diffusion impossible.';
+        const message = payload?.error || error.message || t('admin.news.broadcastError');
         throw new Error(message);
       }
 
       const payload = (data as BroadcastResult | null) ?? null;
       if (payload?.status === 'already_sent') {
         if (!options?.silentSuccess) {
-          toast('Cette news a déjà été diffusée.');
+          toast(t('admin.news.alreadyBroadcast'));
         }
       } else if (payload?.status === 'partial') {
         toast.error(
-          `Diffusion partielle (${payload.sent ?? 0}/${payload.total ?? 0}). Relancer pour terminer.`,
+          t('admin.news.partialBroadcast', {
+            sent: payload.sent ?? 0,
+            total: payload.total ?? 0,
+          }),
         );
       } else if (!options?.silentSuccess) {
-        toast.success('Diffusion email déclenchée.');
+        toast.success(t('admin.news.broadcastSuccess'));
       }
 
       return payload;
     },
-    [],
+    [t],
   );
 
   const handleCreate = () => {
@@ -142,7 +147,7 @@ export function AdminNewsPage() {
   };
 
   const handleDelete = async (row: NewsRow) => {
-    const confirmed = window.confirm(`Supprimer la news "${row.title}" ?`);
+    const confirmed = window.confirm(t('admin.news.deleteConfirm', { title: row.title }));
     if (!confirmed) return;
 
     setDeletingId(row.id);
@@ -150,12 +155,12 @@ export function AdminNewsPage() {
 
     if (error) {
       console.error('Error deleting news video:', error);
-      toast.error('Suppression impossible.');
+      toast.error(t('admin.news.deleteError'));
       setDeletingId(null);
       return;
     }
 
-    toast.success('News supprimée.');
+    toast.success(t('admin.news.deleteSuccess'));
     setRows((prev) => prev.filter((item) => item.id !== row.id));
     setDeletingId(null);
   };
@@ -183,14 +188,14 @@ export function AdminNewsPage() {
 
     if (error) {
       console.error('Error saving news video:', error);
-      toast.error('Enregistrement impossible.');
+      toast.error(t('admin.news.saveError'));
       setIsSubmitting(false);
       return;
     }
 
     const parsed = parseNewsRow(data);
     if (!parsed) {
-      toast.error('Réponse serveur invalide.');
+      toast.error(t('admin.news.invalidResponse'));
       setIsSubmitting(false);
       return;
     }
@@ -202,7 +207,7 @@ export function AdminNewsPage() {
       return prev.map((item) => (item.id === parsed.id ? parsed : item));
     });
 
-    toast.success(editingRow ? 'News mise à jour.' : 'News créée.');
+    toast.success(editingRow ? t('admin.news.updated') : t('admin.news.created'));
     setIsSubmitting(false);
     setIsModalOpen(false);
     setEditingRow(null);
@@ -219,7 +224,7 @@ export function AdminNewsPage() {
         await invokeBroadcast(parsed, { silentSuccess: true });
       } catch (broadcastError) {
         console.error('Auto broadcast error:', broadcastError);
-        toast.error((broadcastError as Error).message || 'Diffusion automatique impossible.');
+        toast.error((broadcastError as Error).message || t('admin.news.autoBroadcastError'));
       } finally {
         setBroadcastingId(null);
         await loadNews();
@@ -240,7 +245,7 @@ export function AdminNewsPage() {
       await invokeBroadcast(row);
     } catch (error) {
       console.error('Broadcast error:', error);
-      toast.error((error as Error).message || 'Diffusion impossible.');
+      toast.error((error as Error).message || t('admin.news.broadcastError'));
     } finally {
       setConfirmBroadcastRow(null);
       setBroadcastingId(null);
@@ -253,20 +258,20 @@ export function AdminNewsPage() {
       <Card className="p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-white">News vidéos</h2>
+            <h2 className="text-xl font-semibold text-white">{t('admin.news.title')}</h2>
             <p className="text-zinc-400 text-sm mt-1">
-              Gestion des annonces affichées sur la homepage.
+              {t('admin.news.subtitle')}
             </p>
           </div>
           <Button leftIcon={<Plus className="w-4 h-4" />} onClick={handleCreate}>
-            Nouvelle news
+            {t('admin.news.newItem')}
           </Button>
         </div>
       </Card>
 
       <Card className="p-0 overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-zinc-400">Chargement...</div>
+          <div className="p-6 text-zinc-400">{t('common.loading')}</div>
         ) : (
           <NewsTable
             rows={sortedRows}
@@ -282,7 +287,7 @@ export function AdminNewsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeFormModal}
-        title={editingRow ? 'Modifier la news vidéo' : 'Créer une news vidéo'}
+        title={editingRow ? t('admin.news.editModalTitle') : t('admin.news.createModalTitle')}
         size="lg"
       >
         <NewsForm
@@ -308,13 +313,13 @@ export function AdminNewsPage() {
       <Modal
         isOpen={Boolean(confirmBroadcastRow)}
         onClose={() => setConfirmBroadcastRow(null)}
-        title="Confirmer la diffusion"
-        description="Cette action enverra un email à tous les abonnés éligibles."
+        title={t('admin.news.confirmBroadcastTitle')}
+        description={t('admin.news.confirmBroadcastDescription')}
         size="md"
       >
         <div className="space-y-4">
           <p className="text-zinc-300 text-sm">
-            News: <span className="text-white font-medium">{confirmBroadcastRow?.title}</span>
+            {t('admin.news.newsLabel')}: <span className="text-white font-medium">{confirmBroadcastRow?.title}</span>
           </p>
           <div className="flex items-center justify-end gap-2">
             <Button
@@ -322,10 +327,10 @@ export function AdminNewsPage() {
               onClick={() => setConfirmBroadcastRow(null)}
               disabled={Boolean(broadcastingId)}
             >
-              Annuler
+              {t('common.cancel')}
             </Button>
             <Button onClick={confirmBroadcast} isLoading={Boolean(broadcastingId)}>
-              Confirmer la diffusion
+              {t('admin.news.confirmBroadcastAction')}
             </Button>
           </div>
         </div>

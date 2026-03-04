@@ -11,6 +11,7 @@ import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import type { BattleProductSnapshot, BattleWithRelations, ProductWithRelations } from '../lib/supabase/types';
+import { formatDateTime } from '../lib/utils/format';
 
 type BattleSnapshotSlot = 'producer1' | 'producer2';
 type BattleSnapshotMap = Partial<Record<BattleSnapshotSlot, BattleProductSnapshot>>;
@@ -25,15 +26,15 @@ function getStatusVariant(status: BattleWithRelations['status']) {
   return 'warning';
 }
 
-function getStatusLabel(status: BattleWithRelations['status']) {
-  if (status === 'active' || status === 'voting') return 'En cours';
-  if (status === 'pending_acceptance') return 'En attente de reponse';
-  if (status === 'awaiting_admin') return 'En attente admin';
-  if (status === 'approved') return 'Approuvee';
-  if (status === 'rejected') return 'Refusee';
-  if (status === 'completed') return 'Terminee';
-  if (status === 'cancelled') return 'Annulee';
-  return 'En attente';
+function getStatusLabelKey(status: BattleWithRelations['status']) {
+  if (status === 'active' || status === 'voting') return 'battleDetail.statusActive';
+  if (status === 'pending_acceptance') return 'battleDetail.statusPendingAcceptance';
+  if (status === 'awaiting_admin') return 'battleDetail.statusAwaitingAdmin';
+  if (status === 'approved') return 'battleDetail.statusApproved';
+  if (status === 'rejected') return 'battleDetail.statusRejected';
+  if (status === 'completed') return 'battleDetail.statusCompleted';
+  if (status === 'cancelled') return 'battleDetail.statusCancelled';
+  return 'battleDetail.statusPending';
 }
 
 function getProductUrl(product: Pick<ProductWithRelations, 'slug' | 'product_type'> | null | undefined) {
@@ -55,7 +56,7 @@ export function BattleDetailPage() {
 
   const fetchBattle = useCallback(async () => {
     if (!slug) {
-      setError('Battle introuvable.');
+      setError(t('battleDetail.missingSlug'));
       setBattleSnapshots({});
       setHistoryWarning(null);
       setIsLoading(false);
@@ -116,7 +117,7 @@ export function BattleDetailPage() {
 
         if (snapshotError) {
           console.error('[battle-detail] failed to load battle product snapshots', snapshotError);
-          setHistoryWarning('Impossible de charger certaines donnees historiques de produit.');
+          setHistoryWarning(t('battleDetail.historyWarning'));
           setBattleSnapshots({});
         } else {
           const nextSnapshots = ((snapshotData as BattleProductSnapshot[] | null) ?? []).reduce<BattleSnapshotMap>((acc, snapshot) => {
@@ -179,11 +180,11 @@ export function BattleDetailPage() {
       setBattle(null);
       setBattleSnapshots({});
       setHistoryWarning(null);
-      setError('Impossible de charger la battle pour le moment.');
+      setError(t('battleDetail.loadError'));
     } finally {
       setIsLoading(false);
     }
-  }, [slug]);
+  }, [slug, t]);
 
   useEffect(() => {
     void fetchBattle();
@@ -231,7 +232,7 @@ export function BattleDetailPage() {
         <div className="max-w-5xl mx-auto px-4 space-y-4">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
-            Retour aux battles
+            {t('battleDetail.backToBattles')}
           </Link>
           <Card>
             <p className="text-red-400">{error}</p>
@@ -247,10 +248,10 @@ export function BattleDetailPage() {
         <div className="max-w-5xl mx-auto px-4 space-y-4">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
-            Retour aux battles
+            {t('battleDetail.backToBattles')}
           </Link>
           <Card>
-            <p className="text-zinc-300">Battle introuvable.</p>
+            <p className="text-zinc-300">{t('battleDetail.notFound')}</p>
           </Card>
         </div>
       </div>
@@ -272,9 +273,9 @@ export function BattleDetailPage() {
         <div className="flex items-center justify-between gap-3">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
-            Retour aux battles
+            {t('battleDetail.backToBattles')}
           </Link>
-          <Badge variant={getStatusVariant(battle.status)}>{getStatusLabel(battle.status)}</Badge>
+          <Badge variant={getStatusVariant(battle.status)}>{t(getStatusLabelKey(battle.status) as 'battleDetail.statusActive' | 'battleDetail.statusPendingAcceptance' | 'battleDetail.statusAwaitingAdmin' | 'battleDetail.statusApproved' | 'battleDetail.statusRejected' | 'battleDetail.statusCompleted' | 'battleDetail.statusCancelled' | 'battleDetail.statusPending')}</Badge>
         </div>
 
         <Card className="space-y-5">
@@ -283,14 +284,14 @@ export function BattleDetailPage() {
             {battle.description ? (
               <p className="text-zinc-400">{battle.description}</p>
             ) : (
-              <p className="text-zinc-500">Aucune description.</p>
+              <p className="text-zinc-500">{t('battleDetail.noDescription')}</p>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div className="bg-zinc-800/50 rounded-lg p-4">
-              <p className="text-zinc-500 text-xs uppercase mb-1">Producteur 1</p>
-              <p className="text-white font-semibold">{battle.producer1?.username || 'Producteur 1'}</p>
+              <p className="text-zinc-500 text-xs uppercase mb-1">{t('battleDetail.producer1Label')}</p>
+              <p className="text-white font-semibold">{battle.producer1?.username || t('battleDetail.producer1Fallback')}</p>
               {battle.producer1 && (
                 <ReputationBadge
                   compact
@@ -306,7 +307,7 @@ export function BattleDetailPage() {
                 </Link>
               )}
               {!battle.product1 && product1Snapshot?.title_snapshot && (
-                <p className="text-xs text-amber-300 mt-2">Produit supprime: {product1Snapshot.title_snapshot}</p>
+                <p className="text-xs text-amber-300 mt-2">{t('battleDetail.deletedProductWithTitle', { title: product1Snapshot.title_snapshot })}</p>
               )}
             </div>
 
@@ -321,14 +322,14 @@ export function BattleDetailPage() {
               {battle.voting_ends_at && (
                 <p className="text-zinc-400 text-xs mt-2 inline-flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {new Date(battle.voting_ends_at).toLocaleString()}
+                  {formatDateTime(battle.voting_ends_at)}
                 </p>
               )}
             </div>
 
             <div className="bg-zinc-800/50 rounded-lg p-4 text-right">
-              <p className="text-zinc-500 text-xs uppercase mb-1">Producteur 2</p>
-              <p className="text-white font-semibold">{battle.producer2?.username || 'Producteur 2'}</p>
+              <p className="text-zinc-500 text-xs uppercase mb-1">{t('battleDetail.producer2Label')}</p>
+              <p className="text-white font-semibold">{battle.producer2?.username || t('battleDetail.producer2Fallback')}</p>
               {battle.producer2 && (
                 <div className="flex justify-end">
                   <ReputationBadge
@@ -346,7 +347,7 @@ export function BattleDetailPage() {
                 </Link>
               )}
               {!battle.product2 && product2Snapshot?.title_snapshot && (
-                <p className="text-xs text-amber-300 mt-2">Produit supprime: {product2Snapshot.title_snapshot}</p>
+                <p className="text-xs text-amber-300 mt-2">{t('battleDetail.deletedProductWithTitle', { title: product2Snapshot.title_snapshot })}</p>
               )}
             </div>
           </div>
@@ -359,13 +360,13 @@ export function BattleDetailPage() {
 
           {battle.status === 'rejected' && battle.rejection_reason && (
             <Card className="bg-red-900/20 border border-red-800">
-              <p className="text-sm text-red-300">Refus du producteur invite: {battle.rejection_reason}</p>
+              <p className="text-sm text-red-300">{t('battleDetail.invitedProducerRejected', { reason: battle.rejection_reason })}</p>
             </Card>
           )}
 
           {battle.status === 'awaiting_admin' && (
             <Card className="bg-sky-900/20 border border-sky-800">
-              <p className="text-sm text-sky-300">Battle acceptee par le producteur invite, en attente de validation admin.</p>
+              <p className="text-sm text-sky-300">{t('battleDetail.awaitingAdmin')}</p>
             </Card>
           )}
 
@@ -382,74 +383,74 @@ export function BattleDetailPage() {
             </div>
             <div className="flex justify-between mt-2 text-sm text-zinc-500">
               <span>{producer1Percent.toFixed(0)}%</span>
-              <span>{totalVotes} votes</span>
+              <span>{t('battleDetail.totalVotes', { count: totalVotes })}</span>
               <span>{producer2Percent.toFixed(0)}%</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="bg-zinc-800/30">
-              <p className="text-zinc-500 text-xs uppercase mb-2">Produit 1</p>
+              <p className="text-zinc-500 text-xs uppercase mb-2">{t('battleDetail.product1Label')}</p>
               {battle.product1 || product1Snapshot ? (
                 <div className="space-y-2">
-                  <p className="text-white font-medium">{product1Title || 'Produit indisponible'}</p>
+                  <p className="text-white font-medium">{product1Title || t('battleDetail.productUnavailable')}</p>
                   {product1IsHistoricalOnly && (
-                    <p className="text-xs text-amber-300">Produit supprime. Historique conserve.</p>
+                    <p className="text-xs text-amber-300">{t('battleDetail.deletedProductHistory')}</p>
                   )}
                   <BattleAudioPlayer
                     src={product1PreviewUrl}
-                    label={product1IsHistoricalOnly ? 'Preview historique producteur 1' : 'Preview producteur 1'}
+                    label={product1IsHistoricalOnly ? t('battleDetail.historicalPreviewProducer1') : t('battleDetail.previewProducer1')}
                     playerId={`battle-${battle.id}-product-1`}
                     activePlayerId={activeBattlePlayerId}
                     onActivePlayerChange={setActiveBattlePlayerId}
                   />
                   {battle.product1 && product1Url && (
                     <Link to={product1Url} className="text-xs text-zinc-400 hover:text-white">
-                      Lien vers la page produit
+                      {t('battleDetail.productPageLink')}
                     </Link>
                   )}
                   {product1IsHistoricalOnly && !product1PreviewUrl && (
-                    <p className="text-xs text-zinc-500">Aucun extrait historique disponible.</p>
+                    <p className="text-xs text-zinc-500">{t('battleDetail.noHistoricalPreview')}</p>
                   )}
                 </div>
               ) : (
-                <p className="text-zinc-500 text-sm">Pas encore assigne.</p>
+                <p className="text-zinc-500 text-sm">{t('battleDetail.notAssigned')}</p>
               )}
             </Card>
 
             <Card className="bg-zinc-800/30">
-              <p className="text-zinc-500 text-xs uppercase mb-2">Produit 2</p>
+              <p className="text-zinc-500 text-xs uppercase mb-2">{t('battleDetail.product2Label')}</p>
               {battle.product2 || product2Snapshot ? (
                 <div className="space-y-2">
-                  <p className="text-white font-medium">{product2Title || 'Produit indisponible'}</p>
+                  <p className="text-white font-medium">{product2Title || t('battleDetail.productUnavailable')}</p>
                   {product2IsHistoricalOnly && (
-                    <p className="text-xs text-amber-300">Produit supprime. Historique conserve.</p>
+                    <p className="text-xs text-amber-300">{t('battleDetail.deletedProductHistory')}</p>
                   )}
                   <BattleAudioPlayer
                     src={product2PreviewUrl}
-                    label={product2IsHistoricalOnly ? 'Preview historique producteur 2' : 'Preview producteur 2'}
+                    label={product2IsHistoricalOnly ? t('battleDetail.historicalPreviewProducer2') : t('battleDetail.previewProducer2')}
                     playerId={`battle-${battle.id}-product-2`}
                     activePlayerId={activeBattlePlayerId}
                     onActivePlayerChange={setActiveBattlePlayerId}
                   />
                   {battle.product2 && product2Url && (
                     <Link to={product2Url} className="text-xs text-zinc-400 hover:text-white">
-                      Lien vers la page produit
+                      {t('battleDetail.productPageLink')}
                     </Link>
                   )}
                   {product2IsHistoricalOnly && !product2PreviewUrl && (
-                    <p className="text-xs text-zinc-500">Aucun extrait historique disponible.</p>
+                    <p className="text-xs text-zinc-500">{t('battleDetail.noHistoricalPreview')}</p>
                   )}
                 </div>
               ) : (
-                <p className="text-zinc-500 text-sm">Pas encore assigne.</p>
+                <p className="text-zinc-500 text-sm">{t('battleDetail.notAssigned')}</p>
               )}
             </Card>
           </div>
 
           <div className="text-xs text-zinc-500 inline-flex items-center gap-1">
             <Users className="w-3 h-3" />
-            Battle: {battle.slug}
+            {t('battleDetail.slugLabel')}: {battle.slug}
           </div>
         </Card>
 

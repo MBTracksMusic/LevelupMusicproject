@@ -1,15 +1,18 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Crown, MessageSquare, MessageSquareText, ShieldCheck, Swords } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
+import { formatRankTier } from '../../components/reputation/ReputationBadge';
 import { ReputationBadge } from '../../components/reputation/ReputationBadge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useForumCategories, useLatestForumTopics } from '../../lib/forum/hooks';
+import { useTranslation } from '../../lib/i18n';
 import { useMyReputation } from '../../lib/reputation/hooks';
 import { meetsRankRequirement } from '../../lib/reputation/utils';
 import { formatRelativeTime } from '../../lib/utils/format';
 
 export function ForumPage() {
+  const { t } = useTranslation();
   const { reputation } = useMyReputation();
   const { categories, isLoading: isCategoriesLoading, error: categoriesError, refresh: refreshCategories } = useForumCategories();
   const { topics, isLoading: isTopicsLoading, error: topicsError, refresh: refreshTopics } = useLatestForumTopics();
@@ -19,14 +22,12 @@ export function ForumPage() {
       <div className="max-w-6xl mx-auto px-4 space-y-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-white">Forum</h1>
-            <p className="text-zinc-400">
-              Categories, derniers topics et entraide entre membres connectes.
-            </p>
+            <h1 className="text-3xl font-bold text-white">{t('forum.title')}</h1>
+            <p className="text-zinc-400">{t('forum.subtitle')}</p>
           </div>
           <div className="flex gap-3">
             <Link to="/forum/new">
-              <Button>Nouveau topic</Button>
+              <Button>{t('forum.newTopic')}</Button>
             </Link>
             <Button
               type="button"
@@ -36,15 +37,15 @@ export function ForumPage() {
                 void refreshTopics();
               }}
             >
-              Actualiser
+              {t('common.refresh')}
             </Button>
           </div>
         </div>
 
         <section className="space-y-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Categories</h2>
-            <p className="text-sm text-zinc-400">Parcourez les espaces disponibles.</p>
+            <h2 className="text-xl font-semibold text-white">{t('forum.categoriesTitle')}</h2>
+            <p className="text-sm text-zinc-400">{t('forum.categoriesSubtitle')}</p>
           </div>
 
           {isCategoriesLoading && (
@@ -77,45 +78,45 @@ export function ForumPage() {
                         {category.is_premium_only && (
                           <Badge variant="premium">
                             <Crown className="h-3 w-3" />
-                            Premium
+                            {t('forum.premium')}
                           </Badge>
                         )}
                         {category.is_competitive && (
                           <Badge variant="info">
                             <Swords className="h-3 w-3" />
-                            Competitif
+                            {t('forum.competitive')}
                           </Badge>
                         )}
                         {category.required_rank_tier && (
                           <Badge variant="warning">
                             <ShieldCheck className="h-3 w-3" />
-                            Rang min. {category.required_rank_tier}
+                            {t('forum.minimumRank', { rank: formatRankTier(category.required_rank_tier, t) })}
                           </Badge>
                         )}
                         {isRankLocked && (
                           <Badge variant="danger">
-                            Verrouille
+                            {t('forum.locked')}
                           </Badge>
                         )}
                       </div>
                       <CardDescription>
-                        {category.description || 'Aucune description pour cette categorie.'}
+                        {category.description || t('forum.noCategoryDescription')}
                       </CardDescription>
                       <div className="flex flex-wrap gap-2 text-xs text-zinc-500">
-                        <span>XP x{category.xp_multiplier ?? 1}</span>
-                        <span>Moderation {category.moderation_strictness ?? 'normal'}</span>
-                        <span>{category.allow_links === false ? 'Liens interdits' : 'Liens autorises'}</span>
-                        <span>{category.allow_media === false ? 'Media interdits' : 'Media autorises'}</span>
+                        <span>{t('forum.xpMultiplier', { value: category.xp_multiplier ?? 1 })}</span>
+                        <span>{t('forum.moderationLabel', { value: category.moderation_strictness ?? t('forum.moderationNormal') })}</span>
+                        <span>{category.allow_links === false ? t('forum.linksForbidden') : t('forum.linksAllowed')}</span>
+                        <span>{category.allow_media === false ? t('forum.mediaForbidden') : t('forum.mediaAllowed')}</span>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3 text-sm text-zinc-400">
                       <span className="inline-flex items-center gap-1">
                         <MessageSquareText className="h-4 w-4" />
-                        {category.topic_count} topics
+                        {t('forum.topicsCount', { count: category.topic_count })}
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <MessageSquare className="h-4 w-4" />
-                        {category.post_count} posts
+                        {t('forum.postsCount', { count: category.post_count })}
                       </span>
                     </div>
                   </CardHeader>
@@ -128,8 +129,8 @@ export function ForumPage() {
 
         <section className="space-y-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Derniers topics</h2>
-            <p className="text-sm text-zinc-400">Les discussions les plus recentes du forum.</p>
+            <h2 className="text-xl font-semibold text-white">{t('forum.latestTopicsTitle')}</h2>
+            <p className="text-sm text-zinc-400">{t('forum.latestTopicsSubtitle')}</p>
           </div>
 
           {isTopicsLoading && (
@@ -157,11 +158,14 @@ export function ForumPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <CardTitle>{topic.title}</CardTitle>
                         {topic.category_is_premium_only && (
-                          <Badge variant="premium">Premium</Badge>
+                          <Badge variant="premium">{t('forum.premium')}</Badge>
                         )}
                       </div>
                       <CardDescription>
-                        {topic.category_name} • par {topic.author?.username || `Membre ${topic.user_id.slice(0, 8)}`}
+                        {t('forum.byAuthor', {
+                          category: topic.category_name,
+                          author: topic.author?.username || t('forum.memberFallback', { id: topic.user_id.slice(0, 8) }),
+                        })}
                       </CardDescription>
                       {topic.author && (
                         <ReputationBadge
@@ -173,13 +177,13 @@ export function ForumPage() {
                       )}
                     </div>
                     <div className="text-right text-sm text-zinc-400">
-                      <div>{topic.post_count} reponses</div>
+                      <div>{t('forum.repliesCount', { count: topic.post_count })}</div>
                       <div>{formatRelativeTime(topic.last_post_at)}</div>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <span className="inline-flex items-center gap-2 text-sm text-rose-300">
-                      Ouvrir la discussion
+                      {t('forum.openDiscussion')}
                       <ArrowRight className="h-4 w-4" />
                     </span>
                   </CardContent>

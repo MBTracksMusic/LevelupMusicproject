@@ -23,13 +23,12 @@ import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { ProductWithRelations } from '../lib/supabase/types';
+import { formatNumber } from '../lib/utils/format';
 
 interface HomeStatsPayload {
   beats_published?: number;
   active_producers?: number;
 }
-
-const statsNumberFormatter = new Intl.NumberFormat('fr-FR');
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -46,7 +45,6 @@ export function HomePage() {
     activeProducers: null,
   });
   const [isHomeStatsLoading, setIsHomeStatsLoading] = useState(true);
-
   useEffect(() => {
     if (!user) {
       clearWishlist();
@@ -159,7 +157,7 @@ export function HomePage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
             <Link to="/beats">
               <Button size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
-                Explorer les beats
+                {t('home.exploreBeats')}
               </Button>
             </Link>
             <Link to="/pricing">
@@ -174,25 +172,25 @@ export function HomePage() {
               <Headphones className="w-5 h-5" />
               <span>
                 {isHomeStatsLoading
-                  ? '... Beats'
+                  ? `... ${t('home.statsBeatsLabel')}`
                   : homeStats.beatsPublished !== null
-                    ? `${statsNumberFormatter.format(homeStats.beatsPublished)} Beats`
-                    : 'Beats indisponibles'}
+                    ? `${formatNumber(homeStats.beatsPublished)} ${t('home.statsBeatsLabel')}`
+                    : t('home.statsBeatsUnavailable')}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5" />
               <span>
                 {isHomeStatsLoading
-                  ? '... Producteurs'
+                  ? `... ${t('nav.producers')}`
                   : homeStats.activeProducers !== null
-                    ? `${statsNumberFormatter.format(homeStats.activeProducers)} Producteurs`
-                    : 'Producteurs indisponibles'}
+                    ? `${formatNumber(homeStats.activeProducers)} ${t('nav.producers')}`
+                    : t('home.statsProducersUnavailable')}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5" />
-              <span>Paiement securise</span>
+              <span>{t('home.securePayment')}</span>
             </div>
           </div>
         </div>
@@ -215,7 +213,7 @@ export function HomePage() {
                   </h2>
                 </div>
                 <p className="text-zinc-400">
-                  Des beats uniques, disponibles une seule fois
+                  {t('home.exclusiveDropsDesc')}
                 </p>
               </div>
               <Link to="/exclusives">
@@ -256,10 +254,10 @@ export function HomePage() {
                 <Zap className="w-7 h-7 text-rose-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                Publication rapide
+                {t('home.fastPublishingTitle')}
               </h3>
               <p className="text-zinc-400">
-                Uploadez vos beats en quelques clics et commencez a vendre immediatement.
+                {t('home.fastPublishingDesc')}
               </p>
             </div>
 
@@ -268,10 +266,10 @@ export function HomePage() {
                 <Shield className="w-7 h-7 text-emerald-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                Protection des fichiers
+                {t('home.fileProtectionTitle')}
               </h3>
               <p className="text-zinc-400">
-                Vos masters sont proteges. Seuls les acheteurs ont acces aux fichiers originaux.
+                {t('home.fileProtectionDesc')}
               </p>
             </div>
 
@@ -280,10 +278,10 @@ export function HomePage() {
                 <TrendingUp className="w-7 h-7 text-sky-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
-                Analytics detailees
+                {t('home.detailedAnalyticsTitle')}
               </h3>
               <p className="text-zinc-400">
-                Suivez vos ventes, ecoutes et revenus en temps reel depuis votre dashboard.
+                {t('home.detailedAnalyticsDesc')}
               </p>
             </div>
           </div>
@@ -291,7 +289,7 @@ export function HomePage() {
           <div className="text-center">
             <Link to="/pricing">
               <Button size="lg" rightIcon={<ArrowRight className="w-5 h-5" />}>
-                Voir les offres producteur
+                {t('home.viewProducerPlans')}
               </Button>
             </Link>
           </div>
@@ -301,20 +299,20 @@ export function HomePage() {
       <section className="py-20 bg-gradient-to-br from-rose-950/30 via-zinc-950 to-orange-950/20">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-            Pret a creer votre prochain hit ?
+            {t('home.finalCtaTitle')}
           </h2>
           <p className="text-xl text-zinc-400 mb-10">
-            Rejoignez des milliers d'artistes qui font confiance a LevelupMusic
+            {t('home.finalCtaSubtitle')}
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link to="/register">
               <Button size="lg">
-                Creer un compte gratuit
+                {t('home.createFreeAccount')}
               </Button>
             </Link>
             <Link to="/beats">
               <Button size="lg" variant="outline" leftIcon={<Play className="w-5 h-5" />}>
-                Ecouter des beats
+                {t('home.listenToBeats')}
               </Button>
             </Link>
           </div>

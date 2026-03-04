@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User, Mail, Shield, Music, ShoppingBag, Heart, Download, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth/hooks';
+import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useMyReputation } from '../lib/reputation/hooks';
 import { supabase } from '../lib/supabase/client';
 import type { License, ProductWithRelations, Purchase } from '../lib/supabase/types';
 import { fetchPublicProducerProfilesMap, type PublicProducerProfileRow } from '../lib/supabase/publicProfiles';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import { buildAudioStoragePathCandidates, extractStoragePathFromCandidate } from '../lib/utils/storage';
-import { formatPrice } from '../lib/utils/format';
+import { formatDate, formatPrice } from '../lib/utils/format';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
@@ -49,22 +50,49 @@ const EXPIRED_SUBSCRIPTION_STATUSES = new Set(['canceled', 'cancelled', 'incompl
 const getSubscriptionDateLabel = (
   subscriptionStatus: string | null | undefined,
   cancelAtPeriodEnd: boolean | null | undefined,
+  t: TranslateFn,
 ) => {
   const normalizedStatus = (subscriptionStatus ?? '').toLowerCase();
 
   if (normalizedStatus === 'active') {
-    return cancelAtPeriodEnd ? 'Fin d’accès' : 'Prochain prélèvement';
+    return cancelAtPeriodEnd
+      ? t('subscription.dateLabelAccessEnds')
+      : t('subscription.dateLabelNextCharge');
   }
 
   if (EXPIRED_SUBSCRIPTION_STATUSES.has(normalizedStatus)) {
-    return 'Abonnement expiré le';
+    return t('subscription.dateLabelExpiredAt');
   }
 
-  return 'Prochaine échéance';
+  return t('subscription.dateLabelNextDue');
 };
 
-const formatSubscriptionDate = (value: string | number | Date | null | undefined) => {
-  if (value === null || value === undefined) return 'N/A';
+const getSubscriptionStatusLabel = (
+  subscriptionStatus: string | null | undefined,
+  t: TranslateFn,
+) => {
+  const normalizedStatus = (subscriptionStatus ?? '').trim().toLowerCase();
+
+  if (!normalizedStatus) return t('subscription.noSubscription');
+  if (normalizedStatus === 'active') return t('subscription.statusActive');
+  if (normalizedStatus === 'trialing') return t('subscription.statusTrialing');
+  if (normalizedStatus === 'past_due') return t('subscription.statusPastDue');
+  if (normalizedStatus === 'unpaid') return t('subscription.statusUnpaid');
+  if (normalizedStatus === 'incomplete') return t('subscription.statusIncomplete');
+  if (normalizedStatus === 'incomplete_expired') return t('subscription.statusIncompleteExpired');
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') {
+    return t('subscription.statusCanceled');
+  }
+  if (normalizedStatus === 'paused') return t('subscription.statusPaused');
+
+  return subscriptionStatus;
+};
+
+const formatSubscriptionDate = (
+  value: string | number | Date | null | undefined,
+  t: TranslateFn,
+) => {
+  if (value === null || value === undefined) return t('common.notAvailable');
 
   let parsedDate: Date | null = null;
 
@@ -75,11 +103,11 @@ const formatSubscriptionDate = (value: string | number | Date | null | undefined
     parsedDate = new Date(timestampMs);
   } else if (typeof value === 'string') {
     const trimmedValue = value.trim();
-    if (!trimmedValue) return 'N/A';
+    if (!trimmedValue) return t('common.notAvailable');
 
     if (/^-?\d+$/.test(trimmedValue)) {
       const numericTimestamp = Number(trimmedValue);
-      if (!Number.isFinite(numericTimestamp)) return 'N/A';
+      if (!Number.isFinite(numericTimestamp)) return t('common.notAvailable');
       const timestampMs = Math.abs(numericTimestamp) < 1_000_000_000_000
         ? numericTimestamp * 1000
         : numericTimestamp;
@@ -89,8 +117,8 @@ const formatSubscriptionDate = (value: string | number | Date | null | undefined
     }
   }
 
-  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return 'N/A';
-  return parsedDate.toLocaleDateString('fr-FR');
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return t('common.notAvailable');
+  return formatDate(parsedDate);
 };
 
 const asNonEmptyString = (value: unknown) => {
@@ -131,20 +159,12 @@ const toNullableBoolean = (value: unknown) => {
   return value;
 };
 
-const formatLimit = (value: number | null) =>
-  value === null ? 'Illimité' : value.toLocaleString('fr-FR');
+const formatLimit = (value: number | null, t: TranslateFn) =>
+  value === null ? t('common.unlimited') : value.toLocaleString();
 
-const formatBoolean = (value: boolean | null) => {
-  if (value === null) return 'Non défini';
-  return value ? 'Oui' : 'Non';
-};
-
-const roleLabels: Record<string, string> = {
-  visitor: 'Visiteur',
-  user: 'Utilisateur',
-  confirmed_user: 'Utilisateur confirme',
-  producer: 'Producteur',
-  admin: 'Administrateur',
+const formatBoolean = (value: boolean | null, t: TranslateFn) => {
+  if (value === null) return t('common.notDefined');
+  return value ? t('common.yes') : t('common.no');
 };
 
 const roleColors: Record<string, string> = {
@@ -161,6 +181,7 @@ const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || '
 export function DashboardPage() {
   const { user, profile } = useAuth();
   const { reputation } = useMyReputation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { fetchWishlist, toggleWishlist } = useWishlistStore();
   const [purchases, setPurchases] = useState<DashboardPurchase[]>([]);
@@ -258,7 +279,7 @@ export function DashboardPage() {
       } catch (error) {
         console.error('Error loading purchases:', error);
         if (!isCancelled) {
-          setPurchasesError("Impossible de charger vos achats pour l'instant.");
+          setPurchasesError(t('dashboard.purchasesLoadError'));
         }
       } finally {
         if (!isCancelled) {
@@ -272,7 +293,7 @@ export function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id]);
+  }, [t, user?.id]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -453,52 +474,59 @@ export function DashboardPage() {
 
   const purchaseCount = purchases.length;
   const producerSubscriptionStatus = producerSubscription?.subscription_status ?? null;
-  const nextProducerBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end);
+  const producerSubscriptionStatusLabel = getSubscriptionStatusLabel(producerSubscriptionStatus, t);
+  const nextProducerBillingDate = formatSubscriptionDate(producerSubscription?.current_period_end, t);
   const producerSubscriptionDateLabel = getSubscriptionDateLabel(
     producerSubscription?.subscription_status,
     producerSubscription?.cancel_at_period_end,
+    t,
   );
   const producerAutoRenewLabel = producerSubscription
-    ? (producerSubscription.cancel_at_period_end ? 'Non' : 'Oui')
+    ? (producerSubscription.cancel_at_period_end ? t('common.no') : t('common.yes'))
     : '-';
 
-  const stats = useMemo(
-    () => [
-      {
-        label: 'Achats',
-        value: purchaseCount,
-        icon: ShoppingBag,
-        color: 'text-blue-400',
-      },
-      {
-        label: 'Favoris',
-        value: wishlistCount,
-        icon: Heart,
-        color: 'text-rose-400',
-        onClick: () => navigate('/wishlist'),
-      },
-      ...(profile?.role === 'admin'
-        ? [{
-            label: 'Battles en attente',
-            value: awaitingAdminCount,
-            icon: Shield,
-            color: 'text-amber-400',
-            onClick: () => navigate('/admin/battles'),
-          }]
-        : []),
-      ...((profile?.is_producer_active || profile?.role === 'producer' || producerSubscriptionStatus)
-        ? [{
-            label: 'Statut producteur',
-            value: producerSubscriptionStatus || 'Aucun abonnement',
-            icon: Music,
-            color: producerSubscriptionStatus === 'active' || producerSubscriptionStatus === 'trialing'
-              ? 'text-green-400'
-              : 'text-orange-400',
-          }]
-        : []),
-    ],
-    [awaitingAdminCount, purchaseCount, wishlistCount, navigate, producerSubscriptionStatus, profile?.is_producer_active, profile?.role]
-  );
+  const roleLabels: Record<string, string> = {
+    visitor: t('dashboard.roleVisitor'),
+    user: t('dashboard.roleUser'),
+    confirmed_user: t('dashboard.roleConfirmedUser'),
+    producer: t('dashboard.roleProducer'),
+    admin: t('dashboard.roleAdmin'),
+  };
+
+  const stats = [
+    {
+      label: t('dashboard.statsPurchases'),
+      value: purchaseCount,
+      icon: ShoppingBag,
+      color: 'text-blue-400',
+    },
+    {
+      label: t('dashboard.statsWishlist'),
+      value: wishlistCount,
+      icon: Heart,
+      color: 'text-rose-400',
+      onClick: () => navigate('/wishlist'),
+    },
+    ...(profile?.role === 'admin'
+      ? [{
+          label: t('dashboard.statsAwaitingBattles'),
+          value: awaitingAdminCount,
+          icon: Shield,
+          color: 'text-amber-400',
+          onClick: () => navigate('/admin/battles'),
+        }]
+      : []),
+    ...((profile?.is_producer_active || profile?.role === 'producer' || producerSubscriptionStatus)
+      ? [{
+          label: t('dashboard.statsProducerStatus'),
+          value: producerSubscriptionStatusLabel,
+          icon: Music,
+          color: producerSubscriptionStatus === 'active' || producerSubscriptionStatus === 'trialing'
+            ? 'text-green-400'
+            : 'text-orange-400',
+        }]
+      : []),
+  ];
 
   const handleRecentWishlistToggle = async (productId: string) => {
     if (!user?.id) return;
@@ -595,7 +623,7 @@ export function DashboardPage() {
     const productId = purchase.product_id || purchase.product?.id;
 
     if (!productId) {
-      toast.error('Produit indisponible pour ce téléchargement.');
+      toast.error(t('dashboard.productUnavailableDownload'));
       return;
     }
 
@@ -615,10 +643,10 @@ export function DashboardPage() {
           (masterData.path || masterData.url).split('?')[0].split('/').pop() || 'track.mp3'
         );
         await forceFileDownload(masterData.url, fallbackName);
-        toast.success('Téléchargement lancé');
+        toast.success(t('dashboard.downloadStarted'));
       } catch (downloadError) {
         console.error('Master download error:', downloadError);
-        toast.error('Téléchargement impossible pour le moment.');
+        toast.error(t('dashboard.downloadError'));
       }
       return;
     }
@@ -631,13 +659,13 @@ export function DashboardPage() {
         masterError,
         masterData,
       });
-      toast.error('Téléchargement impossible pour le moment.');
+      toast.error(t('dashboard.downloadError'));
       return;
     }
 
     try {
       await handleLegacyDownload(legacyPath);
-      toast.success('Téléchargement lancé');
+      toast.success(t('dashboard.downloadStarted'));
     } catch (legacyError) {
       console.error('Legacy download error:', {
         purchaseId: purchase.id,
@@ -646,7 +674,7 @@ export function DashboardPage() {
         masterData,
         legacyError,
       });
-      toast.error('Téléchargement impossible pour le moment.');
+      toast.error(t('dashboard.downloadError'));
     }
   };
 
@@ -697,18 +725,18 @@ export function DashboardPage() {
       functionError: contractError,
       lastError,
     });
-    toast.error('Téléchargement du contrat impossible pour le moment (PDF indisponible).');
+    toast.error(t('dashboard.contractDownloadError'));
   };
 
   const selectedLicenseMetadata = (selectedLicensePurchase?.metadata as Record<string, unknown> | null) || null;
   const selectedLicense = selectedLicensePurchase?.license || null;
   const selectedLicenseName =
-    selectedLicense?.name || selectedLicensePurchase?.license_type || 'Licence';
+    selectedLicense?.name || selectedLicensePurchase?.license_type || t('dashboard.licenseFallback');
   const selectedLicenseDescription =
     selectedLicense?.description ||
     (typeof selectedLicenseMetadata?.license_description === 'string'
       ? selectedLicenseMetadata.license_description
-      : 'Description indisponible pour cet achat.');
+      : t('dashboard.licenseDescriptionUnavailable'));
 
   const selectedMaxStreams =
     selectedLicense?.max_streams ??
@@ -738,8 +766,10 @@ export function DashboardPage() {
     <div className="pt-20 pb-12 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Tableau de bord</h1>
-          <p className="text-zinc-400">Bienvenue, {profile?.username || user?.email}</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('dashboard.title')}</h1>
+          <p className="text-zinc-400">
+            {t('dashboard.welcome', { name: profile?.username || user?.email || t('common.unknown') })}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -767,10 +797,14 @@ export function DashboardPage() {
           <Card className="p-6 mb-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm text-zinc-400 mb-1">Reputation</p>
-                <p className="text-2xl font-bold text-white">{reputation.xp} XP</p>
+                <p className="text-sm text-zinc-400 mb-1">{t('dashboard.reputationTitle')}</p>
+                <p className="text-2xl font-bold text-white">{reputation.xp} {t('common.xpShort')}</p>
                 <p className="text-sm text-zinc-500">
-                  Forum {reputation.forum_xp} • Battles {reputation.battle_xp} • Score {Number(reputation.reputation_score).toFixed(0)}
+                  {t('dashboard.reputationBreakdown', {
+                    forumXp: reputation.forum_xp,
+                    battleXp: reputation.battle_xp,
+                    score: Number(reputation.reputation_score).toFixed(0),
+                  })}
                 </p>
               </div>
               <ReputationBadge
@@ -786,35 +820,35 @@ export function DashboardPage() {
           <Card className="p-6">
             <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
               <User className="w-5 h-5 text-rose-400" />
-              Informations du profil
+              {t('dashboard.profileInfo')}
             </h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Nom d'utilisateur</span>
+                <span className="text-zinc-400">{t('dashboard.username')}</span>
                 <span className="text-white font-medium">{profile?.username || '-'}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Email</span>
+                <span className="text-zinc-400">{t('common.email')}</span>
                 <span className="text-white font-medium">{user?.email}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Role</span>
+                <span className="text-zinc-400">{t('dashboard.roleLabel')}</span>
                 <Badge className={roleColors[profile?.role || 'visitor']}>
                   {roleLabels[profile?.role || 'visitor']}
                 </Badge>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Producteur actif</span>
+                <span className="text-zinc-400">{t('dashboard.activeProducer')}</span>
                 <Badge className={profile?.is_producer_active ? 'bg-green-600' : 'bg-zinc-700'}>
-                  {profile?.is_producer_active ? 'Oui' : 'Non'}
+                  {profile?.is_producer_active ? t('common.yes') : t('common.no')}
                 </Badge>
               </div>
               {(profile?.role === 'producer' || producerSubscription || isProducerSubscriptionLoading) && (
                 <>
                   <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                    <span className="text-zinc-400">Statut abonnement</span>
+                    <span className="text-zinc-400">{t('dashboard.subscriptionStatus')}</span>
                     <span className="text-white font-medium">
-                      {isProducerSubscriptionLoading ? 'Chargement...' : (producerSubscriptionStatus || 'Aucun abonnement')}
+                      {isProducerSubscriptionLoading ? t('common.loading') : producerSubscriptionStatusLabel}
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-zinc-800">
@@ -824,7 +858,7 @@ export function DashboardPage() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2">
-                    <span className="text-zinc-400">Renouvellement auto</span>
+                    <span className="text-zinc-400">{t('subscription.autoRenew')}</span>
                     <Badge className={producerSubscription && !producerSubscription.cancel_at_period_end ? 'bg-green-600' : 'bg-zinc-700'}>
                       {isProducerSubscriptionLoading ? '...' : producerAutoRenewLabel}
                     </Badge>
@@ -837,28 +871,28 @@ export function DashboardPage() {
           <Card className="p-6">
             <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
               <Shield className="w-5 h-5 text-rose-400" />
-              Securite du compte
+              {t('dashboard.security')}
             </h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Email verifie</span>
+                <span className="text-zinc-400">{t('dashboard.emailVerified')}</span>
                 <Badge className={user?.email_confirmed_at ? 'bg-green-600' : 'bg-orange-600'}>
-                  {user?.email_confirmed_at ? 'Oui' : 'En attente'}
+                  {user?.email_confirmed_at ? t('common.yes') : t('dashboard.pending')}
                 </Badge>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-zinc-800">
-                <span className="text-zinc-400">Inscription</span>
+                <span className="text-zinc-400">{t('dashboard.registration')}</span>
                 <span className="text-white">
                   {user?.created_at
-                    ? new Date(user.created_at).toLocaleDateString('fr-FR')
+                    ? formatDate(user.created_at)
                     : '-'}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2">
-                <span className="text-zinc-400">Derniere connexion</span>
+                <span className="text-zinc-400">{t('dashboard.lastLogin')}</span>
                 <span className="text-white">
                   {user?.last_sign_in_at
-                    ? new Date(user.last_sign_in_at).toLocaleDateString('fr-FR')
+                    ? formatDate(user.last_sign_in_at)
                     : '-'}
                 </span>
               </div>
@@ -870,13 +904,13 @@ export function DashboardPage() {
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
               <ShoppingBag className="w-5 h-5 text-rose-400" />
-              Mes achats
+              {t('dashboard.purchasesTitle')}
             </h2>
             <Badge className="bg-zinc-700">{purchases.length}</Badge>
           </div>
 
           {isPurchasesLoading && (
-            <div className="py-6 text-zinc-500">Chargement de vos achats...</div>
+            <div className="py-6 text-zinc-500">{t('dashboard.loadingPurchases')}</div>
           )}
 
           {!isPurchasesLoading && purchasesError && (
@@ -884,7 +918,7 @@ export function DashboardPage() {
           )}
 
           {!isPurchasesLoading && !purchasesError && purchases.length === 0 && (
-            <div className="py-6 text-zinc-500">Aucun achat valide pour le moment.</div>
+            <div className="py-6 text-zinc-500">{t('dashboard.noPurchases')}</div>
           )}
 
           {!isPurchasesLoading && !purchasesError && purchases.length > 0 && (
@@ -893,10 +927,10 @@ export function DashboardPage() {
                 const product = purchase.product;
                 const license = purchase.license;
                 const canDownload = Boolean(purchase.product_id);
-                const licenseName = license?.name || purchase.license_type || 'Licence';
+                const licenseName = license?.name || purchase.license_type || t('dashboard.licenseFallback');
                 const licenseDescription =
                   license?.description ||
-                  "Les droits détaillés de cette licence sont disponibles dans le contrat.";
+                  t('dashboard.licenseDescriptionFallback');
                 const canViewLicenseDetails = Boolean(license || purchase.license_type);
 
                 return (
@@ -913,22 +947,22 @@ export function DashboardPage() {
                         />
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center text-xs text-zinc-500">
-                          MP3
+                          {t('dashboard.audioFallback')}
                         </div>
                       )}
                       <div className="min-w-0">
                         <p className="text-white font-medium truncate">
-                          {product?.title || 'Titre indisponible'}
+                          {product?.title || t('dashboard.titleUnavailable')}
                         </p>
                         <p className="text-sm text-zinc-400 truncate">
-                          {product?.producer?.username || 'Producteur'} ·{' '}
-                          {new Date(purchase.created_at).toLocaleDateString('fr-FR')}
+                          {product?.producer?.username || t('dashboard.producerFallback')} ·{' '}
+                          {formatDate(purchase.created_at)}
                         </p>
                         <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
                           <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
                             {licenseName}
                           </span>
-                          <span>{purchase.is_exclusive ? 'Exclusif' : 'Standard'}</span>
+                          <span>{purchase.is_exclusive ? t('dashboard.exclusiveType') : t('dashboard.standardType')}</span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-500 line-clamp-2">
                           {licenseDescription}
@@ -946,7 +980,7 @@ export function DashboardPage() {
                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors"
                         >
                           <Download className="w-4 h-4" />
-                          Télécharger audio
+                          {t('dashboard.downloadAudio')}
                         </button>
                       )}
                       <button
@@ -957,7 +991,7 @@ export function DashboardPage() {
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors"
                       >
                         <Download className="w-4 h-4" />
-                        Télécharger licence
+                        {t('dashboard.downloadLicense')}
                       </button>
                       <button
                         type="button"
@@ -966,7 +1000,7 @@ export function DashboardPage() {
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <FileText className="w-4 h-4" />
-                        Voir détails de licence
+                        {t('dashboard.viewLicenseDetails')}
                       </button>
                     </div>
                   </li>
@@ -980,17 +1014,17 @@ export function DashboardPage() {
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
               <Heart className="w-5 h-5 text-rose-400" />
-              Mes favoris récents
+              {t('dashboard.recentWishlist')}
             </h2>
             <Badge className="bg-zinc-700">{wishlistCount}</Badge>
           </div>
 
           {isWishlistLoading && recentWishlist.length === 0 && (
-            <div className="py-6 text-zinc-500">Chargement de vos favoris...</div>
+            <div className="py-6 text-zinc-500">{t('dashboard.loadingWishlist')}</div>
           )}
 
           {!isWishlistLoading && recentWishlist.length === 0 && (
-            <div className="py-6 text-zinc-500">Aucun favori pour le moment</div>
+            <div className="py-6 text-zinc-500">{t('dashboard.noWishlist')}</div>
           )}
 
           {recentWishlist.length > 0 && (
@@ -1010,19 +1044,22 @@ export function DashboardPage() {
         <Card className="p-6 mt-6">
           <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
             <Mail className="w-5 h-5 text-rose-400" />
-            Activite recente
+            {t('dashboard.recentActivity')}
           </h2>
           {purchases.length > 0 ? (
             <ul className="space-y-2">
               {purchases.slice(0, 5).map((purchase) => (
                 <li key={`activity-${purchase.id}`} className="text-sm text-zinc-400">
-                  Achat valide: {purchase.product?.title || 'Titre'} ({new Date(purchase.created_at).toLocaleDateString('fr-FR')})
+                  {t('dashboard.activityPurchase', {
+                    title: purchase.product?.title || t('dashboard.activityTitleFallback'),
+                    date: formatDate(purchase.created_at),
+                  })}
                 </li>
               ))}
             </ul>
           ) : (
             <div className="text-center py-8 text-zinc-500">
-              Aucune activite recente
+              {t('dashboard.noActivity')}
             </div>
           )}
         </Card>
@@ -1030,46 +1067,48 @@ export function DashboardPage() {
         <Modal
           isOpen={Boolean(selectedLicensePurchase)}
           onClose={() => setSelectedLicensePurchase(null)}
-          title={selectedLicensePurchase ? `Détails de licence · ${selectedLicenseName}` : 'Détails de licence'}
-          description="Résumé des droits et limites associés à cet achat."
+          title={selectedLicensePurchase
+            ? t('dashboard.licenseModalTitle', { name: selectedLicenseName })
+            : t('dashboard.licenseModalTitleDefault')}
+          description={t('dashboard.licenseModalDescription')}
           size="lg"
         >
           {selectedLicensePurchase && (
             <div className="space-y-4">
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-                <p className="text-sm text-zinc-400 mb-1">Description</p>
+                <p className="text-sm text-zinc-400 mb-1">{t('common.description')}</p>
                 <p className="text-sm text-zinc-200">{selectedLicenseDescription}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Streams max</p>
-                  <p className="text-sm text-white">{formatLimit(selectedMaxStreams)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.maxStreams')}</p>
+                  <p className="text-sm text-white">{formatLimit(selectedMaxStreams, t)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Ventes max</p>
-                  <p className="text-sm text-white">{formatLimit(selectedMaxSales)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.maxSales')}</p>
+                  <p className="text-sm text-white">{formatLimit(selectedMaxSales, t)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Monétisation YouTube</p>
-                  <p className="text-sm text-white">{formatBoolean(selectedYoutubeMonetization)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.youtubeMonetization')}</p>
+                  <p className="text-sm text-white">{formatBoolean(selectedYoutubeMonetization, t)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Clip vidéo autorisé</p>
-                  <p className="text-sm text-white">{formatBoolean(selectedMusicVideoAllowed)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.musicVideoAllowed')}</p>
+                  <p className="text-sm text-white">{formatBoolean(selectedMusicVideoAllowed, t)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Crédit obligatoire</p>
-                  <p className="text-sm text-white">{formatBoolean(selectedCreditRequired)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.creditRequired')}</p>
+                  <p className="text-sm text-white">{formatBoolean(selectedCreditRequired, t)}</p>
                 </div>
                 <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-3">
-                  <p className="text-xs text-zinc-500 mb-1">Licence exclusive autorisée</p>
-                  <p className="text-sm text-white">{formatBoolean(selectedExclusiveAllowed)}</p>
+                  <p className="text-xs text-zinc-500 mb-1">{t('dashboard.exclusiveAllowed')}</p>
+                  <p className="text-sm text-white">{formatBoolean(selectedExclusiveAllowed, t)}</p>
                 </div>
               </div>
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
-                <p className="text-xs text-zinc-500 mb-1">Prix payé</p>
+                <p className="text-xs text-zinc-500 mb-1">{t('dashboard.pricePaid')}</p>
                 <p className="text-sm text-white">
                   {formatPrice(selectedLicense?.price ?? selectedLicensePurchase.amount)}
                 </p>

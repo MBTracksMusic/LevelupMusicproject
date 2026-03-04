@@ -29,7 +29,7 @@ export function LoginPage() {
 
       if (result.user && !result.user.email_confirmed_at) {
         navigate(`/email-confirmation?email=${encodeURIComponent(email)}`);
-        toast.error('Veuillez confirmer votre email avant de vous connecter');
+        toast.error(t('auth.confirmEmailBeforeLogin'));
         return;
       }
 
@@ -101,7 +101,7 @@ export function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               leftIcon={<Mail className="w-5 h-5" />}
-              placeholder="email@exemple.com"
+              placeholder={t('auth.emailPlaceholder')}
               required
               autoComplete="email"
             />
@@ -112,7 +112,7 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={<Lock className="w-5 h-5" />}
-              placeholder="••••••••"
+              placeholder={t('auth.passwordPlaceholder')}
               required
               autoComplete="current-password"
             />
