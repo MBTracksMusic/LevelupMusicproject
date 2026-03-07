@@ -5,6 +5,7 @@ import { useCartStore } from '../lib/stores/cart';
 import { useTranslation } from '../lib/i18n';
 import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
+import { LogoLoader } from '../components/ui/LogoLoader';
 import { supabase } from '../lib/supabase/client';
 
 export function CartPage() {
@@ -135,7 +136,7 @@ export function CartPage() {
 
       {isLoading ? (
         <div className="min-h-[40vh] flex items-center justify-center">
-          <div className="w-10 h-10 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+          <LogoLoader label={t('common.loading')} />
         </div>
       ) : !hasItems ? (
         <div className="min-h-[40vh] border border-dashed border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-4 bg-zinc-900/40">

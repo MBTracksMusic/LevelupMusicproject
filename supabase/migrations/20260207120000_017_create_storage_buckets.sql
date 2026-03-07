@@ -86,6 +86,7 @@ BEGIN
       AND policyname = 'Producers can upload audio'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can upload audio" ON storage.objects;
       CREATE POLICY "Producers can upload audio"
         ON storage.objects
         FOR INSERT
@@ -106,6 +107,7 @@ BEGIN
       AND policyname = 'Producers can update their audio'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can update their audio" ON storage.objects;
       CREATE POLICY "Producers can update their audio"
         ON storage.objects
         FOR UPDATE
@@ -132,6 +134,7 @@ BEGIN
       AND policyname = 'Producers can delete their audio'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can delete their audio" ON storage.objects;
       CREATE POLICY "Producers can delete their audio"
         ON storage.objects
         FOR DELETE
@@ -152,6 +155,7 @@ BEGIN
       AND policyname = 'Producers can read their audio'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can read their audio" ON storage.objects;
       CREATE POLICY "Producers can read their audio"
         ON storage.objects
         FOR SELECT
@@ -188,6 +192,7 @@ BEGIN
       AND policyname = 'Producers can upload covers'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can upload covers" ON storage.objects;
       CREATE POLICY "Producers can upload covers"
         ON storage.objects
         FOR INSERT
@@ -208,6 +213,7 @@ BEGIN
       AND policyname = 'Producers can update their covers'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can update their covers" ON storage.objects;
       CREATE POLICY "Producers can update their covers"
         ON storage.objects
         FOR UPDATE
@@ -234,6 +240,7 @@ BEGIN
       AND policyname = 'Producers can delete their covers'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producers can delete their covers" ON storage.objects;
       CREATE POLICY "Producers can delete their covers"
         ON storage.objects
         FOR DELETE
@@ -254,6 +261,7 @@ BEGIN
       AND policyname = 'Anyone can view covers'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Anyone can view covers" ON storage.objects;
       CREATE POLICY "Anyone can view covers"
         ON storage.objects
         FOR SELECT

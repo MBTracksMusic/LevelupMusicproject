@@ -172,7 +172,7 @@ async function sendBroadcastEmail(
         <p style="margin:0 0 14px;line-height:1.5;color:#333;">${safeDescription}</p>
         ${news.thumbnailUrl ? `<img src="${news.thumbnailUrl}" alt="${safeTitle}" style="max-width:100%;border-radius:8px;margin:0 0 14px;" />` : ""}
         <p style="margin:0 0 10px;"><a href="${news.videoUrl}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a></p>
-        <p style="margin:0;"><a href="${homeUrl}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil LevelupMusic</a></p>
+        <p style="margin:0;"><a href="${homeUrl}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil Beatelion</a></p>
       </div>
     `,
   });
@@ -332,7 +332,7 @@ Deno.serve(async (req: Request) => {
     const from = asNonEmptyString(Deno.env.get("EMAIL_FROM")) || DEFAULT_EMAIL_FROM;
     const appUrl = asNonEmptyString(Deno.env.get("APP_BASE_URL"))
       || req.headers.get("origin")
-      || "https://levelupmusic.com";
+      || "https://beatelion.com";
 
     let sentCount = 0;
     const failedRecipients: string[] = [];

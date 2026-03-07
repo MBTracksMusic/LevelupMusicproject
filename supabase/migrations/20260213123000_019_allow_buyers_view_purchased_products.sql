@@ -18,6 +18,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Buyers can view purchased products'
   ) THEN
+    DROP POLICY IF EXISTS "Buyers can view purchased products" ON public.products;
     CREATE POLICY "Buyers can view purchased products"
       ON public.products
       FOR SELECT

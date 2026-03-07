@@ -5,21 +5,21 @@ import { Resend } from "npm:resend";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey, x-supabase-auth",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey, x-supabase-auth, x-hcaptcha-token",
   "Content-Type": "application/json",
 };
 
-const CONTACT_CATEGORIES = new Set([
-  "support",
-  "battle",
-  "payment",
-  "partnership",
-  "other",
-]);
-
-const DEFAULT_EMAIL_RATE_LIMIT_SECONDS = 15 * 60;
 const DEFAULT_EMAIL_FROM = "onboarding@resend.dev";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_SUBJECT = "Contact form submission";
+const MIN_NAME_LENGTH = 2;
+const MAX_NAME_LENGTH = 120;
+const MIN_MESSAGE_LENGTH = 10;
+const MAX_MESSAGE_LENGTH = 5000;
+const HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify";
+const ALLOWED_FIELDS = new Set(["name", "email", "message"]);
+const CONTACT_SUBMIT_RATE_LIMIT_RPC = "rpc_contact_submit_rate_limit";
+const PRODUCTION_ENV_VALUES = new Set(["production", "prod"]);
 
 type JsonObject = Record<string, unknown>;
 
@@ -29,13 +29,15 @@ const asNonEmptyString = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const parseRateLimitSeconds = () => {
-  const raw = asNonEmptyString(Deno.env.get("CONTACT_EMAIL_RATE_LIMIT_SECONDS"));
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : DEFAULT_EMAIL_RATE_LIMIT_SECONDS;
-};
+const runtimeEnv = (asNonEmptyString(Deno.env.get("ENV")) ??
+  asNonEmptyString(Deno.env.get("NODE_ENV")) ??
+  "development").toLowerCase();
+const IS_PRODUCTION = PRODUCTION_ENV_VALUES.has(runtimeEnv);
+const HCAPTCHA_SECRET = asNonEmptyString(Deno.env.get("HCAPTCHA_SECRET"));
+
+if (IS_PRODUCTION && !HCAPTCHA_SECRET) {
+  throw new Error("Missing HCAPTCHA_SECRET environment variable in production");
+}
 
 const normalizeIpAddress = (value: string): string | null => {
   const cleaned = value.trim().toLowerCase();
@@ -66,43 +68,93 @@ const extractIpAddress = (req: Request): string | null => {
   return null;
 };
 
-const isValidEmail = (value: string | null) => {
+const isValidEmail = (value: string | null): value is string => {
   if (!value) return false;
   return EMAIL_REGEX.test(value);
 };
 
-const claimAdminNotificationEmail = async (
+const sha256Hex = async (value: string) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
+const verifyCaptcha = async (params: {
+  secret: string;
+  token: string;
+  remoteIp: string | null;
+}) => {
+  const body = new URLSearchParams({
+    secret: params.secret,
+    response: params.token,
+  });
+
+  if (params.remoteIp) {
+    body.set("remoteip", params.remoteIp);
+  }
+
+  try {
+    const response = await fetch(HCAPTCHA_VERIFY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+
+    if (!response.ok) {
+      console.error("[contact-submit] CAPTCHA_VERIFY_HTTP_ERROR", {
+        status: response.status,
+      });
+      return false;
+    }
+
+    const result = await response.json() as {
+      success?: boolean;
+      "error-codes"?: string[];
+    };
+
+    if (result.success !== true) {
+      console.warn("[contact-submit] CAPTCHA_VERIFY_FAILED", {
+        errors: result["error-codes"] ?? [],
+      });
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[contact-submit] CAPTCHA_VERIFY_UNEXPECTED_ERROR", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+};
+
+const enforceDbRateLimit = async (
   supabase: any,
-  params: {
-    recipientEmail: string;
-    dedupeKey: string;
-    metadata: JsonObject;
-  },
+  ipHash: string,
 ) => {
-  const { data, error } = await supabase.rpc("claim_notification_email_send", {
-    p_category: "contact_submit_admin_email",
-    p_recipient_email: params.recipientEmail.toLowerCase(),
-    p_dedupe_key: params.dedupeKey,
-    p_rate_limit_seconds: parseRateLimitSeconds(),
-    p_metadata: params.metadata,
+  const { data, error } = await supabase.rpc(CONTACT_SUBMIT_RATE_LIMIT_RPC, {
+    p_ip_hash: ipHash,
   });
 
   if (error) {
-    console.error("[contact-submit] EMAIL_CLAIM_ERROR", {
-      dedupeKey: params.dedupeKey,
-      error: error.message,
-    });
-    return { allowed: false, reason: "claim_error" };
+    const message = asNonEmptyString(error.message) ?? "";
+    const code = asNonEmptyString((error as { code?: unknown })?.code) ?? "";
+    const isRateLimit = message.includes("rate_limit_exceeded") || code === "P0001";
+    return {
+      allowed: false as const,
+      status: isRateLimit ? 429 : 500,
+      error: isRateLimit ? "Too many requests" : "Rate limit unavailable",
+    };
   }
 
-  const decision = data && typeof data === "object"
-    ? data as { allowed?: unknown; reason?: unknown }
-    : null;
+  if (data !== true) {
+    return {
+      allowed: false as const,
+      status: 429,
+      error: "Too many requests",
+    };
+  }
 
-  return {
-    allowed: decision?.allowed === true,
-    reason: typeof decision?.reason === "string" ? decision.reason : "unknown",
-  };
+  return { allowed: true as const };
 };
 
 const sendAdminEmail = async (params: {
@@ -110,16 +162,11 @@ const sendAdminEmail = async (params: {
   from: string;
   to: string;
   record: {
-    id: string;
-    created_at: string;
-    user_id: string | null;
-    name: string | null;
-    email: string | null;
-    subject: string;
-    category: string;
+    submitted_at: string;
+    name: string;
+    email: string;
     message: string;
-    origin_page: string | null;
-    ip_address: string | null;
+    ip_hash: string | null;
     user_agent: string | null;
   };
 }) => {
@@ -129,17 +176,12 @@ const sendAdminEmail = async (params: {
   return await resend.emails.send({
     from: params.from,
     to: params.to,
-    subject: `[Contact] ${item.category} - ${item.subject}`,
+    subject: "[Contact] Nouveau message",
     text: [
-      `Contact message ID: ${item.id}`,
-      `Created at: ${item.created_at}`,
-      `Category: ${item.category}`,
-      `Subject: ${item.subject}`,
-      `User ID: ${item.user_id ?? "anonymous"}`,
-      `Name: ${item.name ?? "-"}`,
-      `Email: ${item.email ?? "-"}`,
-      `Origin page: ${item.origin_page ?? "-"}`,
-      `IP: ${item.ip_address ?? "-"}`,
+      `Submitted at: ${item.submitted_at}`,
+      `Name: ${item.name}`,
+      `Email: ${item.email}`,
+      `IP hash: ${item.ip_hash ?? "-"}`,
       `User-Agent: ${item.user_agent ?? "-"}`,
       "",
       item.message,
@@ -147,15 +189,10 @@ const sendAdminEmail = async (params: {
     html: `
       <div lang="fr" style="font-family:Arial,sans-serif;max-width:680px;margin:auto;padding:24px;color:#111">
         <h1 style="margin:0 0 14px;font-size:22px;">Nouveau message de contact</h1>
-        <p style="margin:0 0 6px;"><strong>ID:</strong> ${item.id}</p>
-        <p style="margin:0 0 6px;"><strong>Créé le:</strong> ${item.created_at}</p>
-        <p style="margin:0 0 6px;"><strong>Catégorie:</strong> ${item.category}</p>
-        <p style="margin:0 0 6px;"><strong>Sujet:</strong> ${item.subject}</p>
-        <p style="margin:0 0 6px;"><strong>User ID:</strong> ${item.user_id ?? "anonymous"}</p>
-        <p style="margin:0 0 6px;"><strong>Nom:</strong> ${item.name ?? "-"}</p>
-        <p style="margin:0 0 6px;"><strong>Email:</strong> ${item.email ?? "-"}</p>
-        <p style="margin:0 0 6px;"><strong>Page origine:</strong> ${item.origin_page ?? "-"}</p>
-        <p style="margin:0 0 6px;"><strong>IP:</strong> ${item.ip_address ?? "-"}</p>
+        <p style="margin:0 0 6px;"><strong>Soumis le:</strong> ${item.submitted_at}</p>
+        <p style="margin:0 0 6px;"><strong>Nom:</strong> ${item.name}</p>
+        <p style="margin:0 0 6px;"><strong>Email:</strong> ${item.email}</p>
+        <p style="margin:0 0 6px;"><strong>IP hash:</strong> ${item.ip_hash ?? "-"}</p>
         <p style="margin:0 0 14px;"><strong>User-Agent:</strong> ${item.user_agent ?? "-"}</p>
         <div style="white-space:pre-wrap;line-height:1.55;background:#f4f4f5;padding:14px;border-radius:8px;">${item.message}</div>
       </div>
@@ -175,6 +212,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const userAgent = asNonEmptyString(req.headers.get("user-agent"));
+  const ipAddress = extractIpAddress(req);
+  const ipHash = await sha256Hex(ipAddress ?? "unknown");
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
@@ -188,174 +229,148 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   }) as any;
 
-  const authHeader =
-    req.headers.get("x-supabase-auth") ||
-    req.headers.get("Authorization") ||
-    "";
-  const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const rateLimit = await enforceDbRateLimit(supabase, ipHash);
+  if (!rateLimit.allowed) {
+    console.warn("[contact-submit] RATE_LIMIT_BLOCK", {
+      ip_hash: ipHash,
+      userAgent,
+    });
+    return new Response(JSON.stringify({ error: rateLimit.error }), {
+      status: rateLimit.status,
+      headers: corsHeaders,
+    });
+  }
 
-  let actorId: string | null = null;
-  let actorEmail: string | null = null;
-  if (jwt) {
-    const { data: authData } = await supabase.auth.getUser(jwt);
-    actorId = authData.user?.id ?? null;
-    actorEmail = asNonEmptyString(authData.user?.email) ?? null;
+  const captchaRequired = IS_PRODUCTION || Boolean(HCAPTCHA_SECRET);
+  if (captchaRequired) {
+    const captchaToken = asNonEmptyString(req.headers.get("x-hcaptcha-token"));
+    if (!captchaToken) {
+      console.warn("[contact-submit] CAPTCHA_TOKEN_MISSING", {
+        ip_hash: ipHash,
+        userAgent,
+      });
+      return new Response(JSON.stringify({ error: "Captcha token required" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    const captchaValid = await verifyCaptcha({
+      secret: HCAPTCHA_SECRET as string,
+      token: captchaToken,
+      remoteIp: ipAddress,
+    });
+
+    if (!captchaValid) {
+      console.warn("[contact-submit] CAPTCHA_BLOCK", {
+        ip_hash: ipHash,
+        userAgent,
+      });
+      return new Response(JSON.stringify({ error: "Captcha verification failed" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
   }
 
   const payload = await req.json().catch(() => null) as JsonObject | null;
-  if (!payload) {
+  if (!payload || Array.isArray(payload)) {
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
       status: 400,
       headers: corsHeaders,
     });
   }
 
-  const subject = asNonEmptyString(payload.subject);
-  const message = asNonEmptyString(payload.message);
-  const category = asNonEmptyString(payload.category) ?? "support";
+  const unsupportedFields = Object.keys(payload).filter((key) => !ALLOWED_FIELDS.has(key));
+  if (unsupportedFields.length > 0) {
+    return new Response(
+      JSON.stringify({ error: `Unsupported fields: ${unsupportedFields.join(", ")}` }),
+      {
+        status: 400,
+        headers: corsHeaders,
+      },
+    );
+  }
+
   const name = asNonEmptyString(payload.name);
-  const payloadEmail = asNonEmptyString(payload.email)?.toLowerCase() ?? null;
-  const originPage = asNonEmptyString(payload.origin_page);
+  const email = asNonEmptyString(payload.email)?.toLowerCase() ?? null;
+  const message = asNonEmptyString(payload.message);
 
-  if (!subject || subject.length < 3 || subject.length > 200) {
-    return new Response(JSON.stringify({ error: "Subject must be between 3 and 200 characters" }), {
+  if (!name || name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
+    return new Response(JSON.stringify({
+      error: `Name must be between ${MIN_NAME_LENGTH} and ${MAX_NAME_LENGTH} characters`,
+    }), {
       status: 400,
       headers: corsHeaders,
     });
   }
 
-  if (!message || message.length < 10 || message.length > 5000) {
-    return new Response(JSON.stringify({ error: "Message must be between 10 and 5000 characters" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  if (!CONTACT_CATEGORIES.has(category)) {
-    return new Response(JSON.stringify({ error: "Unsupported category" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  const isAnonymous = actorId === null;
-  const effectiveEmail = payloadEmail || actorEmail;
-
-  if (isAnonymous && !name) {
-    return new Response(JSON.stringify({ error: "Name is required for anonymous submissions" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  if (isAnonymous && !isValidEmail(effectiveEmail)) {
-    return new Response(JSON.stringify({ error: "Valid email is required for anonymous submissions" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  if (!isAnonymous && payloadEmail && !isValidEmail(payloadEmail)) {
+  if (!isValidEmail(email)) {
     return new Response(JSON.stringify({ error: "Invalid email format" }), {
       status: 400,
       headers: corsHeaders,
     });
   }
 
-  const userAgent = asNonEmptyString(req.headers.get("user-agent"));
-  const ipAddress = extractIpAddress(req);
+  if (!message || message.length < MIN_MESSAGE_LENGTH || message.length > MAX_MESSAGE_LENGTH) {
+    return new Response(JSON.stringify({
+      error: `Message must be between ${MIN_MESSAGE_LENGTH} and ${MAX_MESSAGE_LENGTH} characters`,
+    }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
 
-  const { data: inserted, error: insertError } = await supabase
+  const { error: insertError } = await supabase
     .from("contact_messages")
     .insert({
-      user_id: actorId,
+      user_id: null,
       name,
-      email: effectiveEmail,
-      subject,
-      category,
+      email,
+      subject: DEFAULT_SUBJECT,
+      category: "support",
       message,
-      origin_page: originPage,
+      origin_page: "/contact",
       user_agent: userAgent,
-      ip_address: ipAddress,
-    })
-    .select("id, created_at, user_id, name, email, subject, category, message, origin_page, user_agent, ip_address")
-    .single();
+      ip_address: null,
+    });
 
-  if (insertError || !inserted) {
-    console.error("[contact-submit] INSERT_ERROR", { error: insertError?.message });
+  if (insertError) {
+    console.error("[contact-submit] INSERT_ERROR", { error: insertError.message });
     return new Response(JSON.stringify({ error: "Unable to submit message" }), {
       status: 500,
       headers: corsHeaders,
     });
   }
 
-  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const resendApiKey = asNonEmptyString(Deno.env.get("RESEND_API_KEY"));
   const contactToEmail = asNonEmptyString(Deno.env.get("CONTACT_TO_EMAIL"));
   const emailFrom = asNonEmptyString(Deno.env.get("EMAIL_FROM")) || DEFAULT_EMAIL_FROM;
 
-  if (!resendApiKey || !contactToEmail) {
-    console.error("[contact-submit] EMAIL_CONFIG_MISSING", {
-      hasResendApiKey: Boolean(resendApiKey),
-      hasContactToEmail: Boolean(contactToEmail),
-      contactMessageId: inserted.id,
-    });
-    return new Response(JSON.stringify({ ok: true, id: inserted.id }), {
-      status: 200,
-      headers: corsHeaders,
-    });
+  if (resendApiKey && contactToEmail) {
+    try {
+      await sendAdminEmail({
+        resendApiKey,
+        from: emailFrom,
+        to: contactToEmail,
+        record: {
+          submitted_at: new Date().toISOString(),
+          name,
+          email,
+          message,
+          ip_hash: ipHash,
+          user_agent: userAgent,
+        },
+      });
+      console.log("[contact-submit] EMAIL_SENT");
+    } catch (error) {
+      console.error("[contact-submit] EMAIL_SEND_ERROR", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  const dedupeKey = `contact_message:${inserted.id}`;
-  const claim = await claimAdminNotificationEmail(supabase, {
-    recipientEmail: contactToEmail,
-    dedupeKey,
-    metadata: {
-      contact_message_id: inserted.id,
-      category,
-      user_id: actorId,
-    },
-  });
-
-  if (!claim.allowed) {
-    console.log("[contact-submit] EMAIL_SKIPPED", {
-      contactMessageId: inserted.id,
-      dedupeKey,
-      reason: claim.reason,
-    });
-    return new Response(JSON.stringify({ ok: true, id: inserted.id }), {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
-
-  try {
-    await sendAdminEmail({
-      resendApiKey,
-      from: emailFrom,
-      to: contactToEmail,
-      record: {
-        id: inserted.id as string,
-        created_at: inserted.created_at as string,
-        user_id: (inserted.user_id as string | null) ?? null,
-        name: (inserted.name as string | null) ?? null,
-        email: (inserted.email as string | null) ?? null,
-        subject: inserted.subject as string,
-        category: inserted.category as string,
-        message: inserted.message as string,
-        origin_page: (inserted.origin_page as string | null) ?? null,
-        ip_address: (inserted.ip_address as string | null) ?? null,
-        user_agent: (inserted.user_agent as string | null) ?? null,
-      },
-    });
-    console.log("[contact-submit] EMAIL_SENT", { contactMessageId: inserted.id });
-  } catch (error) {
-    console.error("[contact-submit] EMAIL_SEND_ERROR", {
-      contactMessageId: inserted.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  return new Response(JSON.stringify({ ok: true, id: inserted.id }), {
+  return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: corsHeaders,
   });

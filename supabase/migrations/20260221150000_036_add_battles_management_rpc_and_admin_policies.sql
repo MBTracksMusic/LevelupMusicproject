@@ -92,6 +92,7 @@ BEGIN
       AND tablename = 'battles'
       AND policyname = 'Admins can view all battles'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can view all battles" ON public.battles;
     CREATE POLICY "Admins can view all battles"
       ON public.battles
       FOR SELECT
@@ -110,6 +111,7 @@ BEGIN
       AND tablename = 'battles'
       AND policyname = 'Admins can update all battles'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update all battles" ON public.battles;
     CREATE POLICY "Admins can update all battles"
       ON public.battles
       FOR UPDATE

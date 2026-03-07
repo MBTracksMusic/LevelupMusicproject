@@ -3,12 +3,9 @@ import toast from 'react-hot-toast';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import { useAuth } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
-
-type ContactCategory = 'support' | 'battle' | 'payment' | 'partnership' | 'other';
 
 interface ContactSubmitResponse {
   ok?: boolean;
@@ -23,33 +20,21 @@ export function ContactPage() {
   const defaultName = profile?.username || '';
   const defaultEmail = user?.email || '';
 
-  const [category, setCategory] = useState<ContactCategory>('support');
-  const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [name, setName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const categoryOptions: { value: ContactCategory; label: string }[] = [
-    { value: 'support', label: t('support.contact.categorySupport') },
-    { value: 'battle', label: t('support.contact.categoryBattle') },
-    { value: 'payment', label: t('support.contact.categoryPayment') },
-    { value: 'partnership', label: t('support.contact.categoryPartnership') },
-    { value: 'other', label: t('support.contact.categoryOther') },
-  ];
 
   const isValid = useMemo(() => {
-    if (!subject.trim() || subject.trim().length < 3) return false;
     if (!message.trim() || message.trim().length < 10) return false;
     if (!isAuthenticated) {
       if (!name.trim()) return false;
       if (!email.trim()) return false;
     }
     return true;
-  }, [email, isAuthenticated, message, name, subject]);
+  }, [email, isAuthenticated, message, name]);
 
   const resetForm = () => {
-    setCategory('support');
-    setSubject('');
     setMessage('');
     if (!isAuthenticated) {
       setName('');
@@ -64,14 +49,15 @@ export function ContactPage() {
     setIsSubmitting(true);
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
+    const resolvedEmail = isAuthenticated ? (defaultEmail || email.trim()) : email.trim();
+    const resolvedName = isAuthenticated
+      ? (defaultName || name.trim() || resolvedEmail.split('@')[0] || 'Member')
+      : name.trim();
 
     const payload = {
-      category,
-      subject: subject.trim(),
       message: message.trim(),
-      name: isAuthenticated ? defaultName || name.trim() : name.trim(),
-      email: isAuthenticated ? defaultEmail || email.trim() : email.trim(),
-      origin_page: '/contact',
+      name: resolvedName,
+      email: resolvedEmail,
     };
 
     const { data, error } = await supabase.functions.invoke<ContactSubmitResponse>('contact-submit', {
@@ -132,21 +118,6 @@ export function ContactPage() {
                 {t('support.contact.authenticatedNotice', { email: defaultEmail })}
               </div>
             )}
-
-            <Select
-              label={t('common.category')}
-              value={category}
-              onChange={(event) => setCategory(event.target.value as ContactCategory)}
-              options={categoryOptions}
-            />
-
-            <Input
-              label={t('common.subject')}
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              placeholder={t('support.contact.subjectPlaceholder')}
-              required
-            />
 
             <div>
               <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="contact-message">

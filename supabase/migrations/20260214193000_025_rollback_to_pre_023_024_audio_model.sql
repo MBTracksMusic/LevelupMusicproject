@@ -66,6 +66,7 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Authenticated users can read beats audio'
   ) THEN
+    DROP POLICY IF EXISTS "Authenticated users can read beats audio" ON storage.objects;
     CREATE POLICY "Authenticated users can read beats audio"
       ON storage.objects
       FOR SELECT
@@ -80,6 +81,7 @@ BEGIN
       AND tablename = 'objects'
       AND policyname = 'Producers can read their audio'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can read their audio" ON storage.objects;
     CREATE POLICY "Producers can read their audio"
       ON storage.objects
       FOR SELECT

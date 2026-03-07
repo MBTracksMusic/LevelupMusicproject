@@ -60,6 +60,10 @@ DO $$ BEGIN
       FROM public.battles b
       WHERE b.id = battle_votes.battle_id
         AND b.status = 'active'
+        AND b.starts_at IS NOT NULL
+        AND b.starts_at <= now()
+        AND b.voting_ends_at IS NOT NULL
+        AND now() < b.voting_ends_at
         AND b.producer1_id IS NOT NULL
         AND b.producer2_id IS NOT NULL
         AND (
@@ -143,6 +147,14 @@ BEGIN
 
   IF v_battle.status != 'active' THEN
     RAISE EXCEPTION 'battle_not_open_for_voting';
+  END IF;
+
+  IF v_battle.starts_at IS NULL OR now() < v_battle.starts_at THEN
+    RAISE EXCEPTION 'battle_not_started';
+  END IF;
+
+  IF v_battle.voting_ends_at IS NULL OR now() >= v_battle.voting_ends_at THEN
+    RAISE EXCEPTION 'battle_voting_expired';
   END IF;
 
   IF v_battle.producer1_id IS NULL OR v_battle.producer2_id IS NULL THEN

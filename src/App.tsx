@@ -23,6 +23,7 @@ import { ProductDetailsPage } from './pages/ProductDetails';
 import { ProducersPage } from './pages/Producers';
 import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
 import { LeaderboardPage } from './pages/Leaderboard';
+import { LeaderboardWeeklyPage } from './pages/LeaderboardWeekly';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboardPage } from './pages/admin/AdminDashboard';
 import { AdminNewsPage } from './pages/admin/AdminNews';
@@ -31,6 +32,7 @@ import { AdminPilotagePage } from './pages/admin/AdminPilotage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminForumPage } from './pages/admin/AdminForum';
 import { AdminForumCategoriesPage } from './pages/admin/AdminForumCategories';
+import { AdminBeatAnalyticsPage } from './pages/admin/AdminBeatAnalytics';
 import { ProducerGuide } from './pages/support/ProducerGuide';
 import { Faq } from './pages/support/Faq';
 import { ContactPage } from './pages/support/Contact';
@@ -49,6 +51,7 @@ import { useAuth } from './lib/auth/hooks';
 import { useTranslation } from './lib/i18n';
 import { AdminMessagesPage } from './pages/admin/AdminMessages';
 import { AdminReputationPage } from './pages/admin/AdminReputation';
+import { LogoLoader } from './components/ui/LogoLoader';
 
 function AppContent() {
   const { user, isInitialized } = useAuth();
@@ -63,7 +66,7 @@ function AppContent() {
   if (!isInitialized) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+        <LogoLoader label="Initializing Beatelion..." iconClassName="h-14 w-14" />
       </div>
     );
   }
@@ -91,6 +94,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <LeaderboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="leaderboard-weekly"
+          element={
+            <ProtectedRoute>
+              <LeaderboardWeeklyPage />
             </ProtectedRoute>
           }
         />
@@ -215,6 +226,7 @@ function AppContent() {
           <Route path="messages" element={<AdminMessagesPage />} />
           <Route path="forum" element={<AdminForumPage />} />
           <Route path="forum/categories" element={<AdminForumCategoriesPage />} />
+          <Route path="beat-analytics" element={<AdminBeatAnalyticsPage />} />
           <Route path="reputation" element={<AdminReputationPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
         </Route>

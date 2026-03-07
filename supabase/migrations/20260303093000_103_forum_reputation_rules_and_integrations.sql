@@ -119,7 +119,7 @@ GRANT EXECUTE ON FUNCTION public.forum_can_write_topic(uuid, uuid) TO service_ro
 DROP VIEW IF EXISTS public.public_producer_profiles;
 DROP FUNCTION IF EXISTS public.get_public_producer_profiles();
 
-CREATE FUNCTION public.get_public_producer_profiles()
+CREATE OR REPLACE FUNCTION public.get_public_producer_profiles()
 RETURNS TABLE (
   user_id uuid,
   username text,
@@ -180,7 +180,7 @@ GRANT SELECT ON TABLE public.public_producer_profiles TO service_role;
 DROP VIEW IF EXISTS public.forum_public_profiles;
 DROP FUNCTION IF EXISTS public.get_forum_public_profiles();
 
-CREATE FUNCTION public.get_forum_public_profiles()
+CREATE OR REPLACE FUNCTION public.get_forum_public_profiles()
 RETURNS TABLE (
   user_id uuid,
   username text,
@@ -344,6 +344,7 @@ BEGIN
   IF to_regclass('public.forum_post_likes') IS NOT NULL THEN
     EXECUTE 'DROP TRIGGER IF EXISTS trg_forum_post_likes_reputation ON public.forum_post_likes';
     EXECUTE '
+      DROP TRIGGER IF EXISTS trg_forum_post_likes_reputation ON public.forum_post_likes;
       CREATE TRIGGER trg_forum_post_likes_reputation
       AFTER INSERT ON public.forum_post_likes
       FOR EACH ROW
@@ -354,6 +355,7 @@ BEGIN
   IF to_regclass('public.forum_likes') IS NOT NULL THEN
     EXECUTE 'DROP TRIGGER IF EXISTS trg_forum_likes_reputation ON public.forum_likes';
     EXECUTE '
+      DROP TRIGGER IF EXISTS trg_forum_likes_reputation ON public.forum_likes;
       CREATE TRIGGER trg_forum_likes_reputation
       AFTER INSERT ON public.forum_likes
       FOR EACH ROW

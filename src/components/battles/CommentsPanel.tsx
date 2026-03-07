@@ -119,17 +119,25 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
     setIsSubmitting(true);
     setError(null);
 
-    const { error: insertError } = await supabase
-      .from('battle_comments')
-      .insert({
-        battle_id: battleId,
-        user_id: user.id,
-        content: clean,
-      });
+    const { error: insertError } = await supabase.rpc('rpc_create_battle_comment', {
+      p_battle_id: battleId,
+      p_content: clean,
+    });
 
     if (insertError) {
       console.error('Error inserting battle comment:', insertError);
-      setError(t('battles.commentAddError'));
+      const message = insertError.message ?? '';
+      if (message.includes('empty_comment')) {
+        setError(t('battles.commentEmpty'));
+      } else if (message.includes('comment_too_long')) {
+        setError(t('battles.commentTooLong'));
+      } else if (message.includes('account_too_new')) {
+        setError(t('battles.accountTooNew'));
+      } else if (message.includes('rate_limit_exceeded')) {
+        setError(t('battles.tooManyActions'));
+      } else {
+        setError(t('battles.commentAddError'));
+      }
       setIsSubmitting(false);
       return;
     }

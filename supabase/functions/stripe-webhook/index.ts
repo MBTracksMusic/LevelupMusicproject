@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Resend } from "npm:resend";
 import Stripe from "npm:stripe@17";
+import { invokeContractGeneration, resolveContractGenerateEndpoint } from "../_shared/contract-generation.js";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -166,7 +167,7 @@ async function sendPurchaseEmail(email: string) {
   return await resend.emails.send({
     from: "onboarding@resend.dev",
     to: email,
-    subject: "Votre achat LevelUpMusic est confirmé",
+    subject: "Votre achat Beatelion est confirmé",
     text: "Merci pour votre achat. Votre commande a bien été validée.",
     html: `
       <div lang="fr" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#111">
@@ -419,53 +420,204 @@ const isInvoice = (
 ): object is Stripe.Invoice => object.object === "invoice";
 
 async function notifyContractService(purchaseId: string) {
-  const contractServiceUrl = Deno.env.get("CONTRACT_SERVICE_URL");
+  const resolvedEndpoint = resolveContractGenerateEndpoint({
+    CONTRACT_GENERATE_ENDPOINT: Deno.env.get("CONTRACT_GENERATE_ENDPOINT"),
+    CONTRACT_SERVICE_URL: Deno.env.get("CONTRACT_SERVICE_URL"),
+  });
   const contractServiceSecret = Deno.env.get("CONTRACT_SERVICE_SECRET");
-  const requestTimeoutMs = 8000;
 
-  if (!contractServiceUrl || !contractServiceSecret) {
-    console.warn("[contract-service] Missing CONTRACT_SERVICE_URL or CONTRACT_SERVICE_SECRET");
+  if (!resolvedEndpoint.endpoint) {
+    return {
+      ok: false as const,
+      error: "missing_contract_generate_endpoint",
+      source: resolvedEndpoint.source,
+      details: resolvedEndpoint.error,
+    };
+  }
+
+  if (!contractServiceSecret?.trim()) {
+    return {
+      ok: false as const,
+      error: "missing_contract_service_secret",
+      source: resolvedEndpoint.source,
+      details: null,
+    };
+  }
+
+  const result = await invokeContractGeneration({
+    endpoint: resolvedEndpoint.endpoint,
+    secret: contractServiceSecret,
+    purchaseId,
+    timeoutMs: 8000,
+  });
+
+  if (!result.ok) {
+    console.error("[contract-service] Request failed", {
+      purchaseId,
+      endpoint: resolvedEndpoint.endpoint,
+      source: resolvedEndpoint.source,
+      status: result.status,
+      error: result.error,
+      body: result.body,
+    });
+    return {
+      ok: false as const,
+      error: result.error,
+      source: resolvedEndpoint.source,
+      details: result.body,
+      status: result.status,
+    };
+  }
+
+  console.log("[contract-service] Triggered", {
+    purchaseId,
+    endpoint: resolvedEndpoint.endpoint,
+    source: resolvedEndpoint.source,
+  });
+
+  return {
+    ok: true as const,
+    source: resolvedEndpoint.source,
+    status: result.status,
+  };
+}
+
+const computeContractJobBackoffSeconds = (attempts: number) => {
+  const safeAttempts = Number.isFinite(attempts) ? Math.max(1, Math.floor(attempts)) : 1;
+  const base = 30 * Math.pow(2, Math.max(0, safeAttempts - 1));
+  return Math.min(3600, Math.max(60, Math.floor(base)));
+};
+
+async function enqueueContractGenerationJob(
+  supabase: ReturnType<typeof createClient>,
+  purchaseId: string,
+) {
+  const { data, error } = await supabase.rpc("enqueue_contract_generation_job", {
+    p_purchase_id: purchaseId,
+  });
+
+  if (error) {
+    console.error("[contract-generation-jobs] enqueue failed", {
+      purchaseId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+    return null;
+  }
+
+  const jobId = typeof data === "string" ? data : null;
+  console.log("[contract-generation-jobs] enqueued", { purchaseId, jobId });
+  return jobId;
+}
+
+async function markContractGenerationJobSuccess(
+  supabase: ReturnType<typeof createClient>,
+  purchaseId: string,
+) {
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("contract_generation_jobs")
+    .update({
+      status: "succeeded",
+      last_error: null,
+      locked_at: null,
+      locked_by: null,
+      next_run_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("purchase_id", purchaseId)
+    .in("status", ["pending", "processing"]);
+
+  if (error) {
+    console.error("[contract-generation-jobs] mark success failed", {
+      purchaseId,
+      error,
+    });
+  }
+}
+
+async function markContractGenerationJobFailure(
+  supabase: ReturnType<typeof createClient>,
+  purchaseId: string,
+  reason: string,
+) {
+  const { data: latestJob, error: readError } = await supabase
+    .from("contract_generation_jobs")
+    .select("id, attempts, status")
+    .eq("purchase_id", purchaseId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (readError || !latestJob?.id) {
+    console.error("[contract-generation-jobs] failed to load latest job for failure update", {
+      purchaseId,
+      readError,
+    });
     return;
   }
 
-  const endpoint = contractServiceUrl.endsWith("/generate-contract")
-    ? contractServiceUrl
-    : `${contractServiceUrl.replace(/\/$/, "")}/generate-contract`;
+  const attempts = Number.isFinite(latestJob.attempts) ? Number(latestJob.attempts) : 0;
+  const nextAttempts = attempts + 1;
+  const backoffSeconds = computeContractJobBackoffSeconds(nextAttempts);
+  const nowMs = Date.now();
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${contractServiceSecret}`,
-        },
-        body: JSON.stringify({ purchase_id: purchaseId }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+  const { error: updateError } = await supabase
+    .from("contract_generation_jobs")
+    .update({
+      status: "failed",
+      attempts: nextAttempts,
+      last_error: reason,
+      next_run_at: new Date(nowMs + backoffSeconds * 1000).toISOString(),
+      locked_at: null,
+      locked_by: null,
+      updated_at: new Date(nowMs).toISOString(),
+    })
+    .eq("id", latestJob.id);
 
-    if (!response.ok) {
-      const body = await response.text();
-      console.error("[contract-service] Request failed", {
-        purchaseId,
-        endpoint,
-        status: response.status,
-        body,
-      });
-      return;
-    }
-
-    console.log("[contract-service] Triggered", { purchaseId });
-  } catch (error) {
-    console.error("[contract-service] Unexpected error", {
+  if (updateError) {
+    console.error("[contract-generation-jobs] mark failure failed", {
       purchaseId,
-      timeoutMs: requestTimeoutMs,
+      jobId: latestJob.id,
+      reason,
+      updateError,
+    });
+  } else {
+    console.error("[contract-generation-jobs] contract generation scheduled for retry", {
+      purchaseId,
+      jobId: latestJob.id,
+      reason,
+      nextAttempts,
+      backoffSeconds,
+    });
+  }
+}
+
+async function triggerContractJobWorker(
+  supabase: ReturnType<typeof createClient>,
+  purchaseId: string,
+) {
+  const workerSecret = asNonEmptyString(Deno.env.get("CONTRACT_SERVICE_SECRET"));
+  if (!workerSecret) {
+    console.error("[contract-generation-jobs] cannot trigger worker: missing CONTRACT_SERVICE_SECRET");
+    return;
+  }
+
+  const { error } = await supabase.functions.invoke("process-contract-jobs", {
+    body: {
+      limit: 5,
+      worker: "stripe-webhook",
+      purchase_id: purchaseId,
+    },
+    headers: {
+      "x-contract-worker-secret": workerSecret,
+    },
+  });
+
+  if (error) {
+    console.error("[contract-generation-jobs] worker invoke failed", {
+      purchaseId,
       error,
     });
   }
@@ -1001,7 +1153,21 @@ async function handleCheckoutCompleted(
     console.error("EMAIL_ERROR", { error: "Missing customer email", purchaseId });
   }
 
-  await notifyContractService(purchaseId);
+  await enqueueContractGenerationJob(supabase, purchaseId);
+  const contractTrigger = await notifyContractService(purchaseId);
+
+  if (contractTrigger.ok) {
+    await markContractGenerationJobSuccess(supabase, purchaseId);
+  } else {
+    const composedReason = [
+      asNonEmptyString(contractTrigger.error),
+      asNonEmptyString(contractTrigger.details),
+      contractTrigger.status ? `status=${contractTrigger.status}` : null,
+    ].filter((value): value is string => Boolean(value)).join(" | ") || "contract_generation_failed";
+
+    await markContractGenerationJobFailure(supabase, purchaseId, composedReason);
+    await triggerContractJobWorker(supabase, purchaseId);
+  }
 }
 
 async function handleSubscriptionUpdate(

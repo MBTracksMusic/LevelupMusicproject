@@ -51,8 +51,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const supabaseAdmin = createAdminClient();
-  const allowed = await enforceRateLimit(supabaseAdmin, null, "forum_assistant_worker");
-  if (!allowed) {
+  const rateLimit = await enforceRateLimit(supabaseAdmin, null, "forum_assistant_worker");
+  if (!rateLimit.allowed) {
+    if (rateLimit.code === "rate_limit_check_failed") {
+      return jsonResponse({ error: "Rate limit backend unavailable", code: "rate_limit_check_failed" }, 500);
+    }
     return jsonResponse({ error: "Worker rate limit exceeded", code: "rate_limit_exceeded" }, 429);
   }
 

@@ -187,9 +187,9 @@ export async function loadForumSettings(supabaseAdmin: SupabaseAdminClient): Pro
       assistantModel: asNonEmptyString(moderation.assistant_model) ?? DEFAULT_ASSISTANT_MODEL,
     },
     assistant: {
-      assistantName: asNonEmptyString(assistant.assistant_name) ?? "LevelUp Assistant",
-      assistantEmail: asNonEmptyString(assistant.assistant_email) ?? "forum-assistant@levelupmusic.local",
-      assistantUsername: asNonEmptyString(assistant.assistant_username) ?? "levelup_assistant",
+      assistantName: asNonEmptyString(assistant.assistant_name) ?? "Beatelion Assistant",
+      assistantEmail: asNonEmptyString(assistant.assistant_email) ?? "forum-assistant@beatelion.local",
+      assistantUsername: asNonEmptyString(assistant.assistant_username) ?? "beatelion_assistant",
       assistantUserId: asNonEmptyString(assistant.assistant_user_id),
       mentionCooldownHours: parsePositiveInteger(assistant.mention_cooldown_hours, 6),
     },
@@ -534,10 +534,14 @@ export async function enforceRateLimit(
 
   if (error) {
     console.error("[forum-agents] check_rpc_rate_limit failed", { rpcName, error });
-    return true;
+    return { allowed: false as const, code: "rate_limit_check_failed" as const };
   }
 
-  return data === true;
+  if (data !== true) {
+    return { allowed: false as const, code: "rate_limit_exceeded" as const };
+  }
+
+  return { allowed: true as const };
 }
 
 export async function notifyForumAdmins(
@@ -652,7 +656,7 @@ export async function generateAssistantReply(params: {
     .join("\n\n");
 
   const systemPrompt = [
-    "Tu es LevelUp Assistant, un assistant communautaire pour un forum de musique et production.",
+    "Tu es Beatelion Assistant, un assistant communautaire pour un forum de musique et production.",
     "Reponds en francais, de maniere concise, utile, prudente et orientee action.",
     "Ne donne pas de conseil juridique, fiscal, financier ou medical.",
     "Si la question depasse le cadre du forum, dis-le clairement et reste bref.",

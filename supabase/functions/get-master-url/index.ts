@@ -13,6 +13,7 @@ const MASTER_BUCKET = (Deno.env.get("SUPABASE_MASTER_BUCKET") || "beats-masters"
 const DEFAULT_EXPIRES_SECONDS = 90;
 const MIN_EXPIRES_SECONDS = 60;
 const MAX_EXPIRES_SECONDS = 120;
+const GET_MASTER_URL_RATE_LIMIT_RPC = "get_master_url_user";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -32,6 +33,8 @@ const normalizeExpiresIn = (value: unknown) => {
 };
 
 const isUuid = (value: string) => UUID_RE.test(value);
+
+const normalizeStoragePath = (value: string) => value.trim().replace(/^\/+/, "");
 
 const normalizePathCandidate = (
   candidate: string,
@@ -83,6 +86,32 @@ const normalizePathCandidate = (
   return null;
 };
 
+const pathHasTraversal = (value: string) => {
+  const normalized = normalizeStoragePath(value);
+  return normalized.split("/").some((segment) => segment === "." || segment === "..");
+};
+
+const hasStrictMasterPrefix = (path: string, producerId: string, productId: string) => {
+  const normalized = normalizeStoragePath(path);
+  return normalized.startsWith(`${producerId}/${productId}/`);
+};
+
+function validateMasterPathInvariant(
+  productId: string,
+  producerId: string,
+  path: string,
+) {
+  if (pathHasTraversal(path)) {
+    return { allowed: false as const, reason: "path_traversal" as const };
+  }
+
+  if (!hasStrictMasterPrefix(path, producerId, productId)) {
+    return { allowed: false as const, reason: "prefix_mismatch" as const };
+  }
+
+  return { allowed: true as const };
+}
+
 async function userHasAccessToProduct(
   supabaseAdmin: any,
   userId: string,
@@ -109,6 +138,23 @@ async function userHasAccessToProduct(
   });
 
   if (hasValidEntitlement) return true;
+
+  // Explicitly deny if a refunded row exists for this user/product pair.
+  const { data: refundedData, error: refundedError } = await supabaseAdmin
+    .from("purchases")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("product_id", productId)
+    .eq("status", "refunded")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (refundedError) {
+    throw new Error(`Failed to check refunded purchases: ${refundedError.message}`);
+  }
+
+  const refundedRows = (refundedData ?? []) as Array<{ id: string }>;
+  if (refundedRows.length > 0) return false;
 
   // Legacy compatibility: fallback to completed purchase rows.
   const { data: purchaseData, error: purchaseError } = await supabaseAdmin
@@ -192,6 +238,36 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
+      "check_rpc_rate_limit",
+      {
+        p_user_id: authData.user.id,
+        p_rpc_name: GET_MASTER_URL_RATE_LIMIT_RPC,
+      },
+    );
+
+    if (rateLimitError) {
+      console.error("[get-master-url] Rate limit check failed", {
+        userId: authData.user.id,
+        productId,
+        rateLimitError,
+      });
+      return new Response(JSON.stringify({ error: "Rate limit unavailable" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    if (!rateLimitAllowed) {
+      return new Response(JSON.stringify({
+        error: "Too many requests",
+        code: "rate_limit_exceeded",
+      }), {
+        status: 429,
+        headers: jsonHeaders,
+      });
+    }
+
     const expiresIn = normalizeExpiresIn(body?.expires_in);
 
     console.log("[get-master-url] Request", {
@@ -215,7 +291,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: productRow, error: productError } = await supabaseAdmin
       .from("products")
-      .select("id, master_path, master_url")
+      .select("id, producer_id, master_path")
       .eq("id", productId)
       .maybeSingle();
 
@@ -237,35 +313,84 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const masterCandidates = [
-      asNonEmptyString(productRow.master_path),
-      asNonEmptyString(productRow.master_url),
-    ].filter((value): value is string => Boolean(value));
-
-    let resolvedMaster: { bucket: string; path: string } | null = null;
-
-    for (const candidate of masterCandidates) {
-      const parsed = normalizePathCandidate(candidate, MASTER_BUCKET);
-      if (!parsed) continue;
-      if (parsed.bucket !== MASTER_BUCKET && parsed.bucket !== "beats-masters") {
-        continue;
-      }
-      resolvedMaster = parsed;
-      break;
+    const producerId = asNonEmptyString(productRow.producer_id);
+    if (!producerId || !isUuid(producerId)) {
+      console.error("[get-master-url] Invalid product producer_id", {
+        productId,
+        producerId: productRow.producer_id,
+      });
+      return new Response(JSON.stringify({ error: "Invalid product owner metadata" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
     }
 
-    if (!resolvedMaster) {
-      console.warn("[get-master-url] No master in private bucket", {
+    const masterPath = asNonEmptyString(productRow.master_path);
+    if (!masterPath) {
+      console.warn("[get-master-url] Invalid master_path: empty", {
         productId,
         userId: authData.user.id,
-        candidates: masterCandidates,
+      });
+      return new Response(JSON.stringify({
+        error: "Invalid master path",
+        code: "invalid_master_path",
+      }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    const resolvedMaster = normalizePathCandidate(masterPath, MASTER_BUCKET);
+
+    if (!resolvedMaster) {
+      console.warn("[get-master-url] Invalid master_path: parse failed", {
+        productId,
+        userId: authData.user.id,
+      });
+      return new Response(JSON.stringify({
+        error: "Invalid master path",
+        code: "invalid_master_path",
+      }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    if (resolvedMaster.bucket !== MASTER_BUCKET && resolvedMaster.bucket !== "beats-masters") {
+      console.warn("[get-master-url] Invalid master_path: wrong bucket", {
+        productId,
+        userId: authData.user.id,
+        resolvedMaster,
         requiredBucket: MASTER_BUCKET,
       });
       return new Response(JSON.stringify({
-        error: "Master file not available in private bucket",
-        code: "MASTER_NOT_IN_PRIVATE_BUCKET",
+        error: "Invalid master path",
+        code: "invalid_master_path",
       }), {
-        status: 404,
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    const invariantCheck = validateMasterPathInvariant(
+      productId,
+      producerId,
+      resolvedMaster.path,
+    );
+
+    if (!invariantCheck.allowed) {
+      console.warn("[get-master-url] Invalid master path invariant", {
+        userId: authData.user.id,
+        productId,
+        producerId,
+        resolvedMaster,
+        reason: invariantCheck.reason,
+      });
+      return new Response(JSON.stringify({
+        error: "Invalid master path",
+        code: "invalid_master_path",
+      }), {
+        status: 500,
         headers: jsonHeaders,
       });
     }

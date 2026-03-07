@@ -32,9 +32,121 @@ const describeMediaError = (
   }
 };
 
-const resolvePreviewUrls = async (candidate: string | null | undefined) => {
-  const trimmed = candidate?.trim() ?? '';
-  return trimmed ? [trimmed] : [];
+const PREVIEW_PROXY_BASE = '/preview';
+const WATERMARKED_BUCKET =
+  import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET?.trim() || 'beats-watermarked';
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+
+const hasTrackPreviewAsset = (track: ProductWithRelations | null | undefined) => {
+  if (!track) return false;
+  return Boolean(
+    track.preview_url?.trim() ||
+      track.watermarked_path?.trim() ||
+      track.exclusive_preview_url?.trim()
+  );
+};
+
+const toNonEmptyString = (value: unknown) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const parseStorageReference = (
+  candidate: string,
+  fallbackBucket: string
+): { bucket: string; path: string } | null => {
+  const raw = candidate.trim();
+  if (!raw) return null;
+
+  if (!/^https?:\/\//i.test(raw)) {
+    const normalized = raw.replace(/^\/+/, '');
+    if (!normalized) return null;
+
+    if (normalized.startsWith('storage/v1/object/')) {
+      const parts = normalized.split('/').filter(Boolean);
+      const objectIndex = parts.findIndex((segment) => segment === 'object');
+      if (objectIndex >= 0 && objectIndex + 3 < parts.length) {
+        return {
+          bucket: parts[objectIndex + 2]!,
+          path: decodeURIComponent(parts.slice(objectIndex + 3).join('/')),
+        };
+      }
+    }
+
+    const slashIndex = normalized.indexOf('/');
+    if (slashIndex > 0) {
+      const maybeBucket = normalized.slice(0, slashIndex);
+      const maybePath = normalized.slice(slashIndex + 1);
+      if (
+        maybeBucket.startsWith('beats-') ||
+        maybeBucket === 'watermark-assets' ||
+        maybeBucket === 'avatars'
+      ) {
+        return { bucket: maybeBucket, path: maybePath };
+      }
+    }
+
+    return { bucket: fallbackBucket, path: normalized };
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const objectIndex = segments.findIndex((segment) => segment === 'object');
+    if (objectIndex >= 0 && objectIndex + 3 < segments.length) {
+      return {
+        bucket: segments[objectIndex + 2]!,
+        path: decodeURIComponent(segments.slice(objectIndex + 3).join('/')),
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const resolveDirectPreviewCandidate = (
+  candidate: string,
+  fallbackBucket: string
+) => {
+  if (/^https?:\/\//i.test(candidate)) return candidate;
+  const parsed = parseStorageReference(candidate, fallbackBucket);
+  if (!parsed) return null;
+  return supabase.storage.from(parsed.bucket).getPublicUrl(parsed.path).data.publicUrl;
+};
+
+const resolvePreviewUrls = async (track: ProductWithRelations | null) => {
+  const trackId = track?.id?.trim();
+  if (!trackId || !hasTrackPreviewAsset(track)) return [];
+
+  const encodedTrackId = encodeURIComponent(trackId);
+  const proxyUrl = `${PREVIEW_PROXY_BASE}/${encodedTrackId}`;
+  const candidates = [proxyUrl];
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+  if (supabaseUrl) {
+    const directFunctionProxy = `${trimTrailingSlash(supabaseUrl)}/functions/v1/preview-audio/${encodedTrackId}`;
+    candidates.push(directFunctionProxy);
+  }
+
+  const fallbackBucket = toNonEmptyString(track?.watermarked_bucket) || WATERMARKED_BUCKET;
+  const directCandidates = [
+    toNonEmptyString(track?.preview_url),
+    toNonEmptyString(track?.exclusive_preview_url),
+    toNonEmptyString(track?.watermarked_path),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of directCandidates) {
+    const resolved = resolveDirectPreviewCandidate(candidate, fallbackBucket);
+    if (resolved) {
+      candidates.push(resolved);
+    }
+  }
+
+  return [...new Set(candidates)];
 };
 
 interface AudioPlayerProps {
@@ -78,7 +190,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
       setSourceCandidateIndex(0);
       setGlobalPlaying(false);
 
-      const previewUrls = await resolvePreviewUrls(track?.preview_url);
+      const previewUrls = await resolvePreviewUrls(track);
       if (previewUrls.length === 0) {
         setLoadingUrl(false);
         setErrorMessage(t('audio.previewUnavailable'));
@@ -99,7 +211,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     return () => {
       isCancelled = true;
     };
-  }, [track?.id, track?.preview_url, setGlobalPlaying, t]);
+  }, [track, setGlobalPlaying, t]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -120,6 +232,12 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
     setCurrentTime(0);
     setDuration(0);
   }, [resolvedSource, setGlobalPlaying]);
+
+  useEffect(() => {
+    if (resolvedSource) {
+      console.log('AUDIO SOURCE', resolvedSource);
+    }
+  }, [resolvedSource]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -256,7 +374,7 @@ export function AudioPlayer({ track, onNext, onPrevious, onEnded }: AudioPlayerP
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
   const canPlay = !!resolvedSource && isReady && !loadingUrl && !errorMessage;
-  const hasPreview = Boolean(track?.preview_url?.trim());
+  const hasPreview = hasTrackPreviewAsset(track);
 
   if (!track) {
     return (

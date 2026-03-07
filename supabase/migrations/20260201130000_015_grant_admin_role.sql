@@ -40,6 +40,7 @@ BEGIN
       AND policyname = 'Admins can view all profiles'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Admins can view all profiles" ON public.user_profiles;
       CREATE POLICY "Admins can view all profiles"
         ON public.user_profiles
         FOR SELECT

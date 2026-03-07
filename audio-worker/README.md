@@ -1,4 +1,4 @@
-# LevelUpMusic Audio Worker
+# Beatelion Audio Worker
 
 Worker audio externe pour Render/Docker. Il consomme la queue SQL `audio_processing_jobs`, lit les masters depuis le bucket canonique `beats-masters` avec fallback dev possible vers `beats-audio`, applique le watermark global défini dans `site_audio_settings`, génère des previews MP3 versionnées avec FFmpeg natif, puis les publie dans `beats-watermarked`.
 
@@ -87,12 +87,12 @@ npm start
 
 ```bash
 cd audio-worker
-docker build -t levelup-audio-worker .
+docker build -t beatelion-audio-worker .
 docker run --rm \
   -e SUPABASE_URL=... \
   -e SUPABASE_SERVICE_ROLE_KEY=... \
   -e WORKER_ID=local-dev-1 \
-  levelup-audio-worker
+  beatelion-audio-worker
 ```
 
 ## Déploiement Render

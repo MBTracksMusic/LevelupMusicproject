@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { PDFDocument, StandardFonts } from "npm:pdf-lib@1.17.1";
+import { PDFDocument, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+import { invokeContractGeneration, resolveContractGenerateEndpoint } from "../_shared/contract-generation.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,8 @@ const corsHeaders = {
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
 const CONTRACT_BUCKET = "contracts";
+const CONTRACT_SIGNED_URL_TTL_SECONDS = 60 * 5;
+const CONTRACT_URL_USER_RATE_LIMIT_RPC = "get_contract_url_user";
 
 const asNonEmptyString = (value: unknown) => {
   if (typeof value !== "string") return null;
@@ -98,8 +101,12 @@ async function buildContractPdfBytes(input: {
   return await pdfDoc.save();
 }
 
+const buildContractStoragePath = (purchaseId: string) => {
+  return `contracts/${purchaseId}/${Date.now()}.pdf`;
+};
+
 async function generateContractPdfFallback(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   purchaseId: string,
 ) {
   const { data, error } = await supabaseAdmin
@@ -170,12 +177,12 @@ async function generateContractPdfFallback(
     exclusiveAllowed: license?.exclusive_allowed ?? null,
   });
 
-  const storagePath = `contracts/${purchaseId}.pdf`;
+  const storagePath = buildContractStoragePath(purchaseId);
   const { error: uploadError } = await supabaseAdmin.storage
     .from(CONTRACT_BUCKET)
     .upload(storagePath, pdfBytes, {
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
     });
 
   if (uploadError) {
@@ -183,15 +190,55 @@ async function generateContractPdfFallback(
     return null;
   }
 
-  const { error: updateError } = await supabaseAdmin
+  const fallbackGeneratedAt = new Date().toISOString();
+  const fallbackUpdatePayload: Record<string, unknown> = {
+    contract_pdf_path: storagePath,
+    contract_generated_by: "edge_fallback",
+    contract_generated_at: fallbackGeneratedAt,
+  };
+
+  const { error: fallbackUpdateError } = await supabaseAdmin
     .from("purchases")
-    .update({ contract_pdf_path: storagePath })
+    .update(fallbackUpdatePayload)
     .eq("id", purchaseId);
 
-  if (updateError) {
-    console.error("[get-contract-url] Failed to persist fallback contract_pdf_path", {
+  if (fallbackUpdateError) {
+    const composedError = `${fallbackUpdateError.message ?? ""} ${fallbackUpdateError.details ?? ""}`.toLowerCase();
+    const missingProvenanceColumn = composedError.includes("contract_generated_by") ||
+      composedError.includes("contract_generated_at") ||
+      fallbackUpdateError.code === "42703" ||
+      fallbackUpdateError.code === "PGRST204";
+
+    if (missingProvenanceColumn) {
+      console.warn("[get-contract-url] Contract provenance columns missing, falling back to contract_pdf_path-only update", {
+        purchaseId,
+        code: fallbackUpdateError.code,
+        message: fallbackUpdateError.message,
+      });
+
+      const { error: legacyUpdateError } = await supabaseAdmin
+        .from("purchases")
+        .update({ contract_pdf_path: storagePath })
+        .eq("id", purchaseId);
+
+      if (legacyUpdateError) {
+        console.error("[get-contract-url] Failed to persist fallback contract_pdf_path (legacy retry)", {
+          purchaseId,
+          legacyUpdateError,
+        });
+      }
+    } else {
+      console.error("[get-contract-url] Failed to persist fallback contract metadata", {
+        purchaseId,
+        fallbackUpdateError,
+      });
+    }
+  } else {
+    console.warn("[get-contract-url] Emergency fallback contract generator used", {
       purchaseId,
-      updateError,
+      generatedBy: "edge_fallback",
+      generatedAt: fallbackGeneratedAt,
+      storagePath,
     });
   }
 
@@ -223,58 +270,168 @@ const buildPathCandidates = (purchaseId: string, declaredPath: string | null) =>
   return [...new Set([fromDeclared, ...base].filter((value): value is string => Boolean(value)))];
 };
 
-async function callContractServiceToGenerate(purchaseId: string) {
-  const contractServiceUrl = Deno.env.get("CONTRACT_SERVICE_URL");
-  const contractServiceSecret = Deno.env.get("CONTRACT_SERVICE_SECRET");
-  const requestTimeoutMs = 8000;
-
-  if (!contractServiceUrl || !contractServiceSecret) {
-    console.error("[get-contract-url] Missing CONTRACT_SERVICE_URL or CONTRACT_SERVICE_SECRET");
-    return false;
+const splitStoragePath = (storagePath: string) => {
+  const normalized = storagePath.replace(/^\/+/, "");
+  const slashIndex = normalized.lastIndexOf("/");
+  if (slashIndex < 0) {
+    return { folder: "", fileName: normalized };
   }
+  return {
+    folder: normalized.slice(0, slashIndex),
+    fileName: normalized.slice(slashIndex + 1),
+  };
+};
 
-  const endpoint = contractServiceUrl.endsWith("/generate-contract")
-    ? contractServiceUrl
-    : `${contractServiceUrl.replace(/\/$/, "")}/generate-contract`;
+const contractPathExists = async (
+  supabaseAdmin: any,
+  contractPath: string,
+) => {
+  const normalized = normalizePathCandidate(contractPath);
+  if (!normalized) return false;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${contractServiceSecret}`,
-        },
-        body: JSON.stringify({ purchase_id: purchaseId }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+  const { folder, fileName } = splitStoragePath(normalized);
+  if (!fileName) return false;
 
-    if (!response.ok) {
-      const body = await response.text();
-      console.error("[get-contract-url] Contract generation failed", {
-        purchaseId,
-        status: response.status,
-        timeoutMs: requestTimeoutMs,
-        body,
-      });
-      return false;
-    }
+  const { data, error } = await supabaseAdmin.storage
+    .from(CONTRACT_BUCKET)
+    .list(folder, { limit: 100, search: fileName });
 
-    return true;
-  } catch (error) {
-    console.error("[get-contract-url] Contract generation error", {
-      purchaseId,
-      timeoutMs: requestTimeoutMs,
+  if (error) {
+    console.error("[get-contract-url] Contract existence check failed", {
+      contractPath: normalized,
       error,
     });
     return false;
   }
+
+  return (data ?? []).some((entry: any) => entry.name === fileName);
+};
+
+const resolveExistingContractPath = async (
+  supabaseAdmin: any,
+  purchaseId: string,
+  declaredPath: string | null,
+) => {
+  const candidates = buildPathCandidates(purchaseId, declaredPath);
+  for (const candidate of candidates) {
+    if (await contractPathExists(supabaseAdmin, candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const persistContractPath = async (
+  supabaseAdmin: any,
+  purchaseId: string,
+  contractPath: string,
+) => {
+  const { error } = await supabaseAdmin
+    .from("purchases")
+    .update({ contract_pdf_path: contractPath })
+    .eq("id", purchaseId);
+
+  if (error) {
+    console.error("[get-contract-url] Failed to persist contract_pdf_path", {
+      purchaseId,
+      contractPath,
+      error,
+    });
+  }
+};
+
+const enforceUserRateLimit = async (
+  supabaseAdmin: any,
+  userId: string,
+) => {
+  const { data, error } = await supabaseAdmin.rpc("check_rpc_rate_limit", {
+    p_user_id: userId,
+    p_rpc_name: CONTRACT_URL_USER_RATE_LIMIT_RPC,
+  });
+
+  if (error) {
+    console.error("[get-contract-url] check_rpc_rate_limit failed", {
+      rpc: CONTRACT_URL_USER_RATE_LIMIT_RPC,
+      userId,
+      error,
+    });
+    return { allowed: false as const, status: 500, error: "Rate limit unavailable" };
+  }
+
+  if (data !== true) {
+    return { allowed: false as const, status: 429, error: "Too many requests" };
+  }
+
+  return { allowed: true as const };
+};
+
+const enforcePurchaseRateLimit = async (
+  supabaseAdmin: any,
+  purchaseId: string,
+  userId: string,
+) => {
+  const { data, error } = await supabaseAdmin.rpc("rpc_check_contract_url_rate_limit", {
+    p_purchase_id: purchaseId,
+    p_user_id: userId,
+  });
+
+  if (error) {
+    console.error("[get-contract-url] rpc_check_contract_url_rate_limit failed", {
+      purchaseId,
+      userId,
+      error,
+    });
+    return { allowed: false as const, status: 500, error: "Rate limit unavailable" };
+  }
+
+  if (data !== true) {
+    return { allowed: false as const, status: 429, error: "Too many requests" };
+  }
+
+  return { allowed: true as const };
+};
+
+async function callContractServiceToGenerate(purchaseId: string) {
+  const resolvedEndpoint = resolveContractGenerateEndpoint({
+    CONTRACT_GENERATE_ENDPOINT: Deno.env.get("CONTRACT_GENERATE_ENDPOINT"),
+    CONTRACT_SERVICE_URL: Deno.env.get("CONTRACT_SERVICE_URL"),
+  });
+  const contractServiceSecret = Deno.env.get("CONTRACT_SERVICE_SECRET");
+
+  if (!resolvedEndpoint.endpoint) {
+    console.error("[get-contract-url] Missing/invalid contract generation endpoint configuration", {
+      purchaseId,
+      source: resolvedEndpoint.source,
+      error: resolvedEndpoint.error,
+    });
+    return false;
+  }
+
+  if (!contractServiceSecret?.trim()) {
+    console.error("[get-contract-url] Missing CONTRACT_SERVICE_SECRET");
+    return false;
+  }
+
+  const result = await invokeContractGeneration({
+    endpoint: resolvedEndpoint.endpoint,
+    secret: contractServiceSecret,
+    purchaseId,
+    timeoutMs: 8000,
+  });
+
+  if (!result.ok) {
+    console.error("[get-contract-url] Contract generation failed", {
+      purchaseId,
+      endpoint: resolvedEndpoint.endpoint,
+      source: resolvedEndpoint.source,
+      status: result.status,
+      error: result.error,
+      body: result.body,
+    });
+    return false;
+  }
+
+  return true;
 }
 
 Deno.serve(async (req: Request) => {
@@ -317,7 +474,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey) as any;
 
     const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(jwt);
     if (authError || !authData.user) {
@@ -365,57 +522,86 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const userRateLimit = await enforceUserRateLimit(supabaseAdmin, authData.user.id);
+    if (!userRateLimit.allowed) {
+      return new Response(JSON.stringify({ error: userRateLimit.error }), {
+        status: userRateLimit.status,
+        headers: jsonHeaders,
+      });
+    }
+
+    const purchaseRateLimit = await enforcePurchaseRateLimit(
+      supabaseAdmin,
+      purchaseId,
+      authData.user.id,
+    );
+    if (!purchaseRateLimit.allowed) {
+      return new Response(JSON.stringify({ error: purchaseRateLimit.error }), {
+        status: purchaseRateLimit.status,
+        headers: jsonHeaders,
+      });
+    }
+
     let declaredPath = asNonEmptyString(purchase.contract_pdf_path);
+    let resolvedPath = await resolveExistingContractPath(supabaseAdmin, purchaseId, declaredPath);
 
-    // Best-effort service call on each download request:
-    // - generates missing PDFs
-    // - restores missing notification emails for legacy purchases
-    await callContractServiceToGenerate(purchaseId);
+    if (!resolvedPath) {
+      await callContractServiceToGenerate(purchaseId);
 
-    const { data: refreshedPurchase, error: refreshedError } = await supabaseAdmin
-      .from("purchases")
-      .select("contract_pdf_path")
-      .eq("id", purchaseId)
-      .maybeSingle();
+      const { data: refreshedPurchase, error: refreshedError } = await supabaseAdmin
+        .from("purchases")
+        .select("contract_pdf_path")
+        .eq("id", purchaseId)
+        .maybeSingle();
 
-    if (refreshedError) {
-      console.error("[get-contract-url] Purchase refresh failed", refreshedError);
-    } else {
-      declaredPath = asNonEmptyString(refreshedPurchase?.contract_pdf_path);
+      if (refreshedError) {
+        console.error("[get-contract-url] Purchase refresh failed", refreshedError);
+      } else {
+        declaredPath = asNonEmptyString(refreshedPurchase?.contract_pdf_path);
+      }
+
+      resolvedPath = await resolveExistingContractPath(supabaseAdmin, purchaseId, declaredPath);
     }
 
-    if (!declaredPath) {
-      // Last-resort fallback: generate a minimal PDF directly from the Edge Function.
-      declaredPath = await generateContractPdfFallback(supabaseAdmin, purchaseId);
+    if (!resolvedPath) {
+      // Emergency path only: local PDF generation is kept for resilience
+      // when the canonical API generator is unavailable.
+      const fallbackPath = await generateContractPdfFallback(supabaseAdmin, purchaseId);
+      declaredPath = asNonEmptyString(fallbackPath);
+      resolvedPath = await resolveExistingContractPath(supabaseAdmin, purchaseId, declaredPath);
     }
 
-    const pathCandidates = buildPathCandidates(purchaseId, declaredPath);
-    let lastError: unknown = null;
+    if (resolvedPath) {
+      if (declaredPath !== resolvedPath) {
+        await persistContractPath(supabaseAdmin, purchaseId, resolvedPath);
+      }
 
-    for (const pathCandidate of pathCandidates) {
       const { data, error } = await supabaseAdmin.storage
         .from(CONTRACT_BUCKET)
-        .createSignedUrl(pathCandidate, 60 * 5, { download: true });
+        .createSignedUrl(resolvedPath, CONTRACT_SIGNED_URL_TTL_SECONDS, { download: true });
 
       if (!error && data?.signedUrl) {
         return new Response(JSON.stringify({
           url: data.signedUrl,
-          expires_in: 60 * 5,
-          path: pathCandidate,
+          expires_in: CONTRACT_SIGNED_URL_TTL_SECONDS,
+          path: resolvedPath,
         }), {
           status: 200,
           headers: jsonHeaders,
         });
       }
 
-      lastError = error;
+      console.error("[get-contract-url] Signed URL generation failed", {
+        purchaseId,
+        resolvedPath,
+        error,
+      });
     }
 
     console.error("[get-contract-url] No contract PDF available", {
       purchaseId,
       declaredPath,
-      pathCandidates,
-      lastError,
+      resolvedPath,
     });
 
     return new Response(JSON.stringify({ error: "Contract PDF unavailable" }), {

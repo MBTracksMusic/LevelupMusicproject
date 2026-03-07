@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { BattleVoteFeedbackModal } from './BattleVoteFeedbackModal';
 import { useAuth, useIsEmailVerified } from '../../lib/auth/hooks';
-import { useTranslation, type TranslateFn } from '../../lib/i18n';
+import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import type { BattleWithRelations } from '../../lib/supabase/types';
 
@@ -17,31 +18,21 @@ interface VotePanelProps {
 
 const isVotingOpen = (status: BattleWithRelations['status']) => status === 'active';
 
-function toVoteMessage(message: string, t: TranslateFn) {
-  if (message.includes('already_voted')) return t('battles.alreadyVoted');
-  if (message.includes('vote_not_allowed_unverified_email')) return t('battles.voteVerifyEmailRequired');
-  if (message.includes('vote_not_allowed_unconfirmed_user')) return t('battles.mustBeConfirmed');
-  if (message.includes('participants_cannot_vote')) return t('battles.participantsCannotVote');
-  if (message.includes('battle_not_open_for_voting')) return t('battles.votingClosed');
-  if (message.includes('invalid_vote_target')) return t('battles.invalidVoteTarget');
-  if (message.includes('auth_required')) return t('battles.voteLoginRequired');
-  return t('battles.voteUnavailable');
-}
-
 export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const isEmailVerified = useIsEmailVerified();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingVote, setIsLoadingVote] = useState(false);
   const [userVote, setUserVote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedProducerId, setSelectedProducerId] = useState<string | null>(null);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
   const voteDisabledReason = useMemo(() => {
     if (!user) return t('battles.voteLoginRequired');
     if (!isEmailVerified) return t('battles.voteVerifyEmailRequired');
     if (!isVotingOpen(battle.status)) return t('battles.votingClosed');
     if (!battle.producer1_id || !battle.producer2_id) return t('battles.voteBattleNotReady');
+    if (user.id === battle.producer1_id || user.id === battle.producer2_id) return t('battles.participantsCannotVote');
     return null;
   }, [battle.producer1_id, battle.producer2_id, battle.status, isEmailVerified, t, user]);
 
@@ -82,29 +73,23 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
     };
   }, [battle.id, user?.id]);
 
-  const submitVote = async (votedForProducerId: string) => {
+  const openFeedbackModal = (winnerProducerId: string) => {
     if (!user?.id) return;
-    setError(null);
-    setIsSubmitting(true);
+    setSelectedProducerId(winnerProducerId);
+    setIsFeedbackModalOpen(true);
+  };
 
+  const closeFeedbackModal = () => {
+    setIsFeedbackModalOpen(false);
+    setSelectedProducerId(null);
+  };
+
+  const handleVoteWithFeedbackSuccess = async (winnerProducerId: string) => {
+    setUserVote(winnerProducerId);
     try {
-      const { error: rpcError } = await supabase.rpc('record_battle_vote', {
-        p_battle_id: battle.id,
-        p_user_id: user.id,
-        p_voted_for_producer_id: votedForProducerId,
-      });
-
-      if (rpcError) {
-        throw rpcError;
-      }
-
-      setUserVote(votedForProducerId);
       await onVoteSuccess?.();
-    } catch (voteErr) {
-      const message = voteErr instanceof Error ? voteErr.message : t('battles.voteUnavailable');
-      setError(toVoteMessage(message, t));
-    } finally {
-      setIsSubmitting(false);
+    } catch (refreshError) {
+      console.error('Error refreshing battle after vote-with-feedback flow:', refreshError);
     }
   };
 
@@ -136,8 +121,8 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
             variant="outline"
-            isLoading={isSubmitting}
-            onClick={() => submitVote(battle.producer1_id)}
+            disabled={isFeedbackModalOpen}
+            onClick={() => openFeedbackModal(battle.producer1_id)}
           >
             {t('battles.voteFor', {
               name: battle.producer1?.username || t('battleDetail.producer1Fallback'),
@@ -145,8 +130,8 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
           </Button>
           <Button
             variant="outline"
-            isLoading={isSubmitting}
-            onClick={() => battle.producer2_id && submitVote(battle.producer2_id)}
+            disabled={isFeedbackModalOpen}
+            onClick={() => battle.producer2_id && openFeedbackModal(battle.producer2_id)}
           >
             {t('battles.voteFor', {
               name: battle.producer2?.username || t('battleDetail.producer2Fallback'),
@@ -155,9 +140,13 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
         </div>
       )}
 
-      {error && (
-        <p className="text-sm text-red-400">{error}</p>
-      )}
+      <BattleVoteFeedbackModal
+        isOpen={isFeedbackModalOpen}
+        battleId={battle.id}
+        winnerProducerId={selectedProducerId}
+        onSubmitSuccess={(winnerProducerId) => void handleVoteWithFeedbackSuccess(winnerProducerId)}
+        onClose={closeFeedbackModal}
+      />
     </Card>
   );
 }

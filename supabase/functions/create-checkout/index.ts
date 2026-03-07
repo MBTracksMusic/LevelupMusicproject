@@ -36,10 +36,81 @@ interface LicenseRow {
   exclusive_allowed: boolean;
 }
 
+const isProduction = () => {
+  const runtimeEnv = (Deno.env.get("ENV") ?? Deno.env.get("NODE_ENV") ?? "").trim().toLowerCase();
+  return runtimeEnv === "production" || runtimeEnv === "prod";
+};
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    const parsed = new URL(value);
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+};
+
 const asNonEmptyString = (value: unknown) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const resolveAllowedRedirectOrigins = () => {
+  const allowed = new Set<string>();
+
+  const csvAllowlist = asNonEmptyString(Deno.env.get("CHECKOUT_REDIRECT_ALLOWLIST"));
+  if (csvAllowlist) {
+    for (const token of csvAllowlist.split(",")) {
+      const origin = normalizeOrigin(token.trim());
+      if (origin) allowed.add(origin);
+    }
+  }
+
+  for (const envValue of [
+    Deno.env.get("APP_URL"),
+    Deno.env.get("SITE_URL"),
+    Deno.env.get("PUBLIC_SITE_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ]) {
+    const normalized = envValue ? normalizeOrigin(envValue) : null;
+    if (normalized) allowed.add(normalized);
+  }
+
+  if (!isProduction()) {
+    allowed.add("http://localhost:5173");
+    allowed.add("http://127.0.0.1:5173");
+  }
+
+  return allowed;
+};
+
+const ALLOWED_REDIRECT_ORIGINS = resolveAllowedRedirectOrigins();
+
+if (isProduction() && ALLOWED_REDIRECT_ORIGINS.size === 0) {
+  throw new Error("Missing checkout redirect allowlist configuration");
+}
+
+const validateRedirectUrl = (rawValue: unknown): string | null => {
+  const value = asNonEmptyString(rawValue);
+  if (!value) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+
+  if (!["https:", "http:"].includes(parsed.protocol)) {
+    return null;
+  }
+
+  if (!ALLOWED_REDIRECT_ORIGINS.has(parsed.origin)) {
+    return null;
+  }
+
+  return parsed.toString();
 };
 
 const isValidCheckoutAmount = (value: unknown): value is number => (
@@ -194,6 +265,16 @@ Deno.serve(async (req: Request) => {
 
     if (!resolvedBeatId || !successUrl || !cancelUrl) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const validatedSuccessUrl = validateRedirectUrl(successUrl);
+    const validatedCancelUrl = validateRedirectUrl(cancelUrl);
+
+    if (!validatedSuccessUrl || !validatedCancelUrl) {
+      return new Response(JSON.stringify({ error: "invalid_redirect_url" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -379,8 +460,8 @@ Deno.serve(async (req: Request) => {
 
     const sessionParamsData: Record<string, string> = {
       mode: "payment",
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      success_url: validatedSuccessUrl,
+      cancel_url: validatedCancelUrl,
       "metadata[user_id]": user.id,
       "metadata[buyer_id]": user.id,
       "metadata[beat_id]": resolvedBeatId,

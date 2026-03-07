@@ -33,6 +33,7 @@ FOR SELECT
 TO authenticated
 USING (id = auth.uid());
 
+DROP POLICY IF EXISTS "Owner can update own profile" ON public.user_profiles;
 CREATE POLICY "Owner can update own profile"
 ON public.user_profiles
 FOR UPDATE
@@ -52,6 +53,7 @@ WITH CHECK (
   AND producer_verified_at IS NOT DISTINCT FROM (SELECT producer_verified_at FROM public.user_profiles WHERE id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Owner can insert own profile" ON public.user_profiles;
 CREATE POLICY "Owner can insert own profile"
 ON public.user_profiles
 FOR INSERT

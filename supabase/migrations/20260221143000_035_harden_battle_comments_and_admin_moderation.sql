@@ -21,6 +21,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Confirmed users can comment'
   ) THEN
+    DROP POLICY IF EXISTS "Confirmed users can comment" ON public.battle_comments;
     CREATE POLICY "Confirmed users can comment"
   ON public.battle_comments
   FOR INSERT
@@ -45,6 +46,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Admins can view all battle comments'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can view all battle comments" ON public.battle_comments;
     CREATE POLICY "Admins can view all battle comments"
   ON public.battle_comments
   FOR SELECT
@@ -60,6 +62,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Admins can moderate battle comments'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can moderate battle comments" ON public.battle_comments;
     CREATE POLICY "Admins can moderate battle comments"
   ON public.battle_comments
   FOR UPDATE

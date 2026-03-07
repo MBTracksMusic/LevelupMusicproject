@@ -24,6 +24,8 @@ import { useAuth } from '../../lib/auth/hooks';
 import { useMyReputation } from '../../lib/reputation/hooks';
 import { useTranslation, languageNames } from '../../lib/i18n';
 import { useCartStore } from '../../lib/stores/cart';
+import { BRAND } from '../../config/branding';
+import beatelionIcon from '../../assets/beatelion-icon.svg';
 
 export function Header() {
   const { t, language, updateLanguage, languages } = useTranslation();
@@ -53,12 +55,18 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center">
-                <Music className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-white hidden sm:block">
-                {t('footer.brandName')}
+            <Link
+              to="/"
+              aria-label="Beatelion - Beat marketplace"
+              className="group flex items-center gap-2 cursor-pointer transition duration-200 hover:scale-105"
+            >
+              <img
+                src={beatelionIcon}
+                alt="Beatelion - Beat marketplace"
+                className="h-8 w-auto max-h-8"
+              />
+              <span className="text-lg font-bold tracking-wide text-white hidden md:block">
+                {BRAND.name.toUpperCase()}
               </span>
             </Link>
 

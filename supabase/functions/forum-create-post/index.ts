@@ -114,8 +114,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     topicTitle = topicRow.title;
   }
 
-  const allowed = await enforceRateLimit(supabaseAdmin, user.id, "forum_create_post");
-  if (!allowed) {
+  const rateLimit = await enforceRateLimit(supabaseAdmin, user.id, "forum_create_post");
+  if (!rateLimit.allowed) {
+    if (rateLimit.code === "rate_limit_check_failed") {
+      return jsonResponse({ error: "Service temporairement indisponible.", code: "rate_limit_check_failed" }, 500);
+    }
     return jsonResponse({ error: "Trop de tentatives. Reessayez dans une minute.", code: "rate_limit_exceeded" }, 429);
   }
 

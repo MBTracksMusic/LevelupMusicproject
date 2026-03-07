@@ -58,6 +58,7 @@ BEGIN
       AND policyname = 'Buyers can read own contracts'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Buyers can read own contracts" ON storage.objects;
       CREATE POLICY "Buyers can read own contracts"
         ON storage.objects
         FOR SELECT

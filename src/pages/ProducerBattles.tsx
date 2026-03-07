@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, MailQuestion, Swords, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MailQuestion, Swords, Target, XCircle } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -57,6 +57,16 @@ interface BattleQuotaStatus {
   reset_at: string;
 }
 
+interface MatchmakingOpponent {
+  user_id: string;
+  username: string | null;
+  elo_rating: number;
+  battle_wins: number;
+  battle_losses: number;
+  battle_draws: number;
+  elo_diff: number;
+}
+
 const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'premium'> = {
   pending: 'warning',
   pending_acceptance: 'warning',
@@ -79,6 +89,9 @@ function toRpcErrorMessage(error: {
   const details = error.details ? ` (${error.details})` : '';
   const technical = `[${code}] ${message}${details}`;
 
+  if (message.includes('Daily battle refusal limit reached (5 per day)') || message.includes('daily_battle_refusal_limit_reached')) {
+    return t('producerBattles.dailyRefusalLimitReached');
+  }
   if (message.includes('rejection_reason_required')) return t('producerBattles.rejectionReasonRequired');
   if (message.includes('response_already_recorded')) return t('producerBattles.responseAlreadyRecorded');
   if (message.includes('battle_not_waiting_for_response')) return t('producerBattles.noLongerAwaitingResponse');
@@ -132,6 +145,10 @@ function toBattleInsertErrorMessage(error: {
     return t('producerBattles.insertQuotaBlocked', { technical });
   }
 
+  if (message.includes('Skill difference too high to start battle.')) {
+    return t('producerBattles.skillDifferenceTooHigh');
+  }
+
   if (isRlsError) {
     return t('producerBattles.insertSecurityBlocked', { technical });
   }
@@ -153,6 +170,8 @@ export function ProducerBattlesPage() {
   const [quotaStatus, setQuotaStatus] = useState<BattleQuotaStatus | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [isQuotaLoading, setIsQuotaLoading] = useState(false);
+  const [matchmakingOpponents, setMatchmakingOpponents] = useState<MatchmakingOpponent[]>([]);
+  const [isMatchmakingLoading, setIsMatchmakingLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -279,6 +298,27 @@ export function ProducerBattlesPage() {
     }
   }, [profile?.id, t]);
 
+  const loadMatchmakingOpponents = useCallback(async () => {
+    if (!profile?.id) {
+      setMatchmakingOpponents([]);
+      setIsMatchmakingLoading(false);
+      return;
+    }
+
+    setIsMatchmakingLoading(true);
+
+    const { data, error: matchmakingError } = await supabase.rpc('get_matchmaking_opponents' as any);
+    if (matchmakingError) {
+      console.error('Error loading matchmaking opponents:', matchmakingError);
+      setMatchmakingOpponents([]);
+      setIsMatchmakingLoading(false);
+      return;
+    }
+
+    setMatchmakingOpponents((data as MatchmakingOpponent[] | null) ?? []);
+    setIsMatchmakingLoading(false);
+  }, [profile?.id]);
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -318,7 +358,7 @@ export function ProducerBattlesPage() {
         setProducers(producerRows);
         setMyProducts((productsRes.data as ProductOption[] | null) ?? []);
 
-        await Promise.all([loadBattles(), loadQuotaStatus()]);
+        await Promise.all([loadBattles(), loadQuotaStatus(), loadMatchmakingOpponents()]);
         setIsLoading(false);
       }
     }
@@ -328,7 +368,7 @@ export function ProducerBattlesPage() {
     return () => {
       isCancelled = true;
     };
-  }, [loadBattles, loadQuotaStatus, profile?.id]);
+  }, [loadBattles, loadMatchmakingOpponents, loadQuotaStatus, profile?.id]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -364,6 +404,23 @@ export function ProducerBattlesPage() {
     };
   }, [form.producer2Id]);
 
+  const hasReachedActiveBattlesLimit = useCallback(async () => {
+    if (!profile?.id) return false;
+
+    const { count, error: countError } = await supabase
+      .from('battles')
+      .select('id', { count: 'exact', head: true })
+      .eq('producer1_id', profile.id)
+      .in('status', ['pending_acceptance', 'active', 'voting']);
+
+    if (countError) {
+      console.error('Error checking active battles limit:', countError);
+      return false;
+    }
+
+    return (count ?? 0) >= 3;
+  }, [profile?.id]);
+
   const createBattle = async () => {
     if (!profile?.id) return;
 
@@ -379,6 +436,13 @@ export function ProducerBattlesPage() {
 
     setError(null);
     setIsSaving(true);
+
+    const reachedActiveLimit = await hasReachedActiveBattlesLimit();
+    if (reachedActiveLimit) {
+      setError(t('producerBattles.maxActiveBattlesReached'));
+      setIsSaving(false);
+      return;
+    }
 
     const latestQuota = await loadQuotaStatus();
     if (latestQuota && !latestQuota.can_create) {
@@ -409,6 +473,12 @@ export function ProducerBattlesPage() {
         message: insertError.message,
         details: insertError.details,
       });
+      const reachedAfterError = await hasReachedActiveBattlesLimit();
+      if (reachedAfterError) {
+        setError(t('producerBattles.maxActiveBattlesReached'));
+        setIsSaving(false);
+        return;
+      }
       const refreshedQuota = await loadQuotaStatus();
       setError(toBattleInsertErrorMessage(insertError, refreshedQuota, t));
       setIsSaving(false);
@@ -424,7 +494,7 @@ export function ProducerBattlesPage() {
     });
     setProducer2Products([]);
     setIsSaving(false);
-    await Promise.all([loadBattles(), loadQuotaStatus()]);
+    await Promise.all([loadBattles(), loadQuotaStatus(), loadMatchmakingOpponents()]);
   };
 
   const respondToBattle = async (battleId: string, accept: boolean) => {
@@ -567,6 +637,56 @@ export function ProducerBattlesPage() {
                 {t('common.create')}
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-3 border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-orange-400" />
+              <h3 className="text-sm font-semibold text-white">{t('producerBattles.matchmakingTitle')}</h3>
+            </div>
+            <p className="text-xs text-zinc-400">{t('producerBattles.matchmakingSubtitle')}</p>
+            {isMatchmakingLoading ? (
+              <p className="text-sm text-zinc-400">{t('common.loading')}</p>
+            ) : matchmakingOpponents.length === 0 ? (
+              <p className="text-sm text-zinc-500">{t('producerBattles.matchmakingEmpty')}</p>
+            ) : (
+              <ul className="space-y-2">
+                {matchmakingOpponents.map((opponent) => (
+                  <li
+                    key={opponent.user_id}
+                    className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {opponent.username || t('producerBattles.producerFallback')}
+                      </p>
+                      <p className="text-xs text-zinc-400">
+                        {t('producerBattles.matchmakingStats', {
+                          elo: opponent.elo_rating,
+                          wins: opponent.battle_wins,
+                          losses: opponent.battle_losses,
+                          draws: opponent.battle_draws,
+                          diff: opponent.elo_diff,
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          producer2Id: opponent.user_id,
+                          product2Id: '',
+                        }))
+                      }
+                    >
+                      {t('producerBattles.challengeThisProducer')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </Card>
 

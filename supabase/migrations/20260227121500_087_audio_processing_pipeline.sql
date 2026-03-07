@@ -50,6 +50,7 @@ CREATE POLICY "Admins can insert site audio settings"
   TO authenticated
   WITH CHECK (public.is_admin(auth.uid()));
 
+DROP POLICY IF EXISTS "Admins can update site audio settings" ON public.site_audio_settings;
 CREATE POLICY "Admins can update site audio settings"
   ON public.site_audio_settings
   FOR UPDATE
@@ -57,6 +58,7 @@ CREATE POLICY "Admins can update site audio settings"
   USING (public.is_admin(auth.uid()))
   WITH CHECK (public.is_admin(auth.uid()));
 
+DROP POLICY IF EXISTS "Admins can delete site audio settings" ON public.site_audio_settings;
 CREATE POLICY "Admins can delete site audio settings"
   ON public.site_audio_settings
   FOR DELETE
@@ -78,6 +80,7 @@ BEGIN
          AND tgrelid = 'public.site_audio_settings'::regclass
          AND NOT tgisinternal
      ) THEN
+    DROP TRIGGER IF EXISTS update_site_audio_settings_updated_at ON public.site_audio_settings;
     CREATE TRIGGER update_site_audio_settings_updated_at
       BEFORE UPDATE ON public.site_audio_settings
       FOR EACH ROW
@@ -214,6 +217,7 @@ BEGIN
          AND tgrelid = 'public.audio_processing_jobs'::regclass
          AND NOT tgisinternal
      ) THEN
+    DROP TRIGGER IF EXISTS update_audio_processing_jobs_updated_at ON public.audio_processing_jobs;
     CREATE TRIGGER update_audio_processing_jobs_updated_at
       BEFORE UPDATE ON public.audio_processing_jobs
       FOR EACH ROW
@@ -530,6 +534,7 @@ BEGIN
       AND public.is_admin(auth.uid())
     );
 
+  DROP POLICY IF EXISTS "Admins can upload watermark assets" ON storage.objects;
   CREATE POLICY "Admins can upload watermark assets"
     ON storage.objects
     FOR INSERT
@@ -540,6 +545,7 @@ BEGIN
       AND name LIKE 'admin/%'
     );
 
+  DROP POLICY IF EXISTS "Admins can update watermark assets" ON storage.objects;
   CREATE POLICY "Admins can update watermark assets"
     ON storage.objects
     FOR UPDATE
@@ -555,6 +561,7 @@ BEGIN
       AND name LIKE 'admin/%'
     );
 
+  DROP POLICY IF EXISTS "Admins can delete watermark assets" ON storage.objects;
   CREATE POLICY "Admins can delete watermark assets"
     ON storage.objects
     FOR DELETE

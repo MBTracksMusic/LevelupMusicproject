@@ -106,4 +106,4 @@ Ces fonctions necessitent une cle API Stripe configuree dans les secrets Supabas
 - Zustand (state management)
 - React Query
 - React Router v7
-# LevelupMusicproject
+# Beatelion project

@@ -4,7 +4,12 @@ import PDFDocument from "pdfkit";
 const CONTRACT_BUCKET = "contracts";
 const SIGNED_URL_DEFAULT_SECONDS = 60;
 const SIGNED_URL_MIN_SECONDS = 30;
-const SIGNED_URL_MAX_SECONDS = 24 * 60 * 60;
+const SIGNED_URL_MAX_SECONDS = 600;
+const CONTRACT_SERVICE_SECRET = process.env.CONTRACT_SERVICE_SECRET?.trim();
+
+if (!CONTRACT_SERVICE_SECRET) {
+  throw new Error("Missing CONTRACT_SERVICE_SECRET environment variable");
+}
 
 interface ApiRequest {
   method?: string;
@@ -156,6 +161,43 @@ const normalizeStoragePathCandidate = (candidate: string): string | null => {
   }
 };
 
+const splitStoragePath = (storagePath: string) => {
+  const normalized = storagePath.replace(/^\/+/, "");
+  const slashIndex = normalized.lastIndexOf("/");
+  if (slashIndex < 0) {
+    return { folder: "", fileName: normalized };
+  }
+  return {
+    folder: normalized.slice(0, slashIndex),
+    fileName: normalized.slice(slashIndex + 1),
+  };
+};
+
+const storageObjectExists = async (
+  supabase: SupabaseAdminClient,
+  storagePath: string,
+): Promise<boolean> => {
+  const normalized = normalizeStoragePathCandidate(storagePath);
+  if (!normalized) return false;
+
+  const { folder, fileName } = splitStoragePath(normalized);
+  if (!fileName) return false;
+
+  const { data, error } = await supabase.storage
+    .from(CONTRACT_BUCKET)
+    .list(folder, { limit: 100, search: fileName });
+
+  if (error) {
+    console.error("[api/contracts] Failed checking contract existence", {
+      storagePath: normalized,
+      error,
+    });
+    return false;
+  }
+
+  return (data ?? []).some((entry) => entry.name === fileName);
+};
+
 const concatByteChunks = (chunks: Uint8Array[]): Uint8Array => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const merged = new Uint8Array(total);
@@ -244,14 +286,21 @@ const getSupabaseAdmin = () => {
 type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
 
 const buildStoragePath = (payload: GeneratePayload): string => {
+  const timestamp = Date.now();
+
   if (payload.purchaseId) {
     const purchaseIdSegment = sanitizePathSegment(payload.purchaseId, `purchase-${Date.now()}`);
-    return `contracts/${purchaseIdSegment}.pdf`;
+    return `contracts/${purchaseIdSegment}/${timestamp}.pdf`;
   }
 
   const buyerSegment = sanitizePathSegment(payload.buyerIdForPath, "buyer");
   const trackSegment = sanitizePathSegment(payload.trackIdForPath, "track");
-  return `contracts/${buyerSegment}-${trackSegment}-${Date.now()}.pdf`;
+  return `contracts/${buyerSegment}-${trackSegment}-${timestamp}.pdf`;
+};
+
+const buildPurchaseContractPath = (purchaseId: string): string => {
+  const purchaseIdSegment = sanitizePathSegment(purchaseId, `purchase-${Date.now()}`);
+  return `contracts/${purchaseIdSegment}/${Date.now()}.pdf`;
 };
 
 const uploadContractToSupabase = async (
@@ -263,7 +312,7 @@ const uploadContractToSupabase = async (
     .from(CONTRACT_BUCKET)
     .upload(storagePath, pdfBuffer, {
       contentType: "application/pdf",
-      upsert: true,
+      upsert: false,
     });
 
   if (error) throw error;
@@ -329,15 +378,24 @@ const extractGeneratePayload = (body: Record<string, unknown>): GeneratePayload 
   };
 };
 
-const mustAuthorizeGenerate = (
+const isAuthorized = (
   headers: Record<string, string | string[] | undefined> | undefined,
 ): boolean => {
-  const secret = asNonEmptyString(process.env.CONTRACT_SERVICE_SECRET);
-  if (!secret) return true;
+  if (!headers) return false;
 
-  const authorizationHeader = firstHeaderValue(headers, "authorization");
-  const provided = getBearerToken(authorizationHeader);
-  return provided === secret;
+  const provided = headers["x-contract-secret"] ??
+    headers["X-Contract-Secret"] ??
+    headers["authorization"] ??
+    headers["Authorization"];
+
+  if (!provided) return false;
+
+  const rawToken = Array.isArray(provided) ? provided[0] : provided;
+  const token = asNonEmptyString(rawToken);
+  if (!token) return false;
+
+  const bearerToken = asNonEmptyString(token.replace(/^Bearer\s+/i, ""));
+  return token === CONTRACT_SERVICE_SECRET || bearerToken === CONTRACT_SERVICE_SECRET;
 };
 
 const readQueryParam = (query: Record<string, unknown> | undefined, key: string): string | null => {
@@ -517,7 +575,11 @@ async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    if (!mustAuthorizeGenerate(req.headers)) {
+    if (!isAuthorized(req.headers)) {
+      console.warn("Unauthorized contract generation attempt", {
+        ip: firstHeaderValue(req.headers, "x-forwarded-for"),
+        userAgent: firstHeaderValue(req.headers, "user-agent"),
+      });
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -536,9 +598,19 @@ async function handler(req: ApiRequest, res: ApiResponse) {
         return res.status(404).json({ error: "Purchase not found" });
       }
 
+      if (seed.declaredStoragePath && await storageObjectExists(supabase, seed.declaredStoragePath)) {
+        const signedUrl = await getContractSignedUrl(supabase, seed.declaredStoragePath, signedUrlExpiresIn);
+        return res.status(200).json({
+          message: "Contrat déjà généré",
+          purchaseId: purchaseIdFromWebhook,
+          contractPath: seed.declaredStoragePath,
+          downloadUrl: signedUrl,
+          expiresIn: signedUrlExpiresIn,
+        });
+      }
+
       const pdfBuffer = await generateContractPDF(seed.contractData);
-      const storagePath = seed.declaredStoragePath ??
-        `contracts/${sanitizePathSegment(purchaseIdFromWebhook, `purchase-${Date.now()}`)}.pdf`;
+      const storagePath = buildPurchaseContractPath(purchaseIdFromWebhook);
 
       await uploadContractToSupabase(supabase, pdfBuffer, storagePath);
 

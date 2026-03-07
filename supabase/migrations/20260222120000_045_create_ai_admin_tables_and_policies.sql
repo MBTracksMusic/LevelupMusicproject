@@ -95,6 +95,7 @@ DO $$ BEGIN
     AND tablename = 'ai_admin_actions'
     AND policyname = 'Admins can insert ai admin actions'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can insert ai admin actions" ON public.ai_admin_actions;
     CREATE POLICY "Admins can insert ai admin actions"
   ON public.ai_admin_actions
   FOR INSERT
@@ -110,6 +111,7 @@ DO $$ BEGIN
     AND tablename = 'ai_admin_actions'
     AND policyname = 'Admins can update ai admin actions'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update ai admin actions" ON public.ai_admin_actions;
     CREATE POLICY "Admins can update ai admin actions"
   ON public.ai_admin_actions
   FOR UPDATE
@@ -145,6 +147,7 @@ DO $$ BEGIN
     AND tablename = 'ai_training_feedback'
     AND policyname = 'Admins can insert ai training feedback'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can insert ai training feedback" ON public.ai_training_feedback;
     CREATE POLICY "Admins can insert ai training feedback"
   ON public.ai_training_feedback
   FOR INSERT
@@ -160,6 +163,7 @@ DO $$ BEGIN
     AND tablename = 'ai_training_feedback'
     AND policyname = 'Admins can update ai training feedback'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update ai training feedback" ON public.ai_training_feedback;
     CREATE POLICY "Admins can update ai training feedback"
   ON public.ai_training_feedback
   FOR UPDATE
@@ -194,6 +198,7 @@ DO $$ BEGIN
     AND tablename = 'admin_notifications'
     AND policyname = 'Admins can update own notifications'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update own notifications" ON public.admin_notifications;
     CREATE POLICY "Admins can update own notifications"
   ON public.admin_notifications
   FOR UPDATE

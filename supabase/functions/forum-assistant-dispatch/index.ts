@@ -126,8 +126,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const rateLimitUserId = sourcePost?.user_id ?? null;
-  const allowed = await enforceRateLimit(supabaseAdmin, rateLimitUserId, "forum_assistant_dispatch");
-  if (!allowed) {
+  const rateLimit = await enforceRateLimit(supabaseAdmin, rateLimitUserId, "forum_assistant_dispatch");
+  if (!rateLimit.allowed) {
+    if (rateLimit.code === "rate_limit_check_failed") {
+      return jsonResponse({ error: "Rate limit backend unavailable", code: "rate_limit_check_failed" }, 500);
+    }
     return jsonResponse({ ok: true, queued: false, skipped: "rate_limit_exceeded" }, 429);
   }
 

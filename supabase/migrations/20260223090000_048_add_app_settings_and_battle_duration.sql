@@ -43,6 +43,7 @@ DO $$ BEGIN
     AND tablename = 'app_settings'
     AND policyname = 'Admins can insert app settings'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can insert app settings" ON public.app_settings;
     CREATE POLICY "Admins can insert app settings"
   ON public.app_settings
   FOR INSERT
@@ -58,6 +59,7 @@ DO $$ BEGIN
     AND tablename = 'app_settings'
     AND policyname = 'Admins can update app settings'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update app settings" ON public.app_settings;
     CREATE POLICY "Admins can update app settings"
   ON public.app_settings
   FOR UPDATE

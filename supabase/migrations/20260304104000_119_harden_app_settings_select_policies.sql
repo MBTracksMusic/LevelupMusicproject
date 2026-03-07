@@ -9,6 +9,7 @@
 DROP POLICY IF EXISTS "Anyone can read app settings"
 ON public.app_settings;
 
+DROP POLICY IF EXISTS "Public can read safe app settings" ON public.app_settings;
 CREATE POLICY "Public can read safe app settings"
 ON public.app_settings
 FOR SELECT
@@ -17,6 +18,7 @@ USING (
   key = ANY (ARRAY['social_links'])
 );
 
+DROP POLICY IF EXISTS "Admins can read all app settings" ON public.app_settings;
 CREATE POLICY "Admins can read all app settings"
 ON public.app_settings
 FOR SELECT

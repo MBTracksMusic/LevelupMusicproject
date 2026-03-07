@@ -20,6 +20,7 @@ ON storage.objects;
 DROP POLICY IF EXISTS "Producers can read their audio"
 ON storage.objects;
 
+DROP POLICY IF EXISTS "Producers can read their audio" ON storage.objects;
 CREATE POLICY "Producers can read their audio"
 ON storage.objects
 FOR SELECT

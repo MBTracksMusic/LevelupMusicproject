@@ -63,6 +63,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Users can update own avatars" ON storage.objects;
   CREATE POLICY "Users can update own avatars"
     ON storage.objects
     FOR UPDATE
@@ -78,6 +79,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Users can delete own avatars" ON storage.objects;
   CREATE POLICY "Users can delete own avatars"
     ON storage.objects
     FOR DELETE
@@ -88,6 +90,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Anyone can view avatars" ON storage.objects;
   CREATE POLICY "Anyone can view avatars"
     ON storage.objects
     FOR SELECT

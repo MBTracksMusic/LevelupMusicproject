@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { LogoLoader } from '../components/ui/LogoLoader';
 import { AdminPriorityCards } from '../components/admin/AdminPriorityCards';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
@@ -1044,7 +1045,7 @@ export function AdminBattlesPage({ onAwaitingAdminCountChange }: AdminBattlesPag
   if (adminContext.isAdmin === null) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+        <LogoLoader label={t('common.loading')} />
       </div>
     );
   }

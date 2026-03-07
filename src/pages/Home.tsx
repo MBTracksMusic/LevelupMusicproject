@@ -13,8 +13,10 @@ import {
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/products/ProductCard';
 import { HomeBattlesPreview } from '../components/home/HomeBattlesPreview';
+import { HomeBattleOfTheDay } from '../components/home/HomeBattleOfTheDay';
 import { HomeFeaturedBeats } from '../components/home/HomeFeaturedBeats';
 import { HomeTopProducers } from '../components/home/HomeTopProducers';
+import { HomeWeeklyTopProducers } from '../components/home/HomeWeeklyTopProducers';
 import { HomeNewsVideos } from '../components/home/HomeNewsVideos';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
@@ -160,16 +162,16 @@ export function HomePage() {
                 {t('home.exploreBeats')}
               </Button>
             </Link>
-            <Link to="/pricing">
+            <Link to="/battles">
               <Button size="lg" variant="outline">
-                {t('home.becomeProducer')}
+                {t('home.joinBattles')}
               </Button>
             </Link>
           </div>
 
-          <div className="flex items-center justify-center gap-8 text-zinc-400">
-            <div className="flex items-center gap-2">
-              <Headphones className="w-5 h-5" />
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-zinc-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              <Headphones className="w-4 h-4 text-orange-400" />
               <span>
                 {isHomeStatsLoading
                   ? `... ${t('home.statsBeatsLabel')}`
@@ -178,8 +180,8 @@ export function HomePage() {
                     : t('home.statsBeatsUnavailable')}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              <Users className="w-4 h-4 text-orange-400" />
               <span>
                 {isHomeStatsLoading
                   ? `... ${t('nav.producers')}`
@@ -188,8 +190,8 @@ export function HomePage() {
                     : t('home.statsProducersUnavailable')}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              <Shield className="w-4 h-4 text-orange-400" />
               <span>{t('home.securePayment')}</span>
             </div>
           </div>
@@ -197,7 +199,9 @@ export function HomePage() {
       </section>
 
       <HomeNewsVideos />
+      <HomeBattleOfTheDay />
       <HomeTopProducers />
+      <HomeWeeklyTopProducers />
       <HomeBattlesPreview />
       <HomeFeaturedBeats />
 

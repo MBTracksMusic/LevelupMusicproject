@@ -45,6 +45,7 @@ BEGIN
       AND policyname = 'Stripe events deny clients'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Stripe events deny clients" ON public.stripe_events;
       CREATE POLICY "Stripe events deny clients"
         ON public.stripe_events
         FOR ALL

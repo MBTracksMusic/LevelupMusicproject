@@ -1,11 +1,12 @@
-# Contract Service
+# Contract Service (Legacy)
 
-Serverless Express service used by Stripe webhook callbacks to:
+Legacy service kept for compatibility during migration.
 
-1. load a completed purchase from Supabase,
-2. generate a contract PDF with license rights/limits,
-3. upload the PDF to Supabase Storage,
-4. send a buyer confirmation email via Resend.
+Canonical contract generation is now handled by the API route:
+
+- `POST /api/generate-contract` (see `api/contract-handler.ts`)
+
+This package is not the canonical generator in production.
 
 ## Required environment variables
 
@@ -16,8 +17,8 @@ Serverless Express service used by Stripe webhook callbacks to:
 ## Optional environment variables
 
 - `RESEND_API_KEY`
-- `RESEND_FROM_EMAIL` (default: `LevelUpMusic <noreply@levelupmusic.com>`)
-- `SUPPORT_EMAIL` (default: `support@levelupmusic.com`)
+- `RESEND_FROM_EMAIL` (default: `Beatelion <noreply@beatelion.com>`)
+- `SUPPORT_EMAIL` (default: `support@beatelion.com`)
 - `SUPABASE_AUDIO_BUCKET` (default: `beats-audio`)
 - `CONTRACT_BUCKET` (default: `contracts`)
 - `ATTACH_CONTRACT_TO_EMAIL` (`true` to attach generated PDF)
@@ -25,6 +26,5 @@ Serverless Express service used by Stripe webhook callbacks to:
 ## Endpoints
 
 - `GET /health`
-- `POST /generate-contract`
-  - Header: `Authorization: Bearer <CONTRACT_SERVICE_SECRET>`
-  - Body: `{ "purchase_id": "<uuid>" }`
+
+`POST /generate-contract` is intentionally not exposed here.

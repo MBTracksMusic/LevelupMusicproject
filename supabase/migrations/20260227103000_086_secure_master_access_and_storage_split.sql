@@ -205,6 +205,7 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS %I ON storage.objects', policy_row.policyname);
   END LOOP;
 
+  DROP POLICY IF EXISTS "Producers can upload masters" ON storage.objects;
   CREATE POLICY "Producers can upload masters"
     ON storage.objects
     FOR INSERT
@@ -216,6 +217,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Producers can update own masters" ON storage.objects;
   CREATE POLICY "Producers can update own masters"
     ON storage.objects
     FOR UPDATE
@@ -233,6 +235,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Producers can delete own masters" ON storage.objects;
   CREATE POLICY "Producers can delete own masters"
     ON storage.objects
     FOR DELETE
@@ -244,6 +247,7 @@ BEGIN
       AND name LIKE auth.uid()::text || '/%'
     );
 
+  DROP POLICY IF EXISTS "Public can read watermarked audio" ON storage.objects;
   CREATE POLICY "Public can read watermarked audio"
     ON storage.objects
     FOR SELECT

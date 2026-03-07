@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Heart, AlertCircle, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/products/ProductCard';
+import { LogoLoader } from '../components/ui/LogoLoader';
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '../lib/supabase/client';
@@ -162,7 +163,7 @@ export function WishlistPage() {
 
         {isLoading ? (
           <div className="min-h-[40vh] flex items-center justify-center">
-            <div className="w-10 h-10 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+            <LogoLoader label={t('common.loading')} />
           </div>
         ) : products.length === 0 ? (
           <div className="min-h-[40vh] border border-dashed border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-4 bg-zinc-900/40">

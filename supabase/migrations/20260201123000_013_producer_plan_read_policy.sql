@@ -46,6 +46,7 @@ BEGIN
       AND policyname = 'Producer plan readable'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Producer plan readable" ON public.producer_plan_config;
       CREATE POLICY "Producer plan readable"
         ON public.producer_plan_config
         FOR SELECT

@@ -19,6 +19,7 @@ begin
       and tablename = 'user_profiles'
       and schemaname = 'public'
   ) then
+    DROP POLICY IF EXISTS "Auth service can insert profiles" ON public.user_profiles;
     create policy "Auth service can insert profiles"
       on public.user_profiles
       for insert
@@ -37,6 +38,7 @@ begin
       and tablename = 'user_profiles'
       and schemaname = 'public'
   ) then
+    DROP POLICY IF EXISTS "Authenticated can insert own profile" ON public.user_profiles;
     create policy "Authenticated can insert own profile"
       on public.user_profiles
       for insert

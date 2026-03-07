@@ -9,6 +9,7 @@
 DROP POLICY IF EXISTS "Authenticated users can read beats audio"
 ON storage.objects;
 
+DROP POLICY IF EXISTS "Authenticated users can read specific audio file" ON storage.objects;
 CREATE POLICY "Authenticated users can read specific audio file"
 ON storage.objects
 FOR SELECT

@@ -31,6 +31,7 @@ BEGIN
       AND policyname = 'Authenticated users can read beats audio'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Authenticated users can read beats audio" ON storage.objects;
       CREATE POLICY "Authenticated users can read beats audio"
         ON storage.objects
         FOR SELECT

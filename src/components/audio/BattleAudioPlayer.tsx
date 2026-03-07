@@ -10,6 +10,7 @@ const formatTime = (value: number) => {
 };
 
 interface BattleAudioPlayerProps {
+  productId?: string | null | undefined;
   src: string | null | undefined;
   label?: string;
   playerId: string;
@@ -18,6 +19,7 @@ interface BattleAudioPlayerProps {
 }
 
 export function BattleAudioPlayer({
+  productId,
   src,
   label,
   playerId,
@@ -42,6 +44,7 @@ export function BattleAudioPlayer({
     let isCancelled = false;
 
     const run = async () => {
+      const trimmedProductId = productId?.trim() ?? '';
       const trimmed = src?.trim() ?? '';
       setSourceCandidates([]);
       setSourceIndex(0);
@@ -50,16 +53,33 @@ export function BattleAudioPlayer({
       setIsReady(false);
       setErrorMessage(null);
 
-      if (!trimmed) {
+      if (!trimmedProductId && !trimmed) {
         setErrorMessage(t('audio.previewUnavailable'));
         return;
       }
 
       setIsResolving(true);
-      const resolved = [trimmed];
+      const resolved: string[] = [];
+
+      if (trimmedProductId) {
+        const encodedProductId = encodeURIComponent(trimmedProductId);
+        resolved.push(`/preview/${encodedProductId}`);
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+        if (supabaseUrl) {
+          const base = supabaseUrl.replace(/\/+$/, '');
+          resolved.push(`${base}/functions/v1/preview-audio/${encodedProductId}`);
+        }
+      }
+
+      if (trimmed) {
+        // Legacy fallback kept for historical snapshots where the product row no longer exists.
+        resolved.push(trimmed);
+      }
+
       if (isCancelled) return;
 
-      setSourceCandidates(resolved);
+      setSourceCandidates([...new Set(resolved)]);
       if (resolved.length === 0) {
         setErrorMessage(t('audio.previewUnavailable'));
       }
@@ -70,7 +90,7 @@ export function BattleAudioPlayer({
     return () => {
       isCancelled = true;
     };
-  }, [src, t]);
+  }, [productId, src, t]);
 
   useEffect(() => {
     const audio = audioRef.current;

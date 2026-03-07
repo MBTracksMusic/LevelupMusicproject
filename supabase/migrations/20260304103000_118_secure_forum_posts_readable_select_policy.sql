@@ -10,6 +10,7 @@
 DROP POLICY IF EXISTS "Forum posts readable"
 ON public.forum_posts;
 
+DROP POLICY IF EXISTS "Forum posts readable" ON public.forum_posts;
 CREATE POLICY "Forum posts readable"
 ON public.forum_posts
 FOR SELECT

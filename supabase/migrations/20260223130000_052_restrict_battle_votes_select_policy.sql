@@ -35,6 +35,7 @@ DO $$ BEGIN
     AND tablename = 'battle_votes'
     AND policyname = 'Users can read own battle votes'
   ) THEN
+    DROP POLICY IF EXISTS "Users can read own battle votes" ON public.battle_votes;
     CREATE POLICY "Users can read own battle votes"
   ON public.battle_votes
   FOR SELECT

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Beatelion logo">
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF4D4D" />
+      <stop offset="52%" stop-color="#FF6A2B" />
+      <stop offset="100%" stop-color="#FF8A3D" />
+    </linearGradient>
+    <filter id="brandGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="700" fill="#0B0B0F" />
+
+  <g transform="translate(450 70)" filter="url(#brandGlow)">
+    <g fill="url(#brandGradient)">
+      <path d="M150 0l56 114-56 88-56-88z" />
+      <path d="M20 112l78 46-22 108-60-34z" />
+      <path d="M280 112l4 120-60 34-22-108z" />
+      <path d="M80 252l70 44 70-44-14 56-56 42-56-42z" />
+      <path d="M94 168h112l-12 48h-88z" fill="#0B0B0F" />
+    </g>
+
+    <g stroke="url(#brandGradient)" stroke-width="7" stroke-linecap="round" fill="none" opacity="0.95">
+      <path d="M-260 164h230" />
+      <path d="M270 164h230" />
+      <path d="M-236 164l9-24 9 48 9-72 9 96 9-72 9 48 9-24" />
+      <path d="M468 140l9 24 9-48 9 72 9-96 9 72 9-48 9 24" />
+    </g>
+  </g>
+
+  <text
+    x="600"
+    y="550"
+    text-anchor="middle"
+    fill="url(#brandGradient)"
+    font-family="'Segoe UI', 'Arial Black', Arial, sans-serif"
+    font-size="132"
+    font-weight="900"
+    letter-spacing="7"
+  >
+    BEATELION
+  </text>
+
+  <g transform="translate(600 608)" stroke="url(#brandGradient)" stroke-width="6" fill="none" stroke-linecap="round">
+    <path d="M-210 18c100-18 160-18 210 0c50-18 110-18 210 0" />
+    <path d="M-66 18l8-18 8 36 8-54 8 72 8-54 8 36 8-18" />
+  </g>
+</svg>
+

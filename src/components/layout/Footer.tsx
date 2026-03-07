@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Music, Heart, Twitter, Instagram, Youtube } from 'lucide-react';
+import { Heart, Twitter, Instagram, Youtube } from 'lucide-react';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
+import beatelionIcon from '../../assets/beatelion-icon.svg';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';
 
@@ -76,10 +77,12 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           <div>
-            <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center">
-                <Music className="w-5 h-5 text-white" />
-              </div>
+            <Link to="/" className="flex items-center gap-2 mb-4 transition duration-200 hover:scale-105">
+              <img
+                src={beatelionIcon}
+                alt="Beatelion - Beat marketplace"
+                className="h-8 w-auto max-h-8"
+              />
               <span className="text-xl font-bold text-white">{t('footer.brandName')}</span>
             </Link>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">

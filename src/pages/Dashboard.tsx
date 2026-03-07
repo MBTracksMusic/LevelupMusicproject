@@ -121,34 +121,6 @@ const formatSubscriptionDate = (
   return formatDate(parsedDate);
 };
 
-const asNonEmptyString = (value: unknown) => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const getDeclaredContractPathCandidates = (purchase: DashboardPurchase) => {
-  const metadata = purchase.metadata as Record<string, unknown> | null;
-  const metadataCandidates = [
-    metadata?.contract_pdf_path,
-    metadata?.contract_path,
-    metadata?.contract_pdf,
-    metadata?.pdf_path,
-  ]
-    .map(asNonEmptyString)
-    .filter(Boolean) as string[];
-
-  return [
-    asNonEmptyString(purchase.contract_pdf_path),
-    ...metadataCandidates,
-  ].filter(Boolean) as string[];
-};
-
-const getContractPathCandidates = (purchase: DashboardPurchase) => {
-  const declared = getDeclaredContractPathCandidates(purchase);
-  return [...new Set([...declared, `contracts/${purchase.id}.pdf`, `${purchase.id}.pdf`])];
-};
-
 const toNullableNumber = (value: unknown) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return value;
@@ -692,38 +664,9 @@ export function DashboardPage() {
       return;
     }
 
-    const pathCandidates = getContractPathCandidates(purchase);
-    const normalizedCandidates = [...new Set(pathCandidates.map((path) => path.trim()).filter(Boolean))];
-    let lastError: unknown = null;
-
-    if (normalizedCandidates.length > 0) {
-      for (const candidate of normalizedCandidates) {
-        if (candidate.startsWith('http')) {
-          window.open(candidate, '_blank');
-          return;
-        }
-
-        const normalizedPath =
-          extractStoragePathFromCandidate(candidate, 'contracts') || candidate;
-
-        const { data, error } = await supabase.storage
-          .from('contracts')
-          .createSignedUrl(normalizedPath, 60, { download: true });
-
-        if (data?.signedUrl && !error) {
-          window.open(data.signedUrl, '_blank');
-          return;
-        }
-
-        lastError = error;
-      }
-    }
-
     console.warn('Contract PDF unavailable', {
       purchaseId: purchase.id,
-      triedCandidates: normalizedCandidates,
       functionError: contractError,
-      lastError,
     });
     toast.error(t('dashboard.contractDownloadError'));
   };

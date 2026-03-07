@@ -398,6 +398,7 @@ export function BattleDetailPage() {
                     <p className="text-xs text-amber-300">{t('battleDetail.deletedProductHistory')}</p>
                   )}
                   <BattleAudioPlayer
+                    productId={battle.product1?.id ?? product1Snapshot?.product_id ?? null}
                     src={product1PreviewUrl}
                     label={product1IsHistoricalOnly ? t('battleDetail.historicalPreviewProducer1') : t('battleDetail.previewProducer1')}
                     playerId={`battle-${battle.id}-product-1`}
@@ -427,6 +428,7 @@ export function BattleDetailPage() {
                     <p className="text-xs text-amber-300">{t('battleDetail.deletedProductHistory')}</p>
                   )}
                   <BattleAudioPlayer
+                    productId={battle.product2?.id ?? product2Snapshot?.product_id ?? null}
                     src={product2PreviewUrl}
                     label={product2IsHistoricalOnly ? t('battleDetail.historicalPreviewProducer2') : t('battleDetail.previewProducer2')}
                     playerId={`battle-${battle.id}-product-2`}

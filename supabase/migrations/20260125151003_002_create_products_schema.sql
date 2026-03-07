@@ -168,6 +168,7 @@ BEGIN
       AND tablename = 'genres'
       AND policyname = 'Anyone can view active genres'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view active genres" ON genres FOR SELECT;
     CREATE POLICY "Anyone can view active genres"
       ON genres FOR SELECT
       USING (is_active = true);
@@ -185,6 +186,7 @@ BEGIN
       AND tablename = 'moods'
       AND policyname = 'Anyone can view active moods'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view active moods" ON moods FOR SELECT;
     CREATE POLICY "Anyone can view active moods"
       ON moods FOR SELECT
       USING (is_active = true);
@@ -204,6 +206,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Anyone can view published products'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view published products" ON products FOR SELECT;
     CREATE POLICY "Anyone can view published products"
       ON products FOR SELECT
       USING (
@@ -224,6 +227,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Producers can view own products'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can view own products" ON products FOR SELECT;
     CREATE POLICY "Producers can view own products"
       ON products FOR SELECT
       TO authenticated
@@ -242,6 +246,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Active producers can create products'
   ) THEN
+    DROP POLICY IF EXISTS "Active producers can create products" ON products FOR INSERT;
     CREATE POLICY "Active producers can create products"
       ON products FOR INSERT
       TO authenticated
@@ -267,6 +272,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Producers can update own unsold products'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can update own unsold products" ON products FOR UPDATE;
     CREATE POLICY "Producers can update own unsold products"
       ON products FOR UPDATE
       TO authenticated
@@ -291,6 +297,7 @@ BEGIN
       AND tablename = 'products'
       AND policyname = 'Producers can delete own unsold products'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can delete own unsold products" ON products FOR DELETE;
     CREATE POLICY "Producers can delete own unsold products"
       ON products FOR DELETE
       TO authenticated
@@ -314,6 +321,7 @@ BEGIN
       AND tablename = 'product_files'
       AND policyname = 'Producers can view own product files'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can view own product files" ON product_files FOR SELECT;
     CREATE POLICY "Producers can view own product files"
       ON product_files FOR SELECT
       TO authenticated
@@ -338,6 +346,7 @@ BEGIN
       AND tablename = 'product_files'
       AND policyname = 'Active producers can add product files'
   ) THEN
+    DROP POLICY IF EXISTS "Active producers can add product files" ON product_files FOR INSERT;
     CREATE POLICY "Active producers can add product files"
       ON product_files FOR INSERT
       TO authenticated
@@ -364,6 +373,7 @@ BEGIN
       AND tablename = 'product_files'
       AND policyname = 'Producers can delete own product files'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can delete own product files" ON product_files FOR DELETE;
     CREATE POLICY "Producers can delete own product files"
       ON product_files FOR DELETE
       TO authenticated
@@ -389,6 +399,7 @@ BEGIN
       AND tgrelid = 'public.products'::regclass
       AND NOT tgisinternal
   ) THEN
+    DROP TRIGGER IF EXISTS update_products_updated_at ON products;
     CREATE TRIGGER update_products_updated_at
       BEFORE UPDATE ON products
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -437,6 +448,7 @@ BEGIN
       AND tgrelid = 'public.products'::regclass
       AND NOT tgisinternal
   ) THEN
+    DROP TRIGGER IF EXISTS generate_product_slug_trigger ON products;
     CREATE TRIGGER generate_product_slug_trigger
       BEFORE INSERT OR UPDATE ON products
       FOR EACH ROW

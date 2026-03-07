@@ -128,6 +128,7 @@ DO $$ BEGIN
     AND tablename = 'rpc_rate_limit_rules'
     AND policyname = 'Admins can read rpc rate limit rules'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can read rpc rate limit rules" ON public.rpc_rate_limit_rules;
     CREATE POLICY "Admins can read rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR SELECT
@@ -143,6 +144,7 @@ DO $$ BEGIN
     AND tablename = 'rpc_rate_limit_rules'
     AND policyname = 'Admins can insert rpc rate limit rules'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can insert rpc rate limit rules" ON public.rpc_rate_limit_rules;
     CREATE POLICY "Admins can insert rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR INSERT
@@ -158,6 +160,7 @@ DO $$ BEGIN
     AND tablename = 'rpc_rate_limit_rules'
     AND policyname = 'Admins can update rpc rate limit rules'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update rpc rate limit rules" ON public.rpc_rate_limit_rules;
     CREATE POLICY "Admins can update rpc rate limit rules"
   ON public.rpc_rate_limit_rules
   FOR UPDATE
@@ -174,6 +177,7 @@ DO $$ BEGIN
     AND tablename = 'rpc_rate_limit_counters'
     AND policyname = 'Admins can read rpc rate limit counters'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can read rpc rate limit counters" ON public.rpc_rate_limit_counters;
     CREATE POLICY "Admins can read rpc rate limit counters"
   ON public.rpc_rate_limit_counters
   FOR SELECT
@@ -189,6 +193,7 @@ DO $$ BEGIN
     AND tablename = 'rpc_rate_limit_hits'
     AND policyname = 'Admins can read rpc rate limit hits'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can read rpc rate limit hits" ON public.rpc_rate_limit_hits;
     CREATE POLICY "Admins can read rpc rate limit hits"
   ON public.rpc_rate_limit_hits
   FOR SELECT
@@ -257,6 +262,7 @@ DO $$ BEGIN
     AND tablename = 'monitoring_alert_events'
     AND policyname = 'Admins can update monitoring alert events'
   ) THEN
+    DROP POLICY IF EXISTS "Admins can update monitoring alert events" ON public.monitoring_alert_events;
     CREATE POLICY "Admins can update monitoring alert events"
   ON public.monitoring_alert_events
   FOR UPDATE

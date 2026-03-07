@@ -41,6 +41,7 @@ BEGIN
       AND tablename = 'licenses'
       AND policyname = 'Anyone can read licenses'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can read licenses" ON public.licenses;
     CREATE POLICY "Anyone can read licenses"
       ON public.licenses
       FOR SELECT
@@ -61,6 +62,7 @@ BEGIN
     WHERE tgname = 'update_licenses_updated_at'
       AND tgrelid = 'public.licenses'::regclass
   ) THEN
+    DROP TRIGGER IF EXISTS update_licenses_updated_at ON public.licenses;
     CREATE TRIGGER update_licenses_updated_at
       BEFORE UPDATE ON public.licenses
       FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();

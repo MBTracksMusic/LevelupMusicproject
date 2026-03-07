@@ -5,12 +5,20 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --brand-primary: #FF6A2B;
+    --brand-glow: #FF8A3D;
+    --brand-secondary: #FF4D4D;
+    --brand-bg: #0B0B0F;
+  }
+
   html {
     scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-zinc-950 text-white antialiased;
+    @apply text-white antialiased;
+    background-color: var(--brand-bg);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
@@ -66,11 +74,11 @@
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-brand-secondary via-brand-primary to-brand-glow bg-clip-text text-transparent;
   }
 
   .gradient-border {
-    @apply relative before:absolute before:inset-0 before:rounded-xl before:p-[1px] before:bg-gradient-to-r before:from-rose-500 before:to-orange-500 before:-z-10;
+    @apply relative before:absolute before:inset-0 before:rounded-xl before:p-[1px] before:bg-gradient-to-r before:from-brand-secondary before:via-brand-primary before:to-brand-glow before:-z-10;
   }
 }
 
@@ -85,6 +93,16 @@
 
   .zoom-in-95 {
     animation: zoomIn95 0.2s ease-out forwards;
+  }
+
+  .brand-logo-pulse {
+    animation: brandLogoPulse 1.8s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  .brand-wave {
+    animation: brandWave 1s ease-in-out infinite;
+    transform-origin: center bottom;
   }
 }
 
@@ -105,5 +123,27 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes brandLogoPulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(255, 106, 43, 0.38));
+  }
+  50% {
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 14px rgba(255, 138, 61, 0.75));
+  }
+}
+
+@keyframes brandWave {
+  0%, 100% {
+    transform: scaleY(0.45);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
   }
 }

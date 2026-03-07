@@ -10,6 +10,8 @@
     "build": "npm run build:contract && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:contracts": "node --test tests/integration/contracts-immutability.test.mjs",
+    "test:contract-runtime": "node --test tests/unit/contract-generation-runtime.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts"
   },

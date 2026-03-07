@@ -100,6 +100,7 @@ BEGIN
       AND policyname = 'Users can view own profile'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Users can view own profile" ON public.user_profiles FOR SELECT;
       CREATE POLICY "Users can view own profile"
         ON public.user_profiles FOR SELECT
         TO authenticated
@@ -120,6 +121,7 @@ BEGIN
       AND policyname = 'Anyone can view producer profiles'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Anyone can view producer profiles" ON public.user_profiles FOR SELECT;
       CREATE POLICY "Anyone can view producer profiles"
         ON public.user_profiles FOR SELECT
         TO authenticated
@@ -140,6 +142,7 @@ BEGIN
       AND policyname = 'Users can update own profile limited fields'
   ) THEN
     EXECUTE $policy$
+      DROP POLICY IF EXISTS "Users can update own profile limited fields" ON public.user_profiles FOR UPDATE;
       CREATE POLICY "Users can update own profile limited fields"
         ON public.user_profiles FOR UPDATE
         TO authenticated
@@ -185,6 +188,7 @@ BEGIN
       AND tgrelid = 'auth.users'::regclass
       AND NOT tgisinternal
   ) THEN
+    DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
     CREATE TRIGGER on_auth_user_created
       AFTER INSERT ON auth.users
       FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -211,6 +215,7 @@ BEGIN
       AND tgrelid = 'public.user_profiles'::regclass
       AND NOT tgisinternal
   ) THEN
+    DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON public.user_profiles;
     CREATE TRIGGER update_user_profiles_updated_at
       BEFORE UPDATE ON public.user_profiles
       FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -240,6 +245,7 @@ BEGIN
       AND tgrelid = 'public.user_profiles'::regclass
       AND NOT tgisinternal
   ) THEN
+    DROP TRIGGER IF EXISTS auto_promote_confirmed_user ON public.user_profiles;
     CREATE TRIGGER auto_promote_confirmed_user
       BEFORE UPDATE ON public.user_profiles
       FOR EACH ROW

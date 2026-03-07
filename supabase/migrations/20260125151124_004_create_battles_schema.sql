@@ -138,6 +138,7 @@ DO $$ BEGIN
     AND tablename = 'battles'
     AND policyname = 'Anyone can view public battles'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view public battles" ON battles FOR SELECT;
     CREATE POLICY "Anyone can view public battles"
   ON battles FOR SELECT
   USING (status IN ('active', 'voting', 'completed'));
@@ -152,6 +153,7 @@ DO $$ BEGIN
     AND tablename = 'battles'
     AND policyname = 'Producers can view own battles'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can view own battles" ON battles FOR SELECT;
     CREATE POLICY "Producers can view own battles"
   ON battles FOR SELECT
   TO authenticated
@@ -167,6 +169,7 @@ DO $$ BEGIN
     AND tablename = 'battles'
     AND policyname = 'Active producers can create battles'
   ) THEN
+    DROP POLICY IF EXISTS "Active producers can create battles" ON battles FOR INSERT;
     CREATE POLICY "Active producers can create battles"
   ON battles FOR INSERT
   TO authenticated
@@ -189,6 +192,7 @@ DO $$ BEGIN
     AND tablename = 'battles'
     AND policyname = 'Producers can update own pending battles'
   ) THEN
+    DROP POLICY IF EXISTS "Producers can update own pending battles" ON battles FOR UPDATE;
     CREATE POLICY "Producers can update own pending battles"
   ON battles FOR UPDATE
   TO authenticated
@@ -212,6 +216,7 @@ DO $$ BEGIN
     AND tablename = 'battle_votes'
     AND policyname = 'Anyone can view votes'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view votes" ON battle_votes FOR SELECT;
     CREATE POLICY "Anyone can view votes"
   ON battle_votes FOR SELECT
   USING (true);
@@ -226,6 +231,7 @@ DO $$ BEGIN
     AND tablename = 'battle_votes'
     AND policyname = 'Confirmed users can vote'
   ) THEN
+    DROP POLICY IF EXISTS "Confirmed users can vote" ON battle_votes FOR INSERT;
     CREATE POLICY "Confirmed users can vote"
   ON battle_votes FOR INSERT
   TO authenticated
@@ -260,6 +266,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Anyone can view visible comments'
   ) THEN
+    DROP POLICY IF EXISTS "Anyone can view visible comments" ON battle_comments FOR SELECT;
     CREATE POLICY "Anyone can view visible comments"
   ON battle_comments FOR SELECT
   USING (is_hidden = false);
@@ -274,6 +281,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Authenticated users can comment'
   ) THEN
+    DROP POLICY IF EXISTS "Authenticated users can comment" ON battle_comments FOR INSERT;
     CREATE POLICY "Authenticated users can comment"
   ON battle_comments FOR INSERT
   TO authenticated
@@ -296,6 +304,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Users can update own comments'
   ) THEN
+    DROP POLICY IF EXISTS "Users can update own comments" ON battle_comments FOR UPDATE;
     CREATE POLICY "Users can update own comments"
   ON battle_comments FOR UPDATE
   TO authenticated
@@ -312,6 +321,7 @@ DO $$ BEGIN
     AND tablename = 'battle_comments'
     AND policyname = 'Users can delete own comments'
   ) THEN
+    DROP POLICY IF EXISTS "Users can delete own comments" ON battle_comments FOR DELETE;
     CREATE POLICY "Users can delete own comments"
   ON battle_comments FOR DELETE
   TO authenticated

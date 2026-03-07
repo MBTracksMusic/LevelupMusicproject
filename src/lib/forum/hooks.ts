@@ -544,5 +544,24 @@ export function useForumActions() {
     }
   }, [t, user]);
 
-  return { createTopic, createReply, isSubmitting };
+  const likePost = useCallback(async (input: { postId: string }) => {
+    if (!user) {
+      throw new Error(t('forum.loginRequiredReply'));
+    }
+
+    const postId = input.postId.trim();
+    if (!postId) {
+      throw new Error('post_id_required');
+    }
+
+    const { error } = await supabase.rpc('rpc_like_forum_post' as any, {
+      p_post_id: postId,
+    });
+
+    if (error) {
+      throw error;
+    }
+  }, [t, user]);
+
+  return { createTopic, createReply, likePost, isSubmitting };
 }
