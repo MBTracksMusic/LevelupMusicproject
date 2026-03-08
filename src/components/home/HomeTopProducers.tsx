@@ -14,6 +14,7 @@ interface BattleWinnerRow {
 
 interface RankedProducer {
   id: string;
+  profile_path_username: string | null;
   username: string | null;
   avatar_url: string | null;
   wins: number;
@@ -56,6 +57,7 @@ export function HomeTopProducers() {
 
           winsByProducer.set(row.winner_id, {
             id: row.winner_id,
+            profile_path_username: null,
             username: null,
             avatar_url: null,
             wins: 1,
@@ -69,6 +71,7 @@ export function HomeTopProducers() {
             const profile = producerProfilesMap.get(producer.id);
             return {
               ...producer,
+              profile_path_username: profile?.raw_username ?? producer.profile_path_username,
               username: profile?.username ?? producer.username,
               avatar_url: profile?.avatar_url ?? producer.avatar_url,
             };
@@ -151,12 +154,12 @@ export function HomeTopProducers() {
                 </Card>
               );
 
-              if (!producer.username) {
+              if (!producer.profile_path_username) {
                 return <div key={producer.id}>{content}</div>;
               }
 
               return (
-                <Link key={producer.id} to={`/producers/${producer.username}`}>
+                <Link key={producer.id} to={`/producers/${producer.profile_path_username}`}>
                   {content}
                 </Link>
               );

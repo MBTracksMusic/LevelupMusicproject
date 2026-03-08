@@ -9,6 +9,7 @@ import { formatPrice } from '../lib/utils/format';
 
 interface PublicProducerProfile {
   user_id: string;
+  raw_username: string | null;
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
@@ -18,6 +19,7 @@ interface PublicProducerProfile {
   level: number;
   rank_tier: ReputationRankTier;
   reputation_score: number;
+  is_deleted: boolean;
   created_at: string;
 }
 
@@ -85,6 +87,7 @@ export function ProducerPublicProfilePage() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [beatsError, setBeatsError] = useState<string | null>(null);
   const [battlesError, setBattlesError] = useState<string | null>(null);
+  const [isDeletedProfile, setIsDeletedProfile] = useState(false);
 
   const socialLinks = useMemo(() => toSocialLinks(producer?.social_links), [producer?.social_links]);
 
@@ -102,15 +105,45 @@ export function ProducerPublicProfilePage() {
       setProfileError(null);
       setBeatsError(null);
       setBattlesError(null);
+      setIsDeletedProfile(false);
       setBeats([]);
       setBattles([]);
 
       try {
-        const { data, error: profileFetchError } = await supabase
+        let { data, error: profileFetchError } = await supabase
           .from('public_producer_profiles')
-          .select('user_id, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, created_at')
-          .eq('username', username)
+          .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
+          .eq('raw_username', username)
           .single();
+
+        if (profileFetchError || !data) {
+          const fallbackResponse = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
+            .eq('username', username)
+            .single();
+
+          data = fallbackResponse.data;
+          profileFetchError = fallbackResponse.error;
+        }
+
+        if (profileFetchError || !data) {
+          const legacyResponse = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, created_at')
+            .eq('username', username)
+            .single();
+
+          if (!legacyResponse.error && legacyResponse.data) {
+            const row = legacyResponse.data as Record<string, unknown>;
+            data = {
+              ...row,
+              raw_username: typeof row.username === 'string' ? row.username : null,
+              is_deleted: false,
+            } as unknown as typeof data;
+            profileFetchError = null;
+          }
+        }
 
         if (profileFetchError || !data) {
           if (!isCancelled) {
@@ -125,6 +158,15 @@ export function ProducerPublicProfilePage() {
 
         if (!isCancelled) {
           setProducer(producerRow);
+          setIsDeletedProfile(producerRow.is_deleted === true);
+        }
+
+        if (producerRow.is_deleted === true) {
+          if (!isCancelled) {
+            setBeats([]);
+            setBattles([]);
+          }
+          return;
         }
 
         if (!isCancelled) {
@@ -210,6 +252,20 @@ export function ProducerPublicProfilePage() {
         <div className="max-w-4xl mx-auto px-4 text-center py-20">
           <h1 className="text-3xl font-bold text-white mb-3">{t('producerProfile.notFoundTitle')}</h1>
           <p className="text-zinc-400 mb-6">{profileError || t('producerProfile.unavailableProfile')}</p>
+          <Link to="/producers" className="text-rose-400 hover:text-rose-300">
+            {t('producerProfile.backToProducers')}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isDeletedProfile) {
+    return (
+      <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
+        <div className="max-w-4xl mx-auto px-4 text-center py-20">
+          <h1 className="text-3xl font-bold text-white mb-3">Ce compte a été supprimé</h1>
+          <p className="text-zinc-400 mb-6">Ce profil a ete anonymise et n'est plus actif.</p>
           <Link to="/producers" className="text-rose-400 hover:text-rose-300">
             {t('producerProfile.backToProducers')}
           </Link>

@@ -107,6 +107,32 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("user_profiles")
+      .select("stripe_customer_id, email, is_deleted, deleted_at")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("DB_ERROR", {
+        function: "producer-checkout",
+        stage: "load_profile",
+        userId: user.id,
+        message: profileError.message,
+      });
+      return new Response(JSON.stringify({ error: "Unable to verify account status" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!profile || profile.is_deleted === true || profile.deleted_at !== null) {
+      return new Response(JSON.stringify({ error: "Account deleted" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Guardrail: avoid creating a new checkout session if the user already has an active producer subscription.
     const { data: existingProducerSubscription, error: existingProducerSubscriptionError } = await supabaseAdmin
       .from("producer_subscriptions")
@@ -236,13 +262,6 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // Fetch user profile to reuse existing customer_id if present
-    const { data: profile } = await supabaseAdmin
-      .from("user_profiles")
-      .select("stripe_customer_id, email")
-      .eq("id", user.id)
-      .maybeSingle();
 
     let customerId = profile?.stripe_customer_id || null;
 

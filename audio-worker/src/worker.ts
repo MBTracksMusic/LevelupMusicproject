@@ -10,14 +10,14 @@ import {
   updateProductProcessingState,
 } from "./queue.js";
 import {
-  downloadObjectBuffer,
+  downloadObjectToFile,
   getPublicObjectUrl,
   guessMasterExtension,
   loadWatermarkAsset,
   objectExists,
   resolveMasterDownloadSource,
   storageRefToString,
-  uploadPreviewBuffer,
+  uploadPreviewFile,
 } from "./storage.js";
 import type {
   AudioProcessingJobRow,
@@ -61,6 +61,23 @@ const toErrorMessage = (error: unknown) => {
   return String(error);
 };
 
+const toAbortError = (signal: AbortSignal | undefined, fallbackMessage: string) => {
+  const reason = signal?.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  if (typeof reason === "string" && reason.length > 0) {
+    return new Error(reason);
+  }
+  return new Error(fallbackMessage);
+};
+
+const throwIfAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted) {
+    throw toAbortError(signal, "job_aborted");
+  }
+};
+
 export class AudioWorkerService {
   private readonly supabase: SupabaseAdminClient;
   private readonly config: WorkerConfig;
@@ -83,6 +100,7 @@ export class AudioWorkerService {
 
   async run() {
     await fs.mkdir(this.config.tempRoot, { recursive: true });
+    await this.cleanupTempRootOnStartup();
 
     while (!this.stopRequested) {
       try {
@@ -135,17 +153,91 @@ export class AudioWorkerService {
       return jobs.length;
     }
 
-    for (const job of jobs) {
-      if (this.stopRequested) break;
+    for (let index = 0; index < jobs.length; index += 1) {
+      const job = jobs[index]!;
+      if (this.stopRequested) {
+        await this.requeueClaimedJobs(jobs.slice(index));
+        break;
+      }
 
       try {
-        await this.processClaimedJob(job, settings, currentWatermarkHash, watermarkAsset);
+        await this.processClaimedJobWithTimeout(job, settings, currentWatermarkHash, watermarkAsset);
       } catch (error) {
         await this.failClaimedJob(job, error);
       }
     }
 
     return jobs.length;
+  }
+
+  private async cleanupTempRootOnStartup() {
+    const entries = await fs.readdir(this.config.tempRoot, { withFileTypes: true });
+    if (entries.length === 0) {
+      return;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(this.config.tempRoot, entry.name);
+      await fs.rm(entryPath, { recursive: true, force: true });
+    }
+
+    log("info", "startup_temp_root_cleaned", {
+      workerId: this.config.workerId,
+      tempRoot: this.config.tempRoot,
+      removedEntries: entries.length,
+    });
+  }
+
+  private async requeueClaimedJobs(jobs: AudioProcessingJobRow[]) {
+    for (const job of jobs) {
+      try {
+        await updateAudioProcessingJob(this.supabase, job.id, {
+          status: "queued",
+          last_error: null,
+          locked_at: null,
+          locked_by: null,
+        });
+
+        log("warn", "job_requeued_on_shutdown", {
+          workerId: this.config.workerId,
+          jobId: job.id,
+          productId: job.product_id,
+        });
+      } catch (error) {
+        log("error", "job_requeue_failed_on_shutdown", {
+          workerId: this.config.workerId,
+          jobId: job.id,
+          productId: job.product_id,
+          error: toErrorMessage(error),
+        });
+      }
+    }
+  }
+
+  private async processClaimedJobWithTimeout(
+    job: AudioProcessingJobRow,
+    settings: SiteAudioSettingsRow,
+    currentWatermarkHash: string,
+    watermarkAsset: WatermarkAsset,
+  ) {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => {
+      controller.abort(
+        new Error(`job_timeout_exceeded_after_${this.config.jobTimeoutMs}ms`),
+      );
+    }, this.config.jobTimeoutMs);
+
+    try {
+      await this.processClaimedJob(
+        job,
+        settings,
+        currentWatermarkHash,
+        watermarkAsset,
+        controller.signal,
+      );
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
   }
 
   private async getWatermarkAsset(
@@ -184,7 +276,10 @@ export class AudioWorkerService {
     settings: SiteAudioSettingsRow,
     currentWatermarkHash: string,
     watermarkAsset: WatermarkAsset,
+    signal?: AbortSignal,
   ) {
+    throwIfAborted(signal);
+
     log("info", "job_started", {
       workerId: this.config.workerId,
       jobId: job.id,
@@ -242,6 +337,7 @@ export class AudioWorkerService {
 
     const masterRef = masterSource.canonicalRef;
     const downloadMasterRef = masterSource.downloadRef;
+    throwIfAborted(signal);
 
     if (masterSource.usedLegacyFallback) {
       log("info", "legacy_master_fallback", {
@@ -299,12 +395,7 @@ export class AudioWorkerService {
       processing_status: "processing",
       processing_error: null,
     });
-
-    const masterBuffer = await downloadObjectBuffer(
-      this.supabase,
-      downloadMasterRef,
-      this.config.downloadMasterMaxBytes,
-    );
+    throwIfAborted(signal);
 
     const tempDir = await fs.mkdtemp(
       path.join(this.config.tempRoot, `${product.id}-${job.id}-${randomUUID()}-`),
@@ -315,8 +406,17 @@ export class AudioWorkerService {
     const outputFilePath = path.join(tempDir, "preview.mp3");
 
     try {
-      await fs.writeFile(masterFilePath, masterBuffer);
+      await downloadObjectToFile(
+        this.supabase,
+        downloadMasterRef,
+        this.config.downloadMasterMaxBytes,
+        masterFilePath,
+        signal,
+      );
+      throwIfAborted(signal);
+
       await fs.writeFile(watermarkFilePath, watermarkAsset.buffer);
+      throwIfAborted(signal);
 
       const renderResult = await renderWatermarkedPreview({
         masterFilePath,
@@ -331,16 +431,21 @@ export class AudioWorkerService {
           : 45,
         ffmpegBin: this.config.ffmpegBin,
         ffprobeBin: this.config.ffprobeBin,
+        ffmpegTimeoutMs: Math.min(this.config.ffmpegTimeoutMs, this.config.jobTimeoutMs),
         audioBitrate: this.config.previewAudioBitrate,
         audioSampleRate: this.config.previewAudioSampleRate,
+        ...(signal ? { signal } : {}),
       });
+      throwIfAborted(signal);
 
-      const outputBuffer = await fs.readFile(outputFilePath);
-      if (outputBuffer.byteLength === 0) {
+      const outputStat = await fs.stat(outputFilePath);
+      if (!outputStat.isFile() || outputStat.size === 0) {
         throw new Error("ffmpeg_output_empty");
       }
+      throwIfAborted(signal);
 
-      await uploadPreviewBuffer(this.supabase, targetRef, outputBuffer);
+      await uploadPreviewFile(this.supabase, targetRef, outputFilePath);
+      throwIfAborted(signal);
 
       await updateProductProcessingState(this.supabase, product.id, {
         watermarked_path: storageRefToString(targetRef),
@@ -368,7 +473,7 @@ export class AudioWorkerService {
         masterRef: storageRefToString(downloadMasterRef),
         previewRef: storageRefToString(targetRef),
         previewVersion: nextVersion,
-        outputBytes: outputBuffer.byteLength,
+        outputBytes: outputStat.size,
         durationSec: renderResult.durationSec,
         positionsSec: renderResult.positionsSec,
       });

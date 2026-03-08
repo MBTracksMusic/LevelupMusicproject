@@ -30,6 +30,7 @@ import { formatNumber } from '../lib/utils/format';
 interface HomeStatsPayload {
   beats_published?: number;
   active_producers?: number;
+  show_homepage_stats?: boolean;
 }
 
 export function HomePage() {
@@ -42,9 +43,11 @@ export function HomePage() {
   const [homeStats, setHomeStats] = useState<{
     beatsPublished: number | null;
     activeProducers: number | null;
+    showHomepageStats: boolean;
   }>({
     beatsPublished: null,
     activeProducers: null,
+    showHomepageStats: false,
   });
   const [isHomeStatsLoading, setIsHomeStatsLoading] = useState(true);
   useEffect(() => {
@@ -120,12 +123,14 @@ export function HomePage() {
           setHomeStats({
             beatsPublished: null,
             activeProducers: null,
+            showHomepageStats: false,
           });
         } else {
           const stats = (data as HomeStatsPayload | null) ?? null;
           setHomeStats({
             beatsPublished: typeof stats?.beats_published === 'number' ? stats.beats_published : null,
             activeProducers: typeof stats?.active_producers === 'number' ? stats.active_producers : null,
+            showHomepageStats: stats?.show_homepage_stats === true,
           });
         }
         setIsHomeStatsLoading(false);
@@ -169,32 +174,34 @@ export function HomePage() {
             </Link>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-zinc-300">
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              <Headphones className="w-4 h-4 text-orange-400" />
-              <span>
-                {isHomeStatsLoading
-                  ? `... ${t('home.statsBeatsLabel')}`
-                  : homeStats.beatsPublished !== null
-                    ? `${formatNumber(homeStats.beatsPublished)} ${t('home.statsBeatsLabel')}`
-                    : t('home.statsBeatsUnavailable')}
-              </span>
+          {homeStats.showHomepageStats && (
+            <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-zinc-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+                <Headphones className="w-4 h-4 text-orange-400" />
+                <span>
+                  {isHomeStatsLoading
+                    ? `... ${t('home.statsBeatsLabel')}`
+                    : homeStats.beatsPublished !== null
+                      ? `${formatNumber(homeStats.beatsPublished)} ${t('home.statsBeatsLabel')}`
+                      : t('home.statsBeatsUnavailable')}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+                <Users className="w-4 h-4 text-orange-400" />
+                <span>
+                  {isHomeStatsLoading
+                    ? `... ${t('nav.producers')}`
+                    : homeStats.activeProducers !== null
+                      ? `${formatNumber(homeStats.activeProducers)} ${t('nav.producers')}`
+                      : t('home.statsProducersUnavailable')}
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+                <Shield className="w-4 h-4 text-orange-400" />
+                <span>{t('home.securePayment')}</span>
+              </div>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              <Users className="w-4 h-4 text-orange-400" />
-              <span>
-                {isHomeStatsLoading
-                  ? `... ${t('nav.producers')}`
-                  : homeStats.activeProducers !== null
-                    ? `${formatNumber(homeStats.activeProducers)} ${t('nav.producers')}`
-                    : t('home.statsProducersUnavailable')}
-              </span>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              <Shield className="w-4 h-4 text-orange-400" />
-              <span>{t('home.securePayment')}</span>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 

@@ -10,8 +10,10 @@ const DEFAULT_DOWNLOAD_MASTER_MAX_BYTES = 50 * 1024 * 1024;
 const DEFAULT_WATERMARK_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_ERROR_BACKOFF_MS = 5_000;
+const DEFAULT_FFMPEG_TIMEOUT_MS = 120_000;
 const DEFAULT_PREVIEW_AUDIO_BITRATE = "192k";
 const DEFAULT_PREVIEW_AUDIO_SAMPLE_RATE = 44_100;
+const DEFAULT_JOB_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 30_000;
 
 const readEnv = (name: string) => process.env[name]?.trim() ?? "";
@@ -81,11 +83,13 @@ export const config: WorkerConfig = {
   errorBackoffMs: parsePositiveInt("ERROR_BACKOFF_MS", DEFAULT_ERROR_BACKOFF_MS),
   ffmpegBin: parseNonEmpty("FFMPEG_BIN", "ffmpeg"),
   ffprobeBin: parseNonEmpty("FFPROBE_BIN", "ffprobe"),
+  ffmpegTimeoutMs: parsePositiveInt("FFMPEG_TIMEOUT_MS", DEFAULT_FFMPEG_TIMEOUT_MS),
   previewAudioBitrate: parseNonEmpty("PREVIEW_AUDIO_BITRATE", DEFAULT_PREVIEW_AUDIO_BITRATE),
   previewAudioSampleRate: parsePositiveInt(
     "PREVIEW_AUDIO_SAMPLE_RATE",
     DEFAULT_PREVIEW_AUDIO_SAMPLE_RATE,
   ),
+  jobTimeoutMs: parsePositiveInt("JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
   tempRoot: parseNonEmpty("TMP_ROOT", path.join(os.tmpdir(), "levelup-audio-worker")),
   shutdownGraceMs: parsePositiveInt("SHUTDOWN_GRACE_MS", DEFAULT_SHUTDOWN_GRACE_MS),
 };
@@ -104,8 +108,10 @@ export const publicConfig = {
   errorBackoffMs: config.errorBackoffMs,
   ffmpegBin: config.ffmpegBin,
   ffprobeBin: config.ffprobeBin,
+  ffmpegTimeoutMs: config.ffmpegTimeoutMs,
   previewAudioBitrate: config.previewAudioBitrate,
   previewAudioSampleRate: config.previewAudioSampleRate,
+  jobTimeoutMs: config.jobTimeoutMs,
   tempRoot: config.tempRoot,
   shutdownGraceMs: config.shutdownGraceMs,
 };

@@ -9,6 +9,7 @@ import type { Json } from '../../lib/supabase/database.types';
 import { formatDateTime } from '../../lib/utils/format';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';
+const HOMEPAGE_STATS_SETTINGS_KEY = 'show_homepage_stats';
 const SITE_AUDIO_SETTINGS_TABLE = 'site_audio_settings';
 
 interface SocialLinksForm {
@@ -61,6 +62,25 @@ const sanitizeUrl = (value: unknown) => {
   return HTTP_URL_REGEX.test(trimmed) ? trimmed : '';
 };
 
+const parseEnabledToggle = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const enabled = (value as Record<string, unknown>).enabled;
+  if (typeof enabled === 'boolean') {
+    return enabled;
+  }
+
+  if (typeof enabled === 'string') {
+    const normalized = enabled.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+
+  return false;
+};
+
 const isAllowedUrl = (value: string) => value.length === 0 || HTTP_URL_REGEX.test(value);
 
 const asFiniteNumber = (value: string) => {
@@ -75,6 +95,9 @@ export function AdminSettingsPage() {
   const [socialForm, setSocialForm] = useState<SocialLinksForm>(EMPTY_FORM);
   const [isSocialLoading, setIsSocialLoading] = useState(true);
   const [isSocialSaving, setIsSocialSaving] = useState(false);
+  const [showHomepageStats, setShowHomepageStats] = useState(false);
+  const [isHomepageStatsLoading, setIsHomepageStatsLoading] = useState(true);
+  const [isHomepageStatsSaving, setIsHomepageStatsSaving] = useState(false);
 
   const [siteAudioSettings, setSiteAudioSettings] = useState<SiteAudioSettingsRow | null>(null);
   const [watermarkForm, setWatermarkForm] = useState<WatermarkSettingsForm>(EMPTY_WATERMARK_FORM);
@@ -120,6 +143,25 @@ export function AdminSettingsPage() {
       setIsSocialLoading(false);
     };
 
+    const loadHomepageStatsToggle = async () => {
+      setIsHomepageStatsLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', HOMEPAGE_STATS_SETTINGS_KEY)
+        .maybeSingle();
+
+      if (error) {
+        console.error('admin homepage stats settings load error', error);
+        toast.error(t('admin.settingsPage.homepageStatsLoadError'));
+        setIsHomepageStatsLoading(false);
+        return;
+      }
+
+      setShowHomepageStats(parseEnabledToggle(data?.value));
+      setIsHomepageStatsLoading(false);
+    };
+
     const loadSiteAudioSettings = async () => {
       setIsWatermarkLoading(true);
       const { data, error } = await adminDb
@@ -148,7 +190,7 @@ export function AdminSettingsPage() {
       setIsWatermarkLoading(false);
     };
 
-    void Promise.all([loadSocialLinks(), loadSiteAudioSettings()]);
+    void Promise.all([loadSocialLinks(), loadHomepageStatsToggle(), loadSiteAudioSettings()]);
   }, [t]);
 
   useEffect(() => {
@@ -234,6 +276,33 @@ export function AdminSettingsPage() {
     setSocialForm(nextForm);
     toast.success(t('admin.settingsPage.socialSaveSuccess'));
     setIsSocialSaving(false);
+  };
+
+  const handleHomepageStatsSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isHomepageStatsSaving) return;
+
+    setIsHomepageStatsSaving(true);
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert(
+        {
+          key: HOMEPAGE_STATS_SETTINGS_KEY,
+          value: { enabled: showHomepageStats } as unknown as Json,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' },
+      );
+
+    if (error) {
+      console.error('admin homepage stats settings save error', error);
+      toast.error(t('admin.settingsPage.homepageStatsSaveError'));
+      setIsHomepageStatsSaving(false);
+      return;
+    }
+
+    toast.success(t('admin.settingsPage.homepageStatsSaveSuccess'));
+    setIsHomepageStatsSaving(false);
   };
 
   const handleWatermarkSettingsSave = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -472,6 +541,36 @@ export function AdminSettingsPage() {
               disabled={isEnqueueingReprocess}
             >
               {t('admin.settingsPage.reprocessAction')}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="p-6 border-zinc-800">
+        <h2 className="text-xl font-semibold text-white">{t('admin.settingsPage.homepageStatsTitle')}</h2>
+        <p className="text-zinc-400 text-sm mt-1">
+          {t('admin.settingsPage.homepageStatsSubtitle')}
+        </p>
+
+        <form onSubmit={handleHomepageStatsSave} className="mt-6 space-y-4">
+          <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              checked={showHomepageStats}
+              onChange={(event) => setShowHomepageStats(event.target.checked)}
+              disabled={isHomepageStatsLoading || isHomepageStatsSaving}
+              className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
+            />
+            {t('admin.settingsPage.homepageStatsLabel')}
+          </label>
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              isLoading={isHomepageStatsSaving}
+              disabled={isHomepageStatsLoading || isHomepageStatsSaving}
+            >
+              {t('common.save')}
             </Button>
           </div>
         </form>

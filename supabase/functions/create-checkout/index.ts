@@ -352,11 +352,53 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
-      .select("role, stripe_customer_id")
+      .select("role, stripe_customer_id, is_deleted, deleted_at")
       .eq("id", user.id)
       .maybeSingle();
+
+    if (profileError) {
+      console.error("[create-checkout] Failed to load buyer profile", {
+        userId: user.id,
+        message: profileError.message,
+      });
+      return new Response(JSON.stringify({ error: "Failed to validate account status" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!profile || profile.is_deleted === true || profile.deleted_at !== null) {
+      return new Response(JSON.stringify({ error: "Account deleted" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: producerProfile, error: producerProfileError } = await supabaseAdmin
+      .from("user_profiles")
+      .select("is_deleted, deleted_at")
+      .eq("id", productRow.producer_id)
+      .maybeSingle();
+
+    if (producerProfileError) {
+      console.error("[create-checkout] Failed to load producer profile", {
+        producerId: productRow.producer_id,
+        message: producerProfileError.message,
+      });
+      return new Response(JSON.stringify({ error: "Failed to validate product availability" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!producerProfile || producerProfile.is_deleted === true || producerProfile.deleted_at !== null) {
+      return new Response(JSON.stringify({ error: "Account deleted" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (productRow.is_exclusive) {
       let canPurchaseExclusive = false;

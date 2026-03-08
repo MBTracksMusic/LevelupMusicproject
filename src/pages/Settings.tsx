@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth/hooks';
 import { useTranslation } from '../lib/i18n';
 import { updateProfile, updatePassword } from '../lib/auth/service';
@@ -8,7 +9,8 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Select';
-import { User, Lock, Globe, Save, Camera, Instagram, Youtube, Cloud, Music2, Disc3 } from 'lucide-react';
+import { Modal } from '../components/ui/Modal';
+import { AlertTriangle, User, Lock, Globe, Save, Camera, Instagram, Youtube, Cloud, Music2, Disc3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const AVATAR_BUCKET = import.meta.env.VITE_SUPABASE_AVATAR_BUCKET || 'avatars';
@@ -18,7 +20,8 @@ const MAX_SOCIAL_LINK_LENGTH = 255;
 type SocialLinkKey = 'instagram' | 'youtube' | 'soundcloud' | 'tiktok' | 'spotify';
 
 export function SettingsPage() {
-  const { profile, refreshProfile } = useAuth();
+  const navigate = useNavigate();
+  const { profile, refreshProfile, signOut } = useAuth();
   const { t, language, updateLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +40,10 @@ export function SettingsPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountReason, setDeleteAccountReason] = useState('');
+  const [deleteAccountConfirmInput, setDeleteAccountConfirmInput] = useState('');
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(profile?.avatar_url || '');
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
@@ -281,6 +288,62 @@ export function SettingsPage() {
     }
   };
 
+  const closeDeleteAccountModal = () => {
+    if (isDeletingAccount) return;
+    setIsDeleteAccountModalOpen(false);
+    setDeleteAccountReason('');
+    setDeleteAccountConfirmInput('');
+  };
+
+  const handleDeleteMyAccount = async () => {
+    if (!profile?.id) {
+      toast.error(t('settings.userNotAuthenticated'));
+      return;
+    }
+
+    if (deleteAccountConfirmInput.trim().toUpperCase() !== 'SUPPRIMER') {
+      toast.error(t('settings.deleteAccountConfirmationError'));
+      return;
+    }
+
+    setIsDeletingAccount(true);
+
+    try {
+      const reason = deleteAccountReason.trim();
+      const { data, error } = await supabase.rpc('delete_my_account', {
+        p_reason: reason.length > 0 ? reason : null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const rpcResult = Array.isArray(data) ? data[0] : data;
+      if (rpcResult && typeof rpcResult === 'object' && 'success' in rpcResult) {
+        const success = (rpcResult as { success?: unknown }).success === true;
+        if (!success) {
+          throw new Error(
+            typeof (rpcResult as { message?: unknown }).message === 'string'
+              ? ((rpcResult as { message: string }).message)
+              : t('settings.deleteAccountError')
+          );
+        }
+      }
+
+      toast.success(t('settings.deleteAccountSuccess'));
+      setIsDeleteAccountModalOpen(false);
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error(error instanceof Error ? error.message : t('settings.deleteAccountError'));
+    } finally {
+      setIsDeletingAccount(false);
+      setDeleteAccountReason('');
+      setDeleteAccountConfirmInput('');
+    }
+  };
+
   const tabs = [
     { id: 'profile', label: t('user.profile'), icon: User },
     { id: 'security', label: t('settings.tabSecurity'), icon: Lock },
@@ -473,7 +536,7 @@ export function SettingsPage() {
         )}
 
         {activeTab === 'security' && (
-          <Card className="p-6">
+          <Card className="p-6 space-y-8">
             <form onSubmit={handlePasswordUpdate} className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-white mb-4">
@@ -510,6 +573,24 @@ export function SettingsPage() {
                 {t('settings.updatePasswordButton')}
               </Button>
             </form>
+
+            <section className="rounded-xl border border-red-900/50 bg-red-950/20 p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-white">{t('settings.dangerZoneTitle')}</h3>
+                  <p className="text-sm text-zinc-300">{t('settings.dangerZoneDescription')}</p>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => setIsDeleteAccountModalOpen(true)}
+                    disabled={isLoading || isDeletingAccount}
+                  >
+                    {t('settings.deleteAccountButton')}
+                  </Button>
+                </div>
+              </div>
+            </section>
           </Card>
         )}
 
@@ -534,6 +615,61 @@ export function SettingsPage() {
             </div>
           </Card>
         )}
+
+        <Modal
+          isOpen={isDeleteAccountModalOpen}
+          onClose={closeDeleteAccountModal}
+          title={t('settings.deleteAccountModalTitle')}
+          description={t('settings.deleteAccountModalDescription')}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                {t('settings.deleteAccountReasonLabel')}
+              </label>
+              <textarea
+                value={deleteAccountReason}
+                onChange={(e) => setDeleteAccountReason(e.target.value)}
+                rows={3}
+                maxLength={500}
+                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 transition-colors"
+                placeholder={t('settings.deleteAccountReasonPlaceholder')}
+                disabled={isDeletingAccount}
+              />
+            </div>
+
+            <Input
+              type="text"
+              label={t('settings.deleteAccountConfirmLabel')}
+              value={deleteAccountConfirmInput}
+              onChange={(e) => setDeleteAccountConfirmInput(e.target.value)}
+              placeholder={t('settings.deleteAccountConfirmPlaceholder')}
+              disabled={isDeletingAccount}
+              required
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={closeDeleteAccountModal}
+                disabled={isDeletingAccount}
+              >
+                {t('settings.deleteAccountCancel')}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => void handleDeleteMyAccount()}
+                isLoading={isDeletingAccount}
+                disabled={deleteAccountConfirmInput.trim().toUpperCase() !== 'SUPPRIMER'}
+              >
+                {t('settings.deleteAccountConfirmFinal')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );

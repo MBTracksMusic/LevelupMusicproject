@@ -622,8 +622,20 @@ async function handler(req: ApiRequest, res: ApiResponse) {
       if (updateError) {
         console.error("[api/contracts] Failed to update purchases.contract_pdf_path", {
           purchaseId: purchaseIdFromWebhook,
+          storagePath,
           updateError,
         });
+        const { error: cleanupError } = await supabase.storage
+          .from(CONTRACT_BUCKET)
+          .remove([storagePath]);
+        if (cleanupError) {
+          console.error("[api/contracts] Failed to cleanup orphaned contract PDF after DB error", {
+            purchaseId: purchaseIdFromWebhook,
+            storagePath,
+            cleanupError,
+          });
+        }
+        return res.status(500).json({ error: "contract_persistence_failed" });
       }
 
       const signedUrl = await getContractSignedUrl(supabase, storagePath, signedUrlExpiresIn);
@@ -657,8 +669,20 @@ async function handler(req: ApiRequest, res: ApiResponse) {
       if (updateError) {
         console.error("[api/contracts] Failed to update purchases.contract_pdf_path", {
           purchaseId: payload.purchaseId,
+          storagePath,
           updateError,
         });
+        const { error: cleanupError } = await supabase.storage
+          .from(CONTRACT_BUCKET)
+          .remove([storagePath]);
+        if (cleanupError) {
+          console.error("[api/contracts] Failed to cleanup orphaned contract PDF after DB error", {
+            purchaseId: payload.purchaseId,
+            storagePath,
+            cleanupError,
+          });
+        }
+        return res.status(500).json({ error: "contract_persistence_failed" });
       }
     }
 

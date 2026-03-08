@@ -1,4 +1,7 @@
 import path from "node:path";
+import { createReadStream, createWriteStream } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type {
   ProductRow,
   StorageObjectRef,
@@ -205,6 +208,50 @@ export const downloadObjectBuffer = async (
   return buffer;
 };
 
+export const downloadObjectToFile = async (
+  supabase: SupabaseAdminClient,
+  ref: StorageObjectRef,
+  maxBytes: number,
+  destinationPath: string,
+  signal?: AbortSignal,
+): Promise<number> => {
+  const bucketApi = supabase.storage.from(ref.bucket);
+  const downloader = signal
+    ? bucketApi.download(ref.path, {}, { signal })
+    : bucketApi.download(ref.path);
+
+  const { data, error } = await downloader.asStream();
+
+  if (error || !data) {
+    throw new Error(`Failed to stream-download ${storageRefToString(ref)}: ${error?.message ?? "unknown"}`);
+  }
+
+  const nodeStream = Readable.fromWeb(data as any);
+  const writer = createWriteStream(destinationPath, { flags: "w" });
+  let totalBytes = 0;
+
+  nodeStream.on("data", (chunk: unknown) => {
+    if (typeof chunk === "string") {
+      totalBytes += Buffer.byteLength(chunk);
+    } else if (chunk instanceof Uint8Array) {
+      totalBytes += chunk.byteLength;
+    } else {
+      totalBytes += Buffer.byteLength(String(chunk));
+    }
+
+    if (totalBytes > maxBytes) {
+      nodeStream.destroy(
+        new Error(
+          `Object too large for processing: ${storageRefToString(ref)} (${totalBytes} bytes > ${maxBytes})`,
+        ),
+      );
+    }
+  });
+
+  await pipeline(nodeStream, writer);
+  return totalBytes;
+};
+
 export const loadWatermarkAsset = async (
   supabase: SupabaseAdminClient,
   config: WorkerConfig,
@@ -219,19 +266,25 @@ export const loadWatermarkAsset = async (
   return { ref, buffer };
 };
 
-export const uploadPreviewBuffer = async (
+export const uploadPreviewFile = async (
   supabase: SupabaseAdminClient,
   ref: StorageObjectRef,
-  buffer: Buffer,
+  filePath: string,
 ) => {
-  const { error } = await supabase.storage.from(ref.bucket).upload(ref.path, buffer, {
-    contentType: "audio/mpeg",
-    cacheControl: "3600",
-    upsert: true,
-  });
+  const stream = createReadStream(filePath);
 
-  if (error) {
-    throw new Error(`Failed to upload ${storageRefToString(ref)}: ${error.message}`);
+  try {
+    const { error } = await supabase.storage.from(ref.bucket).upload(ref.path, stream, {
+      contentType: "audio/mpeg",
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+    if (error) {
+      throw new Error(`Failed to upload ${storageRefToString(ref)}: ${error.message}`);
+    }
+  } finally {
+    stream.destroy();
   }
 };
 

@@ -10,6 +10,8 @@ const corsHeaders = {
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
 const MASTER_BUCKET = (Deno.env.get("SUPABASE_MASTER_BUCKET") || "beats-masters").trim() || "beats-masters";
+const LEGACY_MASTER_BUCKET = (Deno.env.get("SUPABASE_AUDIO_BUCKET") || "beats-audio").trim() || "beats-audio";
+const PREVIEW_BUCKET = (Deno.env.get("SUPABASE_WATERMARKED_BUCKET") || "beats-watermarked").trim() || "beats-watermarked";
 const DEFAULT_EXPIRES_SECONDS = 90;
 const MIN_EXPIRES_SECONDS = 60;
 const MAX_EXPIRES_SECONDS = 120;
@@ -35,6 +37,10 @@ const normalizeExpiresIn = (value: unknown) => {
 const isUuid = (value: string) => UUID_RE.test(value);
 
 const normalizeStoragePath = (value: string) => value.trim().replace(/^\/+/, "");
+const CANONICAL_MASTER_BUCKETS = [MASTER_BUCKET, "beats-masters"];
+const LEGACY_MASTER_BUCKETS = [LEGACY_MASTER_BUCKET, "beats-audio"];
+const ALLOWED_MASTER_BUCKETS = [...new Set([...CANONICAL_MASTER_BUCKETS, ...LEGACY_MASTER_BUCKETS])];
+const KNOWN_BUCKETS = [...new Set([...ALLOWED_MASTER_BUCKETS, PREVIEW_BUCKET, "beats-watermarked"])];
 
 const normalizePathCandidate = (
   candidate: string,
@@ -43,13 +49,11 @@ const normalizePathCandidate = (
   const raw = candidate.trim();
   if (!raw) return null;
 
-  const knownBuckets = [MASTER_BUCKET, "beats-masters", "beats-audio", "beats-watermarked"];
-
   if (!/^https?:\/\//i.test(raw)) {
     const cleaned = raw.replace(/^\/+/, "");
     if (!cleaned) return null;
 
-    for (const bucket of knownBuckets) {
+    for (const bucket of KNOWN_BUCKETS) {
       if (cleaned.startsWith(`${bucket}/`)) {
         const path = cleaned.slice(bucket.length + 1);
         if (!path) return null;
@@ -72,7 +76,7 @@ const normalizePathCandidate = (
       return { bucket, path };
     }
 
-    const bucketIndex = segments.findIndex((segment) => knownBuckets.includes(segment));
+    const bucketIndex = segments.findIndex((segment) => KNOWN_BUCKETS.includes(segment));
     if (bucketIndex >= 0) {
       const bucket = segments[bucketIndex];
       const path = decodeURIComponent(segments.slice(bucketIndex + 1).join("/"));
@@ -96,6 +100,43 @@ const hasStrictMasterPrefix = (path: string, producerId: string, productId: stri
   return normalized.startsWith(`${producerId}/${productId}/`);
 };
 
+const hasLegacyMasterPrefix = (path: string, producerId: string) => {
+  const normalized = normalizeStoragePath(path);
+  return normalized.startsWith(`${producerId}/`);
+};
+
+const hasLegacyAudioPrefix = (path: string, producerId: string) => {
+  const normalized = normalizeStoragePath(path);
+  return normalized.startsWith(`${producerId}/audio/`);
+};
+
+const getPathFileName = (path: string) => {
+  const normalized = normalizeStoragePath(path);
+  if (!normalized) return null;
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.at(-1) ?? null;
+};
+
+const buildSigningPathCandidates = (
+  path: string,
+  producerId: string,
+  productId: string,
+) => {
+  const normalized = normalizeStoragePath(path);
+  const fileName = getPathFileName(normalized);
+  const candidates = [normalized];
+
+  if (fileName && hasLegacyAudioPrefix(normalized, producerId)) {
+    candidates.push(`${producerId}/${productId}/${fileName}`);
+  }
+
+  if (fileName && hasStrictMasterPrefix(normalized, producerId, productId)) {
+    candidates.push(`${producerId}/audio/${fileName}`);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+};
+
 function validateMasterPathInvariant(
   productId: string,
   producerId: string,
@@ -110,6 +151,38 @@ function validateMasterPathInvariant(
   }
 
   return { allowed: true as const };
+}
+
+function validateResolvedMasterPath(
+  productId: string,
+  producerId: string,
+  resolvedMaster: { bucket: string; path: string },
+) {
+  if (pathHasTraversal(resolvedMaster.path)) {
+    return { allowed: false as const, reason: "path_traversal" as const };
+  }
+
+  if (CANONICAL_MASTER_BUCKETS.includes(resolvedMaster.bucket)) {
+    const strictInvariant = validateMasterPathInvariant(productId, producerId, resolvedMaster.path);
+    if (!strictInvariant.allowed) {
+      // Compatibility for legacy rows left in `producer_id/audio/...` format.
+      // This pattern existed before strict `producer_id/product_id/...` enforcement.
+      if (strictInvariant.reason === "prefix_mismatch" && hasLegacyAudioPrefix(resolvedMaster.path, producerId)) {
+        return { allowed: true as const };
+      }
+      return { allowed: false as const, reason: strictInvariant.reason };
+    }
+    return { allowed: true as const };
+  }
+
+  if (LEGACY_MASTER_BUCKETS.includes(resolvedMaster.bucket)) {
+    if (!hasLegacyMasterPrefix(resolvedMaster.path, producerId)) {
+      return { allowed: false as const, reason: "legacy_prefix_mismatch" as const };
+    }
+    return { allowed: true as const };
+  }
+
+  return { allowed: false as const, reason: "wrong_bucket" as const };
 }
 
 async function userHasAccessToProduct(
@@ -291,7 +364,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: productRow, error: productError } = await supabaseAdmin
       .from("products")
-      .select("id, producer_id, master_path")
+      .select("id, producer_id, master_path, master_url")
       .eq("id", productId)
       .maybeSingle();
 
@@ -325,9 +398,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const masterPath = asNonEmptyString(productRow.master_path);
-    if (!masterPath) {
-      console.warn("[get-master-url] Invalid master_path: empty", {
+    const masterPathCandidates = [
+      asNonEmptyString(productRow.master_path),
+      asNonEmptyString(productRow.master_url),
+    ].filter((value): value is string => Boolean(value));
+
+    if (masterPathCandidates.length === 0) {
+      console.warn("[get-master-url] Invalid master path: both master_path and master_url empty", {
         productId,
         userId: authData.user.id,
       });
@@ -340,51 +417,32 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const resolvedMaster = normalizePathCandidate(masterPath, MASTER_BUCKET);
+    let resolvedMaster: { bucket: string; path: string } | null = null;
+    let lastValidationReason: string | null = null;
+
+    for (const candidate of masterPathCandidates) {
+      const parsedCandidate = normalizePathCandidate(candidate, MASTER_BUCKET);
+      if (!parsedCandidate) {
+        lastValidationReason = "parse_failed";
+        continue;
+      }
+
+      const validation = validateResolvedMasterPath(productId, producerId, parsedCandidate);
+      if (validation.allowed) {
+        resolvedMaster = parsedCandidate;
+        break;
+      }
+
+      lastValidationReason = validation.reason;
+    }
 
     if (!resolvedMaster) {
-      console.warn("[get-master-url] Invalid master_path: parse failed", {
-        productId,
-        userId: authData.user.id,
-      });
-      return new Response(JSON.stringify({
-        error: "Invalid master path",
-        code: "invalid_master_path",
-      }), {
-        status: 500,
-        headers: jsonHeaders,
-      });
-    }
-
-    if (resolvedMaster.bucket !== MASTER_BUCKET && resolvedMaster.bucket !== "beats-masters") {
-      console.warn("[get-master-url] Invalid master_path: wrong bucket", {
-        productId,
-        userId: authData.user.id,
-        resolvedMaster,
-        requiredBucket: MASTER_BUCKET,
-      });
-      return new Response(JSON.stringify({
-        error: "Invalid master path",
-        code: "invalid_master_path",
-      }), {
-        status: 500,
-        headers: jsonHeaders,
-      });
-    }
-
-    const invariantCheck = validateMasterPathInvariant(
-      productId,
-      producerId,
-      resolvedMaster.path,
-    );
-
-    if (!invariantCheck.allowed) {
-      console.warn("[get-master-url] Invalid master path invariant", {
+      console.warn("[get-master-url] Invalid master path: no candidate passed validation", {
         userId: authData.user.id,
         productId,
         producerId,
-        resolvedMaster,
-        reason: invariantCheck.reason,
+        candidatesTried: masterPathCandidates.length,
+        lastValidationReason,
       });
       return new Response(JSON.stringify({
         error: "Invalid master path",
@@ -395,15 +453,56 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const { data: signedData, error: signedError } = await supabaseAdmin.storage
-      .from(resolvedMaster.bucket)
-      .createSignedUrl(resolvedMaster.path, expiresIn, { download: true });
+    const signingPathCandidates = buildSigningPathCandidates(
+      resolvedMaster.path,
+      producerId,
+      productId,
+    );
 
-    if (signedError || !signedData?.signedUrl) {
+    const signingBuckets = [...new Set([
+      MASTER_BUCKET,
+      "beats-masters",
+      LEGACY_MASTER_BUCKET,
+      "beats-audio",
+      resolvedMaster.bucket,
+    ].filter(Boolean))];
+
+    const signingCandidates: Array<{ bucket: string; path: string }> = [];
+    for (const bucket of signingBuckets) {
+      for (const path of signingPathCandidates) {
+        signingCandidates.push({ bucket, path });
+      }
+    }
+
+    const uniqueSigningCandidates = signingCandidates.filter((candidate, index, source) =>
+      source.findIndex((entry) => entry.bucket === candidate.bucket && entry.path === candidate.path) === index
+    );
+
+    let signedData: { signedUrl: string } | null = null;
+    let signedError: unknown = null;
+    let signedFrom: { bucket: string; path: string } | null = null;
+
+    for (const candidate of uniqueSigningCandidates) {
+      const { data, error } = await supabaseAdmin.storage
+        .from(candidate.bucket)
+        .createSignedUrl(candidate.path, expiresIn, { download: true });
+
+      if (!error && data?.signedUrl) {
+        signedData = { signedUrl: data.signedUrl };
+        signedError = null;
+        signedFrom = candidate;
+        break;
+      }
+
+      signedError = error ?? new Error("signed_url_missing");
+    }
+
+    if (!signedData?.signedUrl || !signedFrom) {
       console.error("[get-master-url] Failed to sign URL", {
         productId,
         userId: authData.user.id,
         resolvedMaster,
+        signingCandidates: uniqueSigningCandidates,
         signedError,
       });
       return new Response(JSON.stringify({ error: "Master file unavailable" }), {
@@ -415,8 +514,8 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       url: signedData.signedUrl,
       expires_in: expiresIn,
-      bucket: resolvedMaster.bucket,
-      path: resolvedMaster.path,
+      bucket: signedFrom.bucket,
+      path: signedFrom.path,
     }), {
       status: 200,
       headers: jsonHeaders,

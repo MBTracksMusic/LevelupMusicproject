@@ -147,8 +147,11 @@ const roleColors: Record<string, string> = {
   admin: 'bg-rose-600',
 };
 
-const LEGACY_AUDIO_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
-const WATERMARKED_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
+const MASTER_BUCKET = import.meta.env.VITE_SUPABASE_MASTER_BUCKET || 'beats-masters';
+const LEGACY_MASTER_BUCKET = import.meta.env.VITE_SUPABASE_AUDIO_BUCKET || 'beats-audio';
+const PREVIEW_BUCKET = import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET || 'beats-watermarked';
+const MASTER_BUCKET_CANDIDATES = [MASTER_BUCKET, 'beats-masters', LEGACY_MASTER_BUCKET, 'beats-audio']
+  .filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
@@ -512,52 +515,103 @@ export function DashboardPage() {
     }
   };
 
+  const isPreviewPathCandidate = (candidate: string) => {
+    const normalized = candidate.trim().toLowerCase();
+    if (!normalized) return true;
+    if (normalized.includes(`${PREVIEW_BUCKET.toLowerCase()}/`) || normalized.includes('beats-watermarked/')) {
+      return true;
+    }
+    return /(^|[/._-])preview([/._-]|$)/i.test(normalized);
+  };
+
   const getPurchaseFilePath = (purchase: DashboardPurchase) => {
     const metadata = purchase.metadata as Record<string, unknown> | null;
     const metadataPathCandidates = [
+      metadata?.master_path,
+      metadata?.master_url,
       metadata?.file_path,
       metadata?.track_path,
       metadata?.storage_path,
       metadata?.download_path,
-      metadata?.master_url,
+      purchase.audio_path_snapshot,
     ];
 
     for (const candidate of metadataPathCandidates) {
-      if (typeof candidate === 'string' && candidate.trim().length > 0) {
-        return candidate;
+      if (typeof candidate !== 'string' || candidate.trim().length === 0) {
+        continue;
       }
+      if (isPreviewPathCandidate(candidate)) {
+        continue;
+      }
+      return candidate;
     }
 
-    return (
-      purchase.product?.watermarked_path ||
-      purchase.product?.preview_url ||
-      purchase.product?.exclusive_preview_url ||
-      null
-    );
+    return null;
   };
 
   const forceFileDownload = async (url: string, fallbackName = 'track.mp3') => {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Download failed with status ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fallbackName;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(blobUrl);
+    const triggerDirectDownload = () => {
+      link.href = url;
+      link.download = fallbackName;
+      link.rel = 'noopener noreferrer';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        const httpError = new Error(`Download failed with status ${response.status}`) as Error & {
+          status?: number;
+        };
+        httpError.status = response.status;
+        throw httpError;
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      link.href = blobUrl;
+      link.download = fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (downloadError) {
+      const status =
+        typeof downloadError === 'object' &&
+        downloadError !== null &&
+        'status' in downloadError &&
+        typeof (downloadError as { status?: unknown }).status === 'number'
+          ? (downloadError as { status: number }).status
+          : null;
+
+      if (status !== null && status >= 400) {
+        throw downloadError;
+      }
+
+      console.warn('Blob download failed, using direct link fallback', downloadError);
+      triggerDirectDownload();
+    }
   };
 
   const handleLegacyDownload = async (rawPath: string) => {
     const filePath = rawPath.trim();
     if (!filePath) return;
 
+    if (isPreviewPathCandidate(filePath)) {
+      throw new Error('Preview path cannot be used for purchased download');
+    }
+
     if (filePath.startsWith('http')) {
+      const isMasterUrl = MASTER_BUCKET_CANDIDATES.some((bucket) =>
+        filePath.includes(`/${bucket}/`) || filePath.includes(`${bucket}%2F`)
+      );
+      if (!isMasterUrl) {
+        throw new Error('Non-master URL blocked in legacy download');
+      }
       const fallbackName = decodeURIComponent(
         filePath.split('?')[0].split('/').pop() || 'track.mp3'
       );
@@ -565,13 +619,13 @@ export function DashboardPage() {
       return;
     }
 
-    const buckets = [LEGACY_AUDIO_BUCKET, WATERMARKED_BUCKET, 'beats-audio', 'beats-watermarked']
-      .filter((value, index, source) => Boolean(value) && source.indexOf(value) === index);
-
     let lastError: unknown = null;
 
-    for (const bucket of buckets) {
+    for (const bucket of MASTER_BUCKET_CANDIDATES) {
       const resolvedPath = extractStoragePathFromCandidate(filePath, bucket) || filePath;
+      if (isPreviewPathCandidate(resolvedPath)) {
+        continue;
+      }
       const fallbackName = decodeURIComponent(resolvedPath.split('/').pop() || 'track.mp3');
       const pathCandidates = buildAudioStoragePathCandidates(resolvedPath);
 
@@ -651,6 +705,14 @@ export function DashboardPage() {
   };
 
   const handleLicenseDownload = async (purchase: DashboardPurchase) => {
+    if (!purchase.contract_pdf_path) {
+      console.warn('Contract PDF path missing on purchase, skipping download call', {
+        purchaseId: purchase.id,
+      });
+      toast.error(t('dashboard.contractDownloadError'));
+      return;
+    }
+
     const { data: contractData, error: contractError } = await supabase.functions.invoke<{
       url: string;
       expires_in: number;
@@ -931,7 +993,8 @@ export function DashboardPage() {
                         onClick={() => {
                           void handleLicenseDownload(purchase);
                         }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors"
+                        disabled={!purchase.contract_pdf_path}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Download className="w-4 h-4" />
                         {t('dashboard.downloadLicense')}
@@ -1053,7 +1116,10 @@ export function DashboardPage() {
               <div className="rounded-xl border border-zinc-800 bg-zinc-950/70 p-4">
                 <p className="text-xs text-zinc-500 mb-1">{t('dashboard.pricePaid')}</p>
                 <p className="text-sm text-white">
-                  {formatPrice(selectedLicense?.price ?? selectedLicensePurchase.amount)}
+                  {formatPrice(
+                    selectedLicensePurchase.amount,
+                    selectedLicensePurchase.currency || 'EUR',
+                  )}
                 </p>
               </div>
             </div>

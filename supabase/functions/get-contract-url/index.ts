@@ -38,6 +38,12 @@ const formatLimit = (value: number | null | undefined) => {
   return value.toLocaleString("fr-FR");
 };
 
+function sanitizePdfText(text: string): string {
+  return text
+    .replace(/\u202F/g, " ")
+    .replace(/\u00A0/g, " ");
+}
+
 async function buildContractPdfBytes(input: {
   purchaseId: string;
   purchaseDate: string;
@@ -64,7 +70,7 @@ async function buildContractPdfBytes(input: {
   const lineGap = 18;
 
   const drawLine = (text: string, isBold = false, size = 11) => {
-    page.drawText(text, {
+    page.drawText(sanitizePdfText(text), {
       x: left,
       y,
       size,

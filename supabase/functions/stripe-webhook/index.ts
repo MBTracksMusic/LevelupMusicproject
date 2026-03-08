@@ -853,13 +853,20 @@ Deno.serve(async (req: Request) => {
 
     try {
       switch (event.type) {
-        case "checkout.session.completed": {
+        case "checkout.session.completed":
+        case "checkout.session.async_payment_succeeded": {
           if (!isCheckoutSession(event.data.object)) {
-            throw new WebhookError("Invalid payload for checkout.session.completed", 400, true);
+            throw new WebhookError(`Invalid payload for ${event.type}`, 400, true);
           }
           await handleCheckoutCompleted(supabase, stripe, event.data.object, event.id);
           break;
         }
+        case "checkout.session.async_payment_failed":
+          console.warn("[stripe-webhook] Async payment failed", {
+            eventId: event.id,
+            eventType: event.type,
+          });
+          break;
         case "customer.subscription.created":
         case "customer.subscription.updated": {
           if (!isSubscription(event.data.object)) {
@@ -1132,17 +1139,7 @@ async function handleCheckoutCompleted(
       } else {
         try {
           await sendPurchaseEmail(email);
-          const { error: purchaseUpdateError } = await supabase
-            .from("purchases")
-            .update({ contract_email_sent_at: new Date().toISOString() })
-            .eq("id", purchaseId)
-            .is("contract_email_sent_at", null);
-
-          if (purchaseUpdateError) {
-            console.error("EMAIL_ERROR", { error: purchaseUpdateError, purchaseId });
-          } else {
-            console.log("EMAIL_SENT", { email, purchaseId });
-          }
+          console.log("EMAIL_SENT", { email, purchaseId });
         } catch (error) {
           await releaseNotificationEmailClaim(supabase, dedupeKey);
           console.error("EMAIL_ERROR", { error, purchaseId, dedupeKey });

@@ -336,6 +336,8 @@ export function ProducerBattlesPage() {
           .from('public_producer_profiles')
           .select('user_id, username')
           .neq('user_id', profile.id)
+          .eq('is_deleted', false)
+          .eq('is_producer_active', true)
           .order('username', { ascending: true }),
         supabase
           .from('products')
@@ -345,15 +347,39 @@ export function ProducerBattlesPage() {
           .order('created_at', { ascending: false }),
       ]);
 
+      let producerData = producersRes.data;
+      let producerError = producersRes.error;
+
+      if (producerError) {
+        const legacyProducersRes = await supabase
+          .from('public_producer_profiles')
+          .select('user_id, username')
+          .neq('user_id', profile.id)
+          .order('username', { ascending: true });
+
+        if (!legacyProducersRes.error) {
+          producerData = legacyProducersRes.data;
+          producerError = null;
+        }
+      }
+
+      if (!producerError && (!producerData || producerData.length === 0)) {
+        const rpcProducersRes = await supabase.rpc('get_public_producer_profiles_v2');
+        if (!rpcProducersRes.error) {
+          producerData = ((rpcProducersRes.data as Array<{ user_id: string; username: string | null }> | null) ?? [])
+            .filter((row) => row.user_id !== profile.id);
+        }
+      }
+
       if (!isCancelled) {
-        if (producersRes.error) {
-          console.error('Error loading producers for battle creation:', producersRes.error);
+        if (producerError) {
+          console.error('Error loading producers for battle creation:', producerError);
         }
         if (productsRes.error) {
           console.error('Error loading producer products:', productsRes.error);
         }
 
-        const producerRows = ((producersRes.data as Array<{ user_id: string; username: string | null }> | null) ?? [])
+        const producerRows = ((producerData as Array<{ user_id: string; username: string | null }> | null) ?? [])
           .map((row) => ({ id: row.user_id, username: row.username }));
         setProducers(producerRows);
         setMyProducts((productsRes.data as ProductOption[] | null) ?? []);

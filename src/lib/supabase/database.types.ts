@@ -3771,12 +3771,16 @@ export type Database = {
           bio: string | null
           confirmed_at: string | null
           created_at: string
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_label: string | null
           elo_rating: number
           email: string
           engagement_score: number
           full_name: string | null
           id: string
           is_confirmed: boolean
+          is_deleted: boolean
           is_producer_active: boolean
           language: string | null
           producer_tier: Database["public"]["Enums"]["producer_tier_type"]
@@ -3804,12 +3808,16 @@ export type Database = {
           bio?: string | null
           confirmed_at?: string | null
           created_at?: string
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_label?: string | null
           elo_rating?: number
           email: string
           engagement_score?: number
           full_name?: string | null
           id: string
           is_confirmed?: boolean
+          is_deleted?: boolean
           is_producer_active?: boolean
           language?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
@@ -3837,12 +3845,16 @@ export type Database = {
           bio?: string | null
           confirmed_at?: string | null
           created_at?: string
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_label?: string | null
           elo_rating?: number
           email?: string
           engagement_score?: number
           full_name?: string | null
           id?: string
           is_confirmed?: boolean
+          is_deleted?: boolean
           is_producer_active?: boolean
           language?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
@@ -4368,9 +4380,13 @@ export type Database = {
           bio: string | null
           confirmed_at: string | null
           created_at: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_label: string | null
           engagement_score: number | null
           full_name: string | null
           id: string | null
+          is_deleted: boolean | null
           is_producer_active: boolean | null
           language: string | null
           producer_tier:
@@ -4393,9 +4409,13 @@ export type Database = {
           bio?: string | null
           confirmed_at?: string | null
           created_at?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_label?: string | null
           engagement_score?: number | null
           full_name?: string | null
           id?: string | null
+          is_deleted?: boolean | null
           is_producer_active?: boolean | null
           language?: string | null
           producer_tier?:
@@ -4418,9 +4438,13 @@ export type Database = {
           bio?: string | null
           confirmed_at?: string | null
           created_at?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_label?: string | null
           engagement_score?: number | null
           full_name?: string | null
           id?: string | null
+          is_deleted?: boolean | null
           is_producer_active?: boolean | null
           language?: string | null
           producer_tier?:
@@ -4503,10 +4527,13 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string | null
+          is_deleted: boolean | null
+          is_producer_active: boolean | null
           level: number | null
           producer_tier:
             | Database["public"]["Enums"]["producer_tier_type"]
             | null
+          raw_username: string | null
           rank_tier: string | null
           reputation_score: number | null
           social_links: Json | null
@@ -5005,6 +5032,14 @@ export type Database = {
         }
       }
       delete_beat_if_no_sales: { Args: { p_beat_id: string }; Returns: Json }
+      delete_my_account: {
+        Args: { p_reason?: string | null }
+        Returns: {
+          message: string
+          status: string
+          success: boolean
+        }[]
+      }
       detect_admin_action_anomalies: {
         Args: { p_lookback_minutes?: number }
         Returns: number
@@ -5205,7 +5240,14 @@ export type Database = {
           xp: number
         }[]
       }
-      get_home_stats: { Args: never; Returns: Json }
+      get_home_stats: {
+        Args: never
+        Returns: {
+          active_producers: number
+          beats_published: number
+          show_homepage_stats: boolean
+        }
+      }
       get_leaderboard_producers: {
         Args: never
         Returns: {

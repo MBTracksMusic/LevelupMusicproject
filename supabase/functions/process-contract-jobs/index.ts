@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { Resend } from "npm:resend";
 import { invokeContractGeneration, resolveContractGenerateEndpoint } from "../_shared/contract-generation.js";
 
 const INTERNAL_SECRET_HEADER = "x-contract-worker-secret";
@@ -41,6 +42,125 @@ const computeBackoffSeconds = (attempts: number) => {
   const safeAttempts = Number.isFinite(attempts) ? Math.max(1, Math.floor(attempts)) : 1;
   const base = 30 * Math.pow(2, Math.max(0, safeAttempts - 1));
   return Math.min(3600, Math.max(60, Math.floor(base)));
+};
+
+const sendContractEmailAndStamp = async (
+  supabaseAdmin: ReturnType<typeof createAdminClient>,
+  purchaseId: string,
+  contractPath: string,
+) => {
+  const { data: purchaseRow, error: purchaseReadError } = await supabaseAdmin
+    .from("purchases")
+    .select("user_id, contract_email_sent_at")
+    .eq("id", purchaseId)
+    .maybeSingle();
+
+  if (purchaseReadError) {
+    console.error("[process-contract-jobs] failed to load purchase for contract email", {
+      purchaseId,
+      contractPath,
+      purchaseReadError,
+    });
+    return;
+  }
+
+  if (!purchaseRow?.user_id) {
+    console.error("[process-contract-jobs] missing purchase row/user_id for contract email", {
+      purchaseId,
+      contractPath,
+    });
+    return;
+  }
+
+  if (purchaseRow.contract_email_sent_at) {
+    return;
+  }
+
+  const { data: buyer, error: buyerError } = await supabaseAdmin
+    .from("user_profiles")
+    .select("email, username, full_name")
+    .eq("id", purchaseRow.user_id)
+    .maybeSingle();
+
+  if (buyerError) {
+    console.error("[process-contract-jobs] failed to load buyer profile for contract email", {
+      purchaseId,
+      contractPath,
+      buyerError,
+    });
+    return;
+  }
+
+  const recipientEmail = asNonEmptyString(buyer?.email);
+  if (!recipientEmail) {
+    console.warn("[process-contract-jobs] no recipient email for contract notification", {
+      purchaseId,
+      contractPath,
+      userId: purchaseRow.user_id,
+    });
+    return;
+  }
+
+  const resendApiKey = asNonEmptyString(Deno.env.get("RESEND_API_KEY"));
+  if (!resendApiKey) {
+    console.warn("[process-contract-jobs] RESEND_API_KEY not configured, skipping contract email", {
+      purchaseId,
+      contractPath,
+      recipientEmail,
+    });
+    return;
+  }
+
+  const resendFromEmail = asNonEmptyString(Deno.env.get("RESEND_FROM_EMAIL")) ?? "onboarding@resend.dev";
+  const buyerName = asNonEmptyString(buyer?.full_name) ?? asNonEmptyString(buyer?.username) ?? "Utilisateur";
+  const resend = new Resend(resendApiKey);
+
+  try {
+    await resend.emails.send({
+      from: resendFromEmail,
+      to: recipientEmail,
+      subject: "Votre contrat Beatelion est disponible",
+      text: `Bonjour ${buyerName}, votre contrat est maintenant disponible dans votre dashboard Beatelion.`,
+      html: `
+        <div lang="fr" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#111">
+          <h1 style="margin:0 0 12px;">Votre contrat est disponible</h1>
+          <p style="margin:0 0 16px;">Bonjour ${buyerName},</p>
+          <p style="margin:0 0 16px;">Votre contrat de licence est pret. Vous pouvez le telecharger depuis votre dashboard Beatelion.</p>
+          <p style="margin:0;">Reference achat: ${purchaseId}</p>
+        </div>
+      `,
+    });
+  } catch (emailError) {
+    console.error("[process-contract-jobs] failed to send contract email", {
+      purchaseId,
+      contractPath,
+      recipientEmail,
+      emailError,
+    });
+    return;
+  }
+
+  const { error: stampError } = await supabaseAdmin
+    .from("purchases")
+    .update({ contract_email_sent_at: new Date().toISOString() })
+    .eq("id", purchaseId)
+    .is("contract_email_sent_at", null);
+
+  if (stampError) {
+    console.error("[process-contract-jobs] failed to stamp contract_email_sent_at", {
+      purchaseId,
+      contractPath,
+      recipientEmail,
+      stampError,
+    });
+    return;
+  }
+
+  console.log("[process-contract-jobs] contract email sent", {
+    purchaseId,
+    contractPath,
+    recipientEmail,
+  });
 };
 
 const createAdminClient = () => {
@@ -276,6 +396,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       succeeded += 1;
       await markJobSucceeded(supabaseAdmin, job.id, purchaseId);
+      await sendContractEmailAndStamp(supabaseAdmin, purchaseId, contractPath);
       results.push({
         job_id: job.id,
         purchase_id: purchaseId,

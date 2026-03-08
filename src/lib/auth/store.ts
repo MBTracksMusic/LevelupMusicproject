@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const fetchPromise = (async () => {
       const { data, error } = await supabase
         .from('my_user_profile')
-        .select('id, user_id, username, full_name, avatar_url, role, producer_tier, is_producer_active, total_purchases, confirmed_at, producer_verified_at, battle_refusal_count, battles_participated, battles_completed, engagement_score, language, bio, website_url, social_links, created_at, updated_at')
+        .select('id, user_id, username, full_name, avatar_url, role, producer_tier, is_producer_active, is_deleted, deleted_at, delete_reason, deleted_label, total_purchases, confirmed_at, producer_verified_at, battle_refusal_count, battles_participated, battles_completed, engagement_score, language, bio, website_url, social_links, created_at, updated_at')
         .maybeSingle();
 
       if (error) {
@@ -74,6 +74,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const row = data as Record<string, unknown>;
       const resolvedLanguage = resolveInitialLanguage(row.language);
+      const isDeletedAccount = row.is_deleted === true || typeof row.deleted_at === 'string';
+
+      if (isDeletedAccount) {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          console.error('Error signing out deleted account:', signOutError);
+        }
+        set({ user: null, session: null, profile: null });
+        syncI18nLanguage();
+        return;
+      }
 
       set({
         profile: {
@@ -110,6 +121,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             row.social_links && typeof row.social_links === 'object' && !Array.isArray(row.social_links)
               ? (row.social_links as Record<string, string>)
               : {},
+          is_deleted: row.is_deleted === true,
+          deleted_at: typeof row.deleted_at === 'string' ? row.deleted_at : null,
+          delete_reason: typeof row.delete_reason === 'string' ? row.delete_reason : null,
+          deleted_label: typeof row.deleted_label === 'string' ? row.deleted_label : null,
           created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
           updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
         } satisfies UserProfile,

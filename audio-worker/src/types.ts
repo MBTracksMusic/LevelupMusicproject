@@ -15,8 +15,10 @@ export interface WorkerConfig {
   errorBackoffMs: number;
   ffmpegBin: string;
   ffprobeBin: string;
+  ffmpegTimeoutMs: number;
   previewAudioBitrate: string;
   previewAudioSampleRate: number;
+  jobTimeoutMs: number;
   tempRoot: string;
   shutdownGraceMs: number;
 }
@@ -87,8 +89,10 @@ export interface RenderPreviewParams {
   maxIntervalSec: number;
   ffmpegBin: string;
   ffprobeBin: string;
+  ffmpegTimeoutMs: number;
   audioBitrate: string;
   audioSampleRate: number;
+  signal?: AbortSignal;
 }
 
 export interface RenderPreviewResult {

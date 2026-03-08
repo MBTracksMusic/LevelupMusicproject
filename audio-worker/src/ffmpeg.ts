@@ -4,6 +4,7 @@ import type { RenderPreviewParams, RenderPreviewResult } from "./types.js";
 import { asFfmpegGainDb, generateWatermarkPositions } from "./watermark.js";
 
 const MAX_LOG_LINES = 200;
+const MAX_CAPTURE_STDOUT_CHARS = 8_192;
 
 const keepTail = (lines: string[], chunk: string) => {
   for (const line of chunk.split(/\r?\n/)) {
@@ -15,45 +16,114 @@ const keepTail = (lines: string[], chunk: string) => {
   }
 };
 
+const toAbortError = (reason: unknown, fallbackMessage: string) => {
+  if (reason instanceof Error) {
+    return reason;
+  }
+  if (typeof reason === "string" && reason.length > 0) {
+    return new Error(reason);
+  }
+  return new Error(fallbackMessage);
+};
+
+interface RunCommandOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  captureStdout?: boolean;
+  stdoutMaxChars?: number;
+}
+
 const runCommand = async (
   command: string,
   args: string[],
-): Promise<{ stdout: string; stderr: string; tail: string[] }> => {
+  options: RunCommandOptions = {},
+): Promise<{ stdout: string; tail: string[] }> => {
+  const {
+    timeoutMs,
+    signal,
+    captureStdout = false,
+    stdoutMaxChars = MAX_CAPTURE_STDOUT_CHARS,
+  } = options;
+
+  if (signal?.aborted) {
+    throw toAbortError(signal.reason, `${command} aborted before start`);
+  }
+
   const child = spawn(command, args, {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
   let stdout = "";
-  let stderr = "";
   const tail: string[] = [];
+  let timedOut = false;
+  let aborted = false;
 
   child.stdout?.setEncoding("utf8");
   child.stderr?.setEncoding("utf8");
 
   child.stdout?.on("data", (chunk: string) => {
-    stdout += chunk;
+    if (captureStdout) {
+      stdout += chunk;
+      if (stdout.length > stdoutMaxChars) {
+        stdout = stdout.slice(-stdoutMaxChars);
+      }
+    }
     keepTail(tail, chunk);
   });
 
   child.stderr?.on("data", (chunk: string) => {
-    stderr += chunk;
     keepTail(tail, chunk);
   });
 
-  const [exitCode] = (await Promise.race([
-    once(child, "close"),
-    once(child, "error").then(([error]) => {
-      throw error;
-    }),
-  ])) as [number | null];
+  const onAbort = () => {
+    aborted = true;
+    child.kill("SIGKILL");
+  };
 
-  if (exitCode !== 0) {
-    throw new Error(
-      `${command} exited with code ${exitCode ?? "unknown"}: ${tail.slice(-10).join(" | ")}`,
-    );
+  if (signal) {
+    signal.addEventListener("abort", onAbort, { once: true });
   }
 
-  return { stdout, stderr, tail };
+  const timeoutHandle = timeoutMs && timeoutMs > 0
+    ? setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutMs)
+    : null;
+
+  try {
+    const [exitCode] = (await Promise.race([
+      once(child, "close"),
+      once(child, "error").then(([error]) => {
+        throw error;
+      }),
+    ])) as [number | null];
+
+    if (timedOut) {
+      throw new Error(
+        `${command} timed out after ${timeoutMs}ms: ${tail.slice(-10).join(" | ")}`,
+      );
+    }
+
+    if (aborted) {
+      throw toAbortError(signal?.reason, `${command} aborted`);
+    }
+
+    if (exitCode !== 0) {
+      throw new Error(
+        `${command} exited with code ${exitCode ?? "unknown"}: ${tail.slice(-10).join(" | ")}`,
+      );
+    }
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    if (signal) {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  return { stdout, tail };
 };
 
 const buildFilterComplex = (delayPositionsMs: number[], gainDb: number, durationSec: number) => {
@@ -88,7 +158,15 @@ export const assertFfmpegAvailable = async (ffmpegBin: string, ffprobeBin: strin
 export const probeAudioDurationSec = async (
   ffprobeBin: string,
   filePath: string,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<number> => {
+  const commandOptions: RunCommandOptions = {
+    captureStdout: true,
+    stdoutMaxChars: 2_048,
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
+
   const { stdout } = await runCommand(ffprobeBin, [
     "-v",
     "error",
@@ -97,7 +175,7 @@ export const probeAudioDurationSec = async (
     "-of",
     "default=noprint_wrappers=1:nokey=1",
     filePath,
-  ]);
+  ], commandOptions);
 
   const duration = Number.parseFloat(stdout.trim());
   if (!Number.isFinite(duration) || duration <= 0) {
@@ -110,7 +188,10 @@ export const probeAudioDurationSec = async (
 export const renderWatermarkedPreview = async (
   params: RenderPreviewParams,
 ): Promise<RenderPreviewResult> => {
-  const durationSec = await probeAudioDurationSec(params.ffprobeBin, params.masterFilePath);
+  const durationSec = await probeAudioDurationSec(params.ffprobeBin, params.masterFilePath, {
+    timeoutMs: params.ffmpegTimeoutMs,
+    ...(params.signal ? { signal: params.signal } : {}),
+  });
   const positionsSec = generateWatermarkPositions(
     durationSec,
     params.minIntervalSec,
@@ -140,7 +221,10 @@ export const renderWatermarkedPreview = async (
     "-b:a",
     params.audioBitrate,
     params.outputFilePath,
-  ]);
+  ], {
+    timeoutMs: params.ffmpegTimeoutMs,
+    ...(params.signal ? { signal: params.signal } : {}),
+  });
 
   return {
     durationSec: Number(durationSec.toFixed(3)),

@@ -59,6 +59,10 @@ export interface UserProfile {
   bio: string | null;
   website_url: string | null;
   social_links: Record<string, string>;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  delete_reason?: string | null;
+  deleted_label?: string | null;
   xp?: number;
   level?: number;
   rank_tier?: ReputationRankTier | null;

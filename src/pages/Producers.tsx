@@ -6,11 +6,14 @@ import { useTranslation } from '../lib/i18n';
 
 interface ProducerListItem {
   user_id: string;
+  raw_username: string | null;
   username: string | null;
   avatar_url: string | null;
   bio: string | null;
   producer_tier: string | null;
   social_links: Record<string, string> | null;
+  is_deleted: boolean;
+  is_producer_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -26,15 +29,69 @@ export function ProducersPage() {
     const fetchProducers = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('public_producer_profiles')
-          .select('user_id, username, avatar_url, producer_tier, bio, social_links, created_at, updated_at')
-          .order('updated_at', { ascending: false });
+        let data: unknown[] | null = null;
+        let error: unknown = null;
 
-        if (error) throw error;
+        const softRpcRes = await supabase.rpc('get_public_producer_profiles_soft' as any);
+        if (!softRpcRes.error && Array.isArray(softRpcRes.data)) {
+          data = (softRpcRes.data as Array<Record<string, unknown>>)
+            .filter(
+              (row) =>
+                row.is_deleted !== true
+                && row.is_producer_active === true
+            );
+        } else {
+          const activeRpcRes = await supabase.rpc('get_public_producer_profiles_v2');
+          if (!activeRpcRes.error && Array.isArray(activeRpcRes.data)) {
+            data = activeRpcRes.data.map((row) => ({
+              ...row,
+              raw_username: row.username,
+              is_deleted: false,
+              is_producer_active: true,
+            }));
+          } else {
+            error = softRpcRes.error || activeRpcRes.error;
+          }
+        }
+
+        if (!data || data.length === 0) {
+          const viewRes = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at')
+            .eq('is_deleted', false)
+            .eq('is_producer_active', true)
+            .order('updated_at', { ascending: false });
+
+          data = viewRes.data as unknown[] | null;
+          error = viewRes.error ?? error;
+        }
+
+        if (error && (!data || data.length === 0)) {
+          const { data: legacyData, error: legacyError } = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, username, avatar_url, producer_tier, bio, social_links, created_at, updated_at')
+            .order('updated_at', { ascending: false });
+
+          if (legacyError) {
+            throw error;
+          }
+
+          data = (legacyData ?? []).map((row) => ({
+            ...row,
+            raw_username: (row as Record<string, unknown>).username as string | null,
+            is_deleted: false,
+            is_producer_active: true,
+          }));
+        }
+
+        const normalized = ((data ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
+          const aDate = typeof a.updated_at === 'string' ? a.updated_at : '';
+          const bDate = typeof b.updated_at === 'string' ? b.updated_at : '';
+          return bDate.localeCompare(aDate);
+        });
 
         if (!isCancelled) {
-          setProducers((data ?? []) as ProducerListItem[]);
+          setProducers(normalized as unknown as ProducerListItem[]);
         }
       } catch (error) {
         console.error('Error fetching producers:', error);
@@ -104,12 +161,14 @@ export function ProducersPage() {
                 </div>
               );
 
-              if (!producer.username) {
+              const profileRouteUsername = producer.raw_username || producer.username;
+
+              if (!profileRouteUsername) {
                 return <div key={producer.user_id}>{cardContent}</div>;
               }
 
               return (
-                <Link key={producer.user_id} to={`/producers/${producer.username}`}>
+                <Link key={producer.user_id} to={`/producers/${profileRouteUsername}`}>
                   {cardContent}
                 </Link>
               );
