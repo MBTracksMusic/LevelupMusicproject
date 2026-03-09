@@ -1176,6 +1176,7 @@ export const de: TranslationSchema = {
     replyDescription: 'Ihre Nachricht wird in der Diskussion veroffentlicht.',
     replyPlaceholder: 'Teilen Sie Ihre Antwort, Ihr Feedback oder eine hilfreiche Prazisierung.',
     publishReply: 'Antwort veroffentlichen',
+    loginToParticipate: 'Melden Sie sich an, um teilzunehmen.',
     loginToReply: 'Melden Sie sich an, um auf dieses Topic zu antworten.',
     paginationTopicsZero: '0 Topic',
     paginationTopics: '{from}-{to} von {total} Topics',

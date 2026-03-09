@@ -46,10 +46,20 @@ export function HomeBattleOfTheDay() {
     async function fetchBattleOfTheDay() {
       setIsLoading(true);
 
-      const { data, error } = await supabase
-        .from('battle_of_the_day' as any)
-        .select('battle_id, slug, title, status, producer1_username, producer2_username, votes_today, votes_total')
-        .maybeSingle();
+      let data: BattleOfTheDayRow | null = null;
+      let error: unknown = null;
+
+      const rpcRes = await supabase.rpc('get_public_battle_of_the_day' as any);
+      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+        data = ((rpcRes.data[0] as BattleOfTheDayRow | undefined) ?? null);
+      } else {
+        const viewRes = await supabase
+          .from('battle_of_the_day' as any)
+          .select('battle_id, slug, title, status, producer1_username, producer2_username, votes_today, votes_total')
+          .maybeSingle();
+        data = (viewRes.data as BattleOfTheDayRow | null) ?? null;
+        error = viewRes.error ?? rpcRes.error;
+      }
 
       if (isCancelled) return;
 
@@ -57,7 +67,7 @@ export function HomeBattleOfTheDay() {
         console.error('Error loading battle of the day:', error);
         setBattle(null);
       } else {
-        setBattle((data as BattleOfTheDayRow | null) ?? null);
+        setBattle(data);
       }
 
       setIsLoading(false);

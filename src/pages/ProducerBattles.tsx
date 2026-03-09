@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth/hooks';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { supabase } from '../lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
-import { formatDate } from '../lib/utils/format';
+import { formatDate, formatDateTime } from '../lib/utils/format';
 
 interface ProducerOption {
   id: string;
@@ -66,6 +66,30 @@ interface MatchmakingOpponent {
   battle_draws: number;
   elo_diff: number;
 }
+
+interface OfficialBattleCampaign {
+  id: string;
+  title: string;
+  description: string | null;
+  social_description: string | null;
+  cover_image_url: string | null;
+  share_slug: string | null;
+  status: 'applications_open' | 'selection_locked' | 'launched' | 'cancelled';
+  participation_deadline: string;
+  submission_deadline: string;
+  created_at: string;
+}
+
+interface MyOfficialApplication {
+  campaign_id: string;
+  status: 'pending' | 'selected' | 'rejected';
+  message: string | null;
+  proposed_product_id: string | null;
+  admin_feedback: string | null;
+  admin_feedback_at: string | null;
+}
+
+type ProducerBattlesTab = 'classic' | 'official';
 
 const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'premium'> = {
   pending: 'warning',
@@ -156,6 +180,22 @@ function toBattleInsertErrorMessage(error: {
   return t('producerBattles.insertUnavailable', { technical });
 }
 
+function toOfficialCampaignErrorMessage(message: string) {
+  if (message.includes('invalid_proposed_product')) {
+    return 'Le titre propose doit etre un beat actif et publie.';
+  }
+  if (message.includes('campaign_not_open')) {
+    return 'Cette campagne n accepte plus les candidatures pour le moment.';
+  }
+  if (message.includes('campaign_participation_closed')) {
+    return 'La date limite de participation est depassee.';
+  }
+  if (message.includes('producer_active_required')) {
+    return 'Compte producteur actif requis pour candidater.';
+  }
+  return message;
+}
+
 export function ProducerBattlesPage() {
   const { t } = useTranslation();
   const { profile } = useAuth();
@@ -175,6 +215,14 @@ export function ProducerBattlesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProducerBattlesTab>('classic');
+  const [officialCampaigns, setOfficialCampaigns] = useState<OfficialBattleCampaign[]>([]);
+  const [myOfficialApplications, setMyOfficialApplications] = useState<Record<string, MyOfficialApplication>>({});
+  const [officialMessagesByCampaign, setOfficialMessagesByCampaign] = useState<Record<string, string>>({});
+  const [officialProductByCampaign, setOfficialProductByCampaign] = useState<Record<string, string>>({});
+  const [isOfficialLoading, setIsOfficialLoading] = useState(false);
+  const [officialError, setOfficialError] = useState<string | null>(null);
+  const [applyingCampaignId, setApplyingCampaignId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -319,6 +367,98 @@ export function ProducerBattlesPage() {
     setIsMatchmakingLoading(false);
   }, [profile?.id]);
 
+  const loadOfficialCampaigns = useCallback(async () => {
+    if (!profile?.id) {
+      setOfficialCampaigns([]);
+      setMyOfficialApplications({});
+      setIsOfficialLoading(false);
+      return;
+    }
+
+    setIsOfficialLoading(true);
+    setOfficialError(null);
+
+    const [campaignsRes, applicationsRes] = await Promise.all([
+      supabase
+        .from('admin_battle_campaigns' as any)
+        .select(`
+          id,
+          title,
+          description,
+          social_description,
+          cover_image_url,
+          share_slug,
+          status,
+          participation_deadline,
+          submission_deadline,
+          created_at
+        `)
+        .eq('status', 'applications_open')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('admin_battle_applications' as any)
+        .select('campaign_id, status, message, proposed_product_id, admin_feedback, admin_feedback_at')
+        .eq('producer_id', profile.id),
+    ]);
+
+    if (campaignsRes.error) {
+      console.error('Error loading official battle campaigns:', campaignsRes.error);
+      setOfficialCampaigns([]);
+      setOfficialError(campaignsRes.error.message);
+      setIsOfficialLoading(false);
+      return;
+    }
+
+    if (applicationsRes.error) {
+      console.error('Error loading my official battle applications:', applicationsRes.error);
+      setOfficialError(applicationsRes.error.message);
+    }
+
+    const campaignRows = (campaignsRes.data as unknown as OfficialBattleCampaign[] | null) ?? [];
+    const applicationRows = (applicationsRes.data as unknown as MyOfficialApplication[] | null) ?? [];
+    const applicationsMap: Record<string, MyOfficialApplication> = {};
+    for (const row of applicationRows) {
+      applicationsMap[row.campaign_id] = row;
+    }
+
+    setOfficialCampaigns(campaignRows);
+    setMyOfficialApplications(applicationsMap);
+    setOfficialProductByCampaign((prev) => {
+      const next = { ...prev };
+      for (const row of applicationRows) {
+        if (!next[row.campaign_id] && row.proposed_product_id) {
+          next[row.campaign_id] = row.proposed_product_id;
+        }
+      }
+      return next;
+    });
+    setIsOfficialLoading(false);
+  }, [profile?.id]);
+
+  const applyToOfficialCampaign = async (campaignId: string) => {
+    const message = officialMessagesByCampaign[campaignId] ?? '';
+    const proposedProductId = officialProductByCampaign[campaignId] || null;
+
+    setOfficialError(null);
+    setApplyingCampaignId(campaignId);
+
+    const { error: applyError } = await supabase.rpc('apply_to_admin_battle_campaign' as any, {
+      p_campaign_id: campaignId,
+      p_message: message.trim() || null,
+      p_proposed_product_id: proposedProductId,
+    });
+
+    if (applyError) {
+      console.error('Error applying to official campaign:', applyError);
+      setOfficialError(toOfficialCampaignErrorMessage(applyError.message));
+      setApplyingCampaignId(null);
+      return;
+    }
+
+    setApplyingCampaignId(null);
+    await loadOfficialCampaigns();
+  };
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -384,7 +524,7 @@ export function ProducerBattlesPage() {
         setProducers(producerRows);
         setMyProducts((productsRes.data as ProductOption[] | null) ?? []);
 
-        await Promise.all([loadBattles(), loadQuotaStatus(), loadMatchmakingOpponents()]);
+        await Promise.all([loadBattles(), loadQuotaStatus(), loadMatchmakingOpponents(), loadOfficialCampaigns()]);
         setIsLoading(false);
       }
     }
@@ -394,7 +534,7 @@ export function ProducerBattlesPage() {
     return () => {
       isCancelled = true;
     };
-  }, [loadBattles, loadMatchmakingOpponents, loadQuotaStatus, profile?.id]);
+  }, [loadBattles, loadMatchmakingOpponents, loadOfficialCampaigns, loadQuotaStatus, profile?.id]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -578,6 +718,146 @@ export function ProducerBattlesPage() {
           </Card>
         )}
 
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={activeTab === 'classic' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('classic')}
+          >
+            Classic Battles
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === 'official' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('official')}
+          >
+            Official Battles
+          </Button>
+        </div>
+
+        {officialError && (
+          <Card className="bg-red-900/20 border border-red-800 text-red-300 inline-flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            {officialError}
+          </Card>
+        )}
+
+        {activeTab === 'official' && (
+          <Card className="space-y-4">
+            <h2 className="text-lg font-semibold text-white">Official Battles</h2>
+            <p className="text-sm text-zinc-400">
+              Apply to official admin campaigns. Selected producers will be launched into a normal battle.
+            </p>
+
+            {isOfficialLoading ? (
+              <p className="text-zinc-400 text-sm">{t('common.loading')}</p>
+            ) : officialCampaigns.length === 0 ? (
+              <p className="text-zinc-500 text-sm">No official campaigns open right now.</p>
+            ) : (
+              <ul className="space-y-4">
+                {officialCampaigns.map((campaign) => {
+                  const myApplication = myOfficialApplications[campaign.id];
+                  const alreadyAppliedStatus = myApplication?.status;
+                  const hasAdminResubmissionRequest = Boolean(myApplication?.admin_feedback);
+                  const sharePath = campaign.share_slug ? `/battle-campaign/${campaign.share_slug}` : null;
+
+                  return (
+                    <li key={campaign.id} className="border border-zinc-800 rounded-lg bg-zinc-900/50 p-4 space-y-3">
+                      <div className="flex flex-col md:flex-row gap-4">
+                        {campaign.cover_image_url ? (
+                          <img
+                            src={campaign.cover_image_url}
+                            alt={campaign.title}
+                            className="w-full md:w-48 h-32 object-cover rounded border border-zinc-800"
+                          />
+                        ) : (
+                          <div className="w-full md:w-48 h-32 rounded border border-dashed border-zinc-700 flex items-center justify-center text-xs text-zinc-500">
+                            No image
+                          </div>
+                        )}
+
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <h3 className="text-white font-semibold">{campaign.title}</h3>
+                            {alreadyAppliedStatus ? (
+                              <Badge variant="info">Applied: {alreadyAppliedStatus}</Badge>
+                            ) : (
+                              <Badge variant="warning">Open</Badge>
+                            )}
+                          </div>
+                          {campaign.description && <p className="text-sm text-zinc-300">{campaign.description}</p>}
+                          {campaign.social_description && <p className="text-xs text-zinc-500">{campaign.social_description}</p>}
+                          <p className="text-xs text-zinc-500">
+                            Participation deadline: {formatDateTime(campaign.participation_deadline)} • Submission deadline: {formatDateTime(campaign.submission_deadline)}
+                          </p>
+                          {hasAdminResubmissionRequest && (
+                            <div className="rounded border border-amber-700/50 bg-amber-900/20 p-2 text-xs text-amber-200">
+                              Admin request: {myApplication?.admin_feedback}
+                            </div>
+                          )}
+                          {sharePath && (
+                            <Link to={sharePath} className="text-xs text-sky-300 hover:text-sky-200">
+                              Open public campaign page
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                          <label className="block text-xs text-zinc-400 mb-1">Message (optional)</label>
+                          <textarea
+                            value={officialMessagesByCampaign[campaign.id] || ''}
+                            onChange={(event) =>
+                              setOfficialMessagesByCampaign((prev) => ({
+                                ...prev,
+                                [campaign.id]: event.target.value,
+                              }))
+                            }
+                            className="w-full min-h-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm"
+                            placeholder="Tell the admin why you should be selected."
+                          />
+                        </div>
+
+                        <Select
+                          label="Proposed beat (optional)"
+                          value={officialProductByCampaign[campaign.id] || ''}
+                          onChange={(event) =>
+                            setOfficialProductByCampaign((prev) => ({
+                              ...prev,
+                              [campaign.id]: event.target.value,
+                            }))
+                          }
+                          options={[
+                            { value: '', label: 'No beat selected' },
+                            ...myProducts.map((product) => ({ value: product.id, label: product.title })),
+                          ]}
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          isLoading={applyingCampaignId === campaign.id}
+                          onClick={() => void applyToOfficialCampaign(campaign.id)}
+                        >
+                          {hasAdminResubmissionRequest
+                            ? 'Submit New Beat'
+                            : alreadyAppliedStatus
+                            ? 'Update Application'
+                            : 'Apply'}
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        )}
+
+        {activeTab === 'classic' && (
+          <>
         <Card className="space-y-4">
           <h2 className="text-lg font-semibold text-white inline-flex items-center gap-2">
             <Swords className="w-4 h-4" />
@@ -834,6 +1114,8 @@ export function ProducerBattlesPage() {
             </ul>
           )}
         </Card>
+          </>
+        )}
       </div>
     </div>
   );

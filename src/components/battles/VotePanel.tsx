@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -21,6 +22,8 @@ const isVotingOpen = (status: BattleWithRelations['status']) => status === 'acti
 export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const isEmailVerified = useIsEmailVerified();
   const [isLoadingVote, setIsLoadingVote] = useState(false);
   const [userVote, setUserVote] = useState<string | null>(null);
@@ -98,7 +101,18 @@ export function VotePanel({ battle, onVoteSuccess }: VotePanelProps) {
       <h2 className="text-lg font-semibold text-white">{t('battles.vote')}</h2>
 
       {voteDisabledReason && (
-        <p className="text-sm text-zinc-400">{voteDisabledReason}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-zinc-400">{voteDisabledReason}</p>
+          {!user && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/login', { state: { from: { pathname: location.pathname } } })}
+            >
+              {t('auth.loginButton')}
+            </Button>
+          )}
+        </div>
       )}
 
       {!voteDisabledReason && isLoadingVote && (

@@ -110,42 +110,101 @@ export function ProducerPublicProfilePage() {
       setBattles([]);
 
       try {
-        let { data, error: profileFetchError } = await supabase
-          .from('public_producer_profiles')
-          .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
-          .eq('raw_username', username)
-          .single();
+        const lookup = username.trim().toLowerCase();
+        const isUuidLookup = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(username);
+        const matchesLookup = (row: Record<string, unknown>) => {
+          const candidates = [row.raw_username, row.username, row.user_id];
+          return candidates.some((value) => typeof value === 'string' && value.trim().toLowerCase() === lookup);
+        };
 
-        if (profileFetchError || !data) {
-          const fallbackResponse = await supabase
+        let producerRecord: Record<string, unknown> | null = null;
+
+        const visibleRpcRes = await supabase.rpc('get_public_visible_producer_profiles' as any);
+        if (!visibleRpcRes.error && Array.isArray(visibleRpcRes.data)) {
+          const row = (visibleRpcRes.data as Array<Record<string, unknown>>).find(matchesLookup);
+          if (row) {
+            producerRecord = row;
+          }
+        }
+
+        if (!producerRecord) {
+          const softRpcRes = await supabase.rpc('get_public_producer_profiles_soft' as any);
+          if (!softRpcRes.error && Array.isArray(softRpcRes.data)) {
+            const row = (softRpcRes.data as Array<Record<string, unknown>>).find(matchesLookup);
+            if (row) {
+              producerRecord = row;
+            }
+          }
+        }
+
+        if (!producerRecord) {
+          const v2RpcRes = await supabase.rpc('get_public_producer_profiles_v2');
+          if (!v2RpcRes.error && Array.isArray(v2RpcRes.data)) {
+            const row = (v2RpcRes.data as Array<Record<string, unknown>>).find(matchesLookup);
+            if (row) {
+              producerRecord = {
+                ...row,
+                raw_username: typeof row.username === 'string' ? row.username : null,
+                is_deleted: false,
+              };
+            }
+          }
+        }
+
+        if (!producerRecord) {
+          const byRawUsername = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
+            .eq('raw_username', username)
+            .limit(1)
+            .maybeSingle();
+          if (!byRawUsername.error && byRawUsername.data) {
+            producerRecord = byRawUsername.data as unknown as Record<string, unknown>;
+          }
+        }
+
+        if (!producerRecord) {
+          const byUsername = await supabase
             .from('public_producer_profiles')
             .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
             .eq('username', username)
-            .single();
-
-          data = fallbackResponse.data;
-          profileFetchError = fallbackResponse.error;
+            .limit(1)
+            .maybeSingle();
+          if (!byUsername.error && byUsername.data) {
+            producerRecord = byUsername.data as unknown as Record<string, unknown>;
+          }
         }
 
-        if (profileFetchError || !data) {
+        if (!producerRecord && isUuidLookup) {
+          const byUserId = await supabase
+            .from('public_producer_profiles')
+            .select('user_id, raw_username, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, is_deleted, created_at')
+            .eq('user_id', username)
+            .limit(1)
+            .maybeSingle();
+          if (!byUserId.error && byUserId.data) {
+            producerRecord = byUserId.data as unknown as Record<string, unknown>;
+          }
+        }
+
+        if (!producerRecord) {
           const legacyResponse = await supabase
             .from('public_producer_profiles')
             .select('user_id, username, avatar_url, bio, social_links, producer_tier, xp, level, rank_tier, reputation_score, created_at')
             .eq('username', username)
-            .single();
-
+            .limit(1)
+            .maybeSingle();
           if (!legacyResponse.error && legacyResponse.data) {
             const row = legacyResponse.data as Record<string, unknown>;
-            data = {
+            producerRecord = {
               ...row,
               raw_username: typeof row.username === 'string' ? row.username : null,
               is_deleted: false,
-            } as unknown as typeof data;
-            profileFetchError = null;
+            };
           }
         }
 
-        if (profileFetchError || !data) {
+        if (!producerRecord) {
           if (!isCancelled) {
             setProducer(null);
             setProfileError(t('producerProfile.notFoundTitle'));
@@ -154,7 +213,7 @@ export function ProducerPublicProfilePage() {
           return;
         }
 
-        const producerRow = data as unknown as PublicProducerProfile;
+        const producerRow = producerRecord as unknown as PublicProducerProfile;
 
         if (!isCancelled) {
           setProducer(producerRow);

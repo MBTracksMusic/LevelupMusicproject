@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { MessageSquare, Pencil, ShieldAlert, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -33,6 +34,8 @@ interface CommentsPanelProps {
 export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const isEmailVerified = useIsEmailVerified();
   const isAdmin = useIsAdmin();
 
@@ -286,7 +289,18 @@ export function CommentsPanel({ battleId, commentsOpen }: CommentsPanelProps) {
       </h2>
 
       {commentPermissionMessage ? (
-        <p className="text-sm text-zinc-400">{commentPermissionMessage}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-zinc-400">{commentPermissionMessage}</p>
+          {!user && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/login', { state: { from: { pathname: location.pathname } } })}
+            >
+              {t('auth.loginButton')}
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="space-y-2">
           <textarea

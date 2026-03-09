@@ -32,25 +32,25 @@ export function ProducersPage() {
         let data: unknown[] | null = null;
         let error: unknown = null;
 
-        const softRpcRes = await supabase.rpc('get_public_producer_profiles_soft' as any);
-        if (!softRpcRes.error && Array.isArray(softRpcRes.data)) {
-          data = (softRpcRes.data as Array<Record<string, unknown>>)
-            .filter(
-              (row) =>
-                row.is_deleted !== true
-                && row.is_producer_active === true
-            );
+        const visibleRpcRes = await supabase.rpc('get_public_visible_producer_profiles' as any);
+        if (!visibleRpcRes.error && Array.isArray(visibleRpcRes.data)) {
+          data = visibleRpcRes.data;
         } else {
-          const activeRpcRes = await supabase.rpc('get_public_producer_profiles_v2');
-          if (!activeRpcRes.error && Array.isArray(activeRpcRes.data)) {
-            data = activeRpcRes.data.map((row) => ({
-              ...row,
-              raw_username: row.username,
-              is_deleted: false,
-              is_producer_active: true,
-            }));
+          const softRpcRes = await supabase.rpc('get_public_producer_profiles_soft' as any);
+          if (!softRpcRes.error && Array.isArray(softRpcRes.data)) {
+            data = (softRpcRes.data as Array<Record<string, unknown>>).filter((row) => row.is_deleted !== true);
           } else {
-            error = softRpcRes.error || activeRpcRes.error;
+            const activeRpcRes = await supabase.rpc('get_public_producer_profiles_v2');
+            if (!activeRpcRes.error && Array.isArray(activeRpcRes.data)) {
+              data = activeRpcRes.data.map((row) => ({
+                ...row,
+                raw_username: row.username,
+                is_deleted: false,
+                is_producer_active: true,
+              }));
+            } else {
+              error = visibleRpcRes.error || softRpcRes.error || activeRpcRes.error;
+            }
           }
         }
 
@@ -59,7 +59,6 @@ export function ProducersPage() {
             .from('public_producer_profiles')
             .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at')
             .eq('is_deleted', false)
-            .eq('is_producer_active', true)
             .order('updated_at', { ascending: false });
 
           data = viewRes.data as unknown[] | null;
@@ -80,15 +79,25 @@ export function ProducersPage() {
             ...row,
             raw_username: (row as Record<string, unknown>).username as string | null,
             is_deleted: false,
-            is_producer_active: true,
+            is_producer_active: false,
           }));
         }
 
-        const normalized = ((data ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
-          const aDate = typeof a.updated_at === 'string' ? a.updated_at : '';
-          const bDate = typeof b.updated_at === 'string' ? b.updated_at : '';
-          return bDate.localeCompare(aDate);
-        });
+        const deduped = new Map<string, Record<string, unknown>>();
+        for (const row of ((data ?? []) as Array<Record<string, unknown>>)) {
+          const userId = typeof row.user_id === 'string' ? row.user_id : null;
+          if (!userId) continue;
+          if (row.is_deleted === true) continue;
+          if (row.is_producer_active !== true) continue;
+          deduped.set(userId, row);
+        }
+
+        const normalized = Array.from(deduped.values())
+          .sort((a, b) => {
+            const aDate = typeof a.updated_at === 'string' ? a.updated_at : '';
+            const bDate = typeof b.updated_at === 'string' ? b.updated_at : '';
+            return bDate.localeCompare(aDate);
+          });
 
         if (!isCancelled) {
           setProducers(normalized as unknown as ProducerListItem[]);

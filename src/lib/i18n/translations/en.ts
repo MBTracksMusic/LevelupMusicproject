@@ -1176,6 +1176,7 @@ export const en: TranslationSchema = {
     replyDescription: 'Your message will be published in the discussion.',
     replyPlaceholder: 'Share your reply, feedback, or a useful clarification.',
     publishReply: 'Publish reply',
+    loginToParticipate: 'Log in to participate.',
     loginToReply: 'Log in to reply to this topic.',
     paginationTopicsZero: '0 topic',
     paginationTopics: '{from}-{to} of {total} topics',

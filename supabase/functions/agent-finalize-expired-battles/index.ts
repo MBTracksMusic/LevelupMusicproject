@@ -103,5 +103,6 @@ Deno.serve(async (req: Request) => {
     finalized: data ?? 0,
     limit: normalizedLimit,
     model: "rule-based",
+    supported_battle_types: ["user", "admin"],
   });
 });

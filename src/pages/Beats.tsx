@@ -73,6 +73,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   useEffect(() => {
     async function fetchBeats() {
       setIsLoading(true);
+      const shouldRestrictToActiveProducers = !user;
       try {
         let query = supabase
           .from('products')
@@ -129,28 +130,130 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
             query = query.order('created_at', { ascending: false });
         }
 
-        const { data, error } = await query.limit(50);
+        let { data, error } = await query.limit(50);
+
+        // Fallback for anon/public mode if relation selects are restricted.
+        if (error) {
+          let fallbackQuery = supabase
+            .from('products')
+            .select(`${PRODUCT_SAFE_COLUMNS}` as any)
+            .eq('is_published', true);
+
+          if (mode === 'exclusives') {
+            fallbackQuery = fallbackQuery
+              .eq('product_type', 'exclusive')
+              .eq('is_sold', false);
+          } else if (mode === 'kits') {
+            fallbackQuery = fallbackQuery.eq('product_type', 'kit');
+          } else {
+            fallbackQuery = fallbackQuery.eq('product_type', 'beat');
+          }
+
+          if (filters.genre) {
+            fallbackQuery = fallbackQuery.eq('genre_id', filters.genre);
+          }
+          if (filters.mood) {
+            fallbackQuery = fallbackQuery.eq('mood_id', filters.mood);
+          }
+          if (filters.bpmMin) {
+            fallbackQuery = fallbackQuery.gte('bpm', parseInt(filters.bpmMin));
+          }
+          if (filters.bpmMax) {
+            fallbackQuery = fallbackQuery.lte('bpm', parseInt(filters.bpmMax));
+          }
+          if (filters.priceMin) {
+            fallbackQuery = fallbackQuery.gte('price', parseInt(filters.priceMin) * 100);
+          }
+          if (filters.priceMax) {
+            fallbackQuery = fallbackQuery.lte('price', parseInt(filters.priceMax) * 100);
+          }
+          if (filters.search) {
+            fallbackQuery = fallbackQuery.or(`title.ilike.%${filters.search}%,tags.cs.{${filters.search}}`);
+          }
+
+          switch (filters.sort) {
+            case 'popular':
+              fallbackQuery = fallbackQuery.order('play_count', { ascending: false });
+              break;
+            case 'price_asc':
+              fallbackQuery = fallbackQuery.order('price', { ascending: true });
+              break;
+            case 'price_desc':
+              fallbackQuery = fallbackQuery.order('price', { ascending: false });
+              break;
+            default:
+              fallbackQuery = fallbackQuery.order('created_at', { ascending: false });
+          }
+
+          const fallbackRes = await fallbackQuery.limit(50);
+          data = fallbackRes.data as unknown as typeof data;
+          error = fallbackRes.error;
+        }
+
         if (error) throw error;
+
         const rows = ((data as unknown as ProductWithRelations[] | null) ?? []);
-        const producerProfilesMap = await fetchPublicProducerProfilesMap(
-          rows.map((row) => row.producer_id)
-        );
-        const withProducer = rows.map((row) => {
-          const producer = producerProfilesMap.get(row.producer_id);
-          return {
-            ...row,
-            producer: producer
-              ? {
-                  id: producer.user_id,
-                  username: producer.username,
-                  avatar_url: producer.avatar_url,
-                }
-              : undefined,
-          };
-        });
-        setBeats(withProducer as ProductWithRelations[]);
+        let nextBeats: ProductWithRelations[] = rows;
+
+        try {
+          const producerProfilesMap = await fetchPublicProducerProfilesMap(
+            rows.map((row) => row.producer_id)
+          );
+
+          const visibleRows = shouldRestrictToActiveProducers
+            ? rows.filter((row) => {
+                const producer = producerProfilesMap.get(row.producer_id);
+                return producer?.is_producer_active === true;
+              })
+            : rows;
+
+          nextBeats = visibleRows.map((row) => {
+            const producer = producerProfilesMap.get(row.producer_id);
+            return {
+              ...row,
+              producer: producer
+                ? {
+                    id: producer.user_id,
+                    username: producer.username,
+                    avatar_url: producer.avatar_url,
+                  }
+                : undefined,
+            };
+          }) as ProductWithRelations[];
+        } catch (enrichError) {
+          console.error('Error enriching beats with producer profiles:', enrichError);
+          if (shouldRestrictToActiveProducers) {
+            // Visitor fallback: keep only active producers using public RPC if available.
+            const activeRpcRes = await supabase.rpc('get_public_producer_profiles_v2');
+            if (!activeRpcRes.error && Array.isArray(activeRpcRes.data)) {
+              const activeProducerIds = new Set(
+                (activeRpcRes.data as Array<{ user_id: string }>).map((row) => row.user_id)
+              );
+              nextBeats = rows
+                .filter((row) => activeProducerIds.has(row.producer_id))
+                .map((row) => ({
+                  ...row,
+                  producer: undefined,
+                })) as ProductWithRelations[];
+            } else {
+              // Do not block catalog rendering for visitors if every profile source fails.
+              nextBeats = rows.map((row) => ({
+                ...row,
+                producer: undefined,
+              })) as ProductWithRelations[];
+            }
+          } else {
+            nextBeats = rows.map((row) => ({
+              ...row,
+              producer: undefined,
+            })) as ProductWithRelations[];
+          }
+        }
+
+        setBeats(nextBeats);
       } catch (error) {
         console.error('Error fetching beats:', error);
+        setBeats([]);
       } finally {
         setIsLoading(false);
       }
@@ -158,7 +261,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
     const debounce = setTimeout(fetchBeats, 300);
     return () => clearTimeout(debounce);
-  }, [filters, mode]);
+  }, [filters, mode, user?.id]);
 
   const clearFilters = () => {
     setFilters({

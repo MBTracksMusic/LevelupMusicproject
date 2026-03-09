@@ -15,6 +15,7 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { user, profile, isInitialized, isLoading } = useAuth();
   const location = useLocation();
+  const isProducerAllowed = profile?.is_producer_active === true || profile?.role === 'admin';
 
   if (isLoading) {
     return null;
@@ -36,7 +37,7 @@ export function ProtectedRoute({
     return <Navigate to="/" replace />;
   }
 
-  if (requireProducer && !profile?.is_producer_active) {
+  if (requireProducer && !isProducerAllowed) {
     return <Navigate to="/" replace />;
   }
 

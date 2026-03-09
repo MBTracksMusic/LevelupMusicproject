@@ -6,6 +6,7 @@ import { HomePage } from './pages/Home';
 import { BeatsPage } from './pages/Beats';
 import { BattlesPage } from './pages/Battles';
 import { BattleDetailPage } from './pages/BattleDetail';
+import { BattleCampaignPage } from './pages/BattleCampaign';
 import { PricingPage } from './pages/Pricing';
 import { LoginPage } from './pages/auth/Login';
 import { RegisterPage } from './pages/auth/Register';
@@ -89,35 +90,15 @@ function AppContent() {
         <Route path="kits/:slug" element={<Navigate to="/beats" replace />} />
         <Route path="battles" element={<BattlesPage />} />
         <Route path="battles/:slug" element={<BattleDetailPage />} />
-        <Route
-          path="leaderboard"
-          element={
-            <ProtectedRoute>
-              <LeaderboardPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="leaderboard-weekly"
-          element={
-            <ProtectedRoute>
-              <LeaderboardWeeklyPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="battle-campaign/:slug" element={<BattleCampaignPage />} />
+        <Route path="leaderboard" element={<LeaderboardPage />} />
+        <Route path="leaderboard-weekly" element={<LeaderboardWeeklyPage />} />
         <Route path="pricing" element={<PricingPage />} />
         <Route path="tarifs" element={<PricingPage />} />
         <Route path="guide-producteur" element={<ProducerGuide />} />
         <Route path="faq" element={<Faq />} />
         <Route path="contact" element={<ContactPage />} />
-        <Route
-          path="/forum"
-          element={
-            <ProtectedRoute>
-              <ForumPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/forum" element={<ForumPage />} />
         <Route
           path="/forum/new"
           element={
@@ -126,22 +107,8 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/forum/:categorySlug"
-          element={
-            <ProtectedRoute>
-              <ForumCategoryPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/forum/:categorySlug/:topicSlug"
-          element={
-            <ProtectedRoute>
-              <TopicPage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/forum/:categorySlug" element={<ForumCategoryPage />} />
+        <Route path="/forum/:categorySlug/:topicSlug" element={<TopicPage />} />
         <Route path="/licenses" element={<Licenses />} />
         <Route path="terms" element={<Terms />} />
         <Route path="privacy" element={<Privacy />} />

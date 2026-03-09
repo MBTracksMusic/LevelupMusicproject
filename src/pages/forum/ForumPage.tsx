@@ -5,6 +5,7 @@ import { formatRankTier } from '../../components/reputation/ReputationBadge';
 import { ReputationBadge } from '../../components/reputation/ReputationBadge';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
+import { useAuth } from '../../lib/auth/hooks';
 import { useForumCategories, useLatestForumTopics } from '../../lib/forum/hooks';
 import { useTranslation } from '../../lib/i18n';
 import { useMyReputation } from '../../lib/reputation/hooks';
@@ -13,6 +14,7 @@ import { formatRelativeTime } from '../../lib/utils/format';
 
 export function ForumPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { reputation } = useMyReputation();
   const { categories, isLoading: isCategoriesLoading, error: categoriesError, refresh: refreshCategories } = useForumCategories();
   const { topics, isLoading: isTopicsLoading, error: topicsError, refresh: refreshTopics } = useLatestForumTopics();
@@ -26,9 +28,13 @@ export function ForumPage() {
             <p className="text-zinc-400">{t('forum.subtitle')}</p>
           </div>
           <div className="flex gap-3">
-            <Link to="/forum/new">
-              <Button>{t('forum.newTopic')}</Button>
-            </Link>
+            {user ? (
+              <Link to="/forum/new">
+                <Button>{t('forum.newTopic')}</Button>
+              </Link>
+            ) : (
+              <Button disabled>{t('forum.newTopic')}</Button>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -41,6 +47,14 @@ export function ForumPage() {
             </Button>
           </div>
         </div>
+
+        {!user && (
+          <Card className="border-zinc-800">
+            <CardContent className="py-4 text-sm text-zinc-400">
+              {t('forum.loginToParticipate')}
+            </CardContent>
+          </Card>
+        )}
 
         <section className="space-y-4">
           <div>

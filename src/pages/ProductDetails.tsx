@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Pause, Play, ShoppingCart } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useTranslation } from '../lib/i18n';
@@ -16,6 +16,7 @@ import { useAuth } from '../lib/auth/hooks';
 export function ProductDetailsPage() {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const { currentTrack, setCurrentTrack, isPlaying, setIsPlaying } = usePlayerStore();
@@ -60,7 +61,28 @@ export function ProductDetailsPage() {
           query = query.eq('product_type', 'beat').eq('is_exclusive', false);
         }
 
-        const { data, error: fetchError } = await query.maybeSingle();
+        let { data, error: fetchError } = await query.maybeSingle();
+
+        // Fallback for anon/public mode when relation embeds are restricted.
+        if (fetchError) {
+          let fallbackQuery = supabase
+            .from('products')
+            .select(`${PRODUCT_SAFE_COLUMNS}` as any)
+            .eq('slug', slug)
+            .eq('is_published', true);
+
+          if (routePrefix === 'exclusives') {
+            fallbackQuery = fallbackQuery.eq('is_exclusive', true);
+          } else if (routePrefix === 'kits') {
+            fallbackQuery = fallbackQuery.eq('product_type', 'kit');
+          } else if (routePrefix === 'beats') {
+            fallbackQuery = fallbackQuery.eq('product_type', 'beat').eq('is_exclusive', false);
+          }
+
+          const fallbackRes = await fallbackQuery.maybeSingle();
+          data = fallbackRes.data as typeof data;
+          fetchError = fallbackRes.error;
+        }
 
         if (fetchError) {
           throw fetchError;
@@ -71,18 +93,26 @@ export function ProductDetailsPage() {
           if (!row) {
             setProduct(null);
           } else {
-            const producerProfilesMap = await fetchPublicProducerProfilesMap([row.producer_id]);
-            const producer = producerProfilesMap.get(row.producer_id);
-            setProduct({
-              ...row,
-              producer: producer
-                ? {
-                    id: producer.user_id,
-                    username: producer.username,
-                    avatar_url: producer.avatar_url,
-                  }
-                : undefined,
-            } as ProductWithRelations);
+            try {
+              const producerProfilesMap = await fetchPublicProducerProfilesMap([row.producer_id]);
+              const producer = producerProfilesMap.get(row.producer_id);
+              setProduct({
+                ...row,
+                producer: producer
+                  ? {
+                      id: producer.user_id,
+                      username: producer.username,
+                      avatar_url: producer.avatar_url,
+                    }
+                  : undefined,
+              } as ProductWithRelations);
+            } catch (enrichError) {
+              console.error('Error enriching product details with producer profile', enrichError);
+              setProduct({
+                ...row,
+                producer: undefined,
+              } as ProductWithRelations);
+            }
           }
         }
       } catch (e) {
@@ -121,7 +151,11 @@ export function ProductDetailsPage() {
   };
 
   const handleAddToCart = async () => {
-    if (!product || !isAuthenticated || product.is_sold) return;
+    if (!product || product.is_sold) return;
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: location.pathname } } });
+      return;
+    }
     setIsAddingToCart(true);
     try {
       await addToCart(product.id);
@@ -220,13 +254,14 @@ export function ProductDetailsPage() {
               <p className="mb-6 text-sm text-zinc-500">{t('audio.previewUnavailable')}</p>
             )}
 
-            {!product.is_sold && isAuthenticated && (
+            {!product.is_sold && (
               <Button
                 onClick={handleAddToCart}
                 isLoading={isAddingToCart}
                 leftIcon={<ShoppingCart className="w-4 h-4" />}
+                variant={isAuthenticated ? 'primary' : 'outline'}
               >
-                {t('products.addToCart')}
+                {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
               </Button>
             )}
           </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
@@ -11,6 +11,7 @@ import {
   useSeasonLeaderboard,
   useWeeklyLeaderboard,
 } from '../lib/reputation/hooks';
+import { useAuth } from '../lib/auth/hooks';
 import { useTranslation } from '../lib/i18n';
 import { formatDate } from '../lib/utils/format';
 
@@ -21,6 +22,7 @@ type LeaderboardTab = 'global' | 'weekly' | 'season';
 
 export function LeaderboardPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [tab, setTab] = useState<LeaderboardTab>('global');
   const [globalMode, setGlobalMode] = useState<LeaderboardGlobalMode>('elo');
   const [period, setPeriod] = useState<LeaderboardPeriod>('week');
@@ -55,6 +57,13 @@ export function LeaderboardPage() {
   } = useSeasonLeaderboard(100);
 
   const { season: activeSeason } = useActiveSeason();
+  const canUseReputationMode = Boolean(user);
+
+  useEffect(() => {
+    if (!canUseReputationMode && globalMode === 'reputation') {
+      setGlobalMode('elo');
+    }
+  }, [canUseReputationMode, globalMode]);
 
   const isLoading =
     tab === 'weekly'
@@ -99,7 +108,9 @@ export function LeaderboardPage() {
       return;
     }
 
-    void refreshReputation();
+    if (canUseReputationMode) {
+      void refreshReputation();
+    }
   };
 
   return (
@@ -135,6 +146,7 @@ export function LeaderboardPage() {
               </Button>
               <Button
                 variant={globalMode === 'reputation' ? 'primary' : 'outline'}
+                disabled={!canUseReputationMode}
                 onClick={() => setGlobalMode('reputation')}
               >
                 {t('leaderboard.modeReputation')}

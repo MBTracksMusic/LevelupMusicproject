@@ -30,7 +30,7 @@ interface ReputationBadgeProps {
   compact?: boolean;
 }
 
-export function ReputationBadge({ rankTier = 'bronze', level = 1, xp, compact = false }: ReputationBadgeProps) {
+export function ReputationBadge({ rankTier = 'bronze', level, xp, compact = false }: ReputationBadgeProps) {
   const { t } = useTranslation();
   const normalizedRankTier = rankTier ?? 'bronze';
 
@@ -40,10 +40,12 @@ export function ReputationBadge({ rankTier = 'bronze', level = 1, xp, compact = 
         <Award className="h-3 w-3" />
         {formatRankTier(normalizedRankTier, t)}
       </Badge>
-      <Badge variant="default" className={compact ? '' : 'text-[11px]'}>
-        <Sparkles className="h-3 w-3" />
-        {t('producerProfile.statsLevel')} {level ?? 1}
-      </Badge>
+      {typeof level === 'number' && (
+        <Badge variant="default" className={compact ? '' : 'text-[11px]'}>
+          <Sparkles className="h-3 w-3" />
+          {t('producerProfile.statsLevel')} {level}
+        </Badge>
+      )}
       {!compact && typeof xp === 'number' && (
         <span className="text-[11px] text-zinc-500">{xp} {t('common.xpShort')}</span>
       )}

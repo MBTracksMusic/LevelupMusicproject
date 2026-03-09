@@ -20,7 +20,18 @@ interface HomeBattleRow {
   producer2?: { id: string; username: string | null };
 }
 
-const visibleStatuses: BattleStatus[] = ['active', 'voting', 'completed'];
+interface HomeBattlesPreviewRpcRow {
+  id: string;
+  title: string;
+  slug: string;
+  status: BattleStatus;
+  producer1_id: string;
+  producer1_username: string | null;
+  producer2_id: string | null;
+  producer2_username: string | null;
+}
+
+const visibleStatuses: BattleStatus[] = ['active', 'voting', 'completed', 'awaiting_admin', 'approved'];
 
 const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'premium'> = {
   pending: 'warning',
@@ -51,30 +62,79 @@ export function HomeBattlesPreview() {
     async function fetchBattles() {
       setIsLoading(true);
 
-      const { data, error } = await supabase
-        .from('battles')
-        .select(`
-          id,
-          title,
-          slug,
-          status,
-          producer1_id,
-          producer2_id
-        `)
-        .in('status', visibleStatuses)
-        .order('created_at', { ascending: false })
-        .limit(3);
+      let previewBattles: HomeBattleRow[] = [];
+      const rpcRes = await supabase.rpc('get_public_home_battles_preview' as any, { p_limit: 3 });
+      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+        previewBattles = (rpcRes.data as HomeBattlesPreviewRpcRow[]).map((row) => ({
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          status: row.status,
+          producer1_id: row.producer1_id,
+          producer2_id: row.producer2_id,
+          producer1: {
+            id: row.producer1_id,
+            username: row.producer1_username,
+          },
+          producer2: row.producer2_id
+            ? {
+                id: row.producer2_id,
+                username: row.producer2_username,
+              }
+            : undefined,
+        }));
+      }
 
-      if (!isCancelled) {
+      if (previewBattles.length === 0) {
+        const { data, error } = await supabase
+          .from('battles')
+          .select(`
+            id,
+            title,
+            slug,
+            status,
+            producer1_id,
+            producer2_id
+          `)
+          .in('status', visibleStatuses)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
         if (error) {
           console.error('Error fetching home battles preview:', error);
-          setBattles([]);
+          if (rpcRes.error) {
+            console.error('Error fetching home battles preview RPC:', rpcRes.error);
+          }
+          const { data: spotlightRows, error: spotlightError } = await supabase.rpc('get_public_battle_of_the_day' as any);
+          if (!spotlightError && Array.isArray(spotlightRows) && spotlightRows.length > 0) {
+            const spotlight = spotlightRows[0] as Record<string, unknown>;
+            previewBattles = [
+              {
+                id: String(spotlight.battle_id),
+                title: String(spotlight.title),
+                slug: String(spotlight.slug),
+                status: (spotlight.status as BattleStatus) ?? 'active',
+                producer1_id: String(spotlight.producer1_id),
+                producer2_id: (spotlight.producer2_id as string | null) ?? null,
+                producer1: {
+                  id: String(spotlight.producer1_id),
+                  username: (spotlight.producer1_username as string | null) ?? null,
+                },
+                producer2: spotlight.producer2_id
+                  ? {
+                      id: String(spotlight.producer2_id),
+                      username: (spotlight.producer2_username as string | null) ?? null,
+                    }
+                  : undefined,
+              },
+            ];
+          }
         } else {
           const rows = ((data as HomeBattleRow[] | null) ?? []);
           const producerProfilesMap = await fetchPublicProducerProfilesMap(
             rows.flatMap((row) => [row.producer1_id, row.producer2_id])
           );
-          const withProducers = rows.map((row) => {
+          previewBattles = rows.map((row) => {
             const producer1 = producerProfilesMap.get(row.producer1_id);
             const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
             return {
@@ -93,8 +153,14 @@ export function HomeBattlesPreview() {
                 : undefined,
             };
           });
-          setBattles(withProducers);
         }
+      }
+
+      if (!isCancelled) {
+        if (rpcRes.error && previewBattles.length > 0) {
+          console.warn('Home battles preview RPC failed, fallback succeeded:', rpcRes.error);
+        }
+        setBattles(previewBattles);
         setIsLoading(false);
       }
     }

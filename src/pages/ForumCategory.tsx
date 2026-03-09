@@ -131,8 +131,14 @@ export function ForumCategoryPage() {
                 </div>
               )}
             </div>
-            {user && !isRankLocked && (
-              <Button leftIcon={<MessageSquarePlus className="h-4 w-4" />} onClick={() => setIsCreateOpen(true)}>
+            {user ? (
+              !isRankLocked && (
+                <Button leftIcon={<MessageSquarePlus className="h-4 w-4" />} onClick={() => setIsCreateOpen(true)}>
+                  {t('forum.newTopic')}
+                </Button>
+              )
+            ) : (
+              <Button leftIcon={<MessageSquarePlus className="h-4 w-4" />} disabled>
                 {t('forum.newTopic')}
               </Button>
             )}
@@ -143,6 +149,14 @@ export function ForumCategoryPage() {
           <Card className="border-amber-900 bg-amber-950/20">
             <CardContent className="text-sm text-amber-300">
               {t('forum.categoryLockedNotice', { rank: formatRankTier(category.required_rank_tier, t) })}
+            </CardContent>
+          </Card>
+        )}
+
+        {!user && (
+          <Card className="border-zinc-800">
+            <CardContent className="text-sm text-zinc-400">
+              {t('forum.loginToParticipate')}
             </CardContent>
           </Card>
         )}

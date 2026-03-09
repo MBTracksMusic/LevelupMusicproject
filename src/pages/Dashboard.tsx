@@ -169,6 +169,7 @@ export function DashboardPage() {
   const [purchasesError, setPurchasesError] = useState<string | null>(null);
   const [producerSubscription, setProducerSubscription] = useState<ProducerSubscriptionSummary | null>(null);
   const [isProducerSubscriptionLoading, setIsProducerSubscriptionLoading] = useState(false);
+  const [licenseDownloadingPurchaseId, setLicenseDownloadingPurchaseId] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -705,32 +706,40 @@ export function DashboardPage() {
   };
 
   const handleLicenseDownload = async (purchase: DashboardPurchase) => {
-    if (!purchase.contract_pdf_path) {
-      console.warn('Contract PDF path missing on purchase, skipping download call', {
+    setLicenseDownloadingPurchaseId(purchase.id);
+
+    try {
+      const { data: contractData, error: contractError } = await supabase.functions.invoke<{
+        url: string;
+        expires_in: number;
+        path?: string;
+      }>('get-contract-url', {
+        body: { purchase_id: purchase.id },
+      });
+
+      if (contractError) {
+        throw contractError;
+      }
+
+      if (contractData?.url) {
+        window.open(contractData.url, '_blank');
+        return;
+      }
+
+      console.warn('Contract PDF unavailable', {
         purchaseId: purchase.id,
+        contractData,
       });
       toast.error(t('dashboard.contractDownloadError'));
-      return;
+    } catch (error) {
+      console.error('License download error:', {
+        purchaseId: purchase.id,
+        error,
+      });
+      toast.error(t('dashboard.contractDownloadError'));
+    } finally {
+      setLicenseDownloadingPurchaseId((current) => (current === purchase.id ? null : current));
     }
-
-    const { data: contractData, error: contractError } = await supabase.functions.invoke<{
-      url: string;
-      expires_in: number;
-      path?: string;
-    }>('get-contract-url', {
-      body: { purchase_id: purchase.id },
-    });
-
-    if (!contractError && contractData?.url) {
-      window.open(contractData.url, '_blank');
-      return;
-    }
-
-    console.warn('Contract PDF unavailable', {
-      purchaseId: purchase.id,
-      functionError: contractError,
-    });
-    toast.error(t('dashboard.contractDownloadError'));
   };
 
   const selectedLicenseMetadata = (selectedLicensePurchase?.metadata as Record<string, unknown> | null) || null;
@@ -993,7 +1002,7 @@ export function DashboardPage() {
                         onClick={() => {
                           void handleLicenseDownload(purchase);
                         }}
-                        disabled={!purchase.contract_pdf_path}
+                        disabled={licenseDownloadingPurchaseId === purchase.id}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Download className="w-4 h-4" />

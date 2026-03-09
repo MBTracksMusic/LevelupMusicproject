@@ -1175,6 +1175,7 @@ export const fr = {
     replyDescription: 'Votre message sera publie a la suite de la discussion.',
     replyPlaceholder: 'Partagez votre reponse, votre retour ou une precision utile.',
     publishReply: 'Publier la reponse',
+    loginToParticipate: 'Connectez-vous pour participer.',
     loginToReply: 'Connectez-vous pour repondre a ce topic.',
     paginationTopicsZero: '0 topic',
     paginationTopics: '{from}-{to} sur {total} topics',

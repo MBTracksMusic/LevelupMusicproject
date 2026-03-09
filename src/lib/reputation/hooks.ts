@@ -111,12 +111,20 @@ export function useMyReputation() {
 }
 
 export function useLeaderboard(period: 'week' | 'month', source: 'overall' | 'forum' | 'battle') {
+  const { user } = useAuth();
   const { t } = useTranslation();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!user?.id) {
+      setEntries([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -136,7 +144,7 @@ export function useLeaderboard(period: 'week' | 'month', source: 'overall' | 'fo
 
     setEntries((data as LeaderboardEntry[] | null) ?? []);
     setIsLoading(false);
-  }, [period, source, t]);
+  }, [period, source, t, user?.id]);
 
   useEffect(() => {
     void refresh();
@@ -181,7 +189,7 @@ export function useEloLeaderboard(limit = 100) {
       return;
     }
 
-    setEntries((data as EloLeaderboardEntry[] | null) ?? []);
+    setEntries((data as unknown as EloLeaderboardEntry[] | null) ?? []);
     setIsLoading(false);
   }, [limit, t]);
 
@@ -265,7 +273,7 @@ export function useSeasonLeaderboard(limit = 100) {
       return;
     }
 
-    setEntries((data as SeasonLeaderboardEntry[] | null) ?? []);
+    setEntries((data as unknown as SeasonLeaderboardEntry[] | null) ?? []);
     setIsLoading(false);
   }, [limit, t]);
 

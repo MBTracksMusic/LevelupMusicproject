@@ -5,13 +5,8 @@ export interface ForumPublicProfileRow {
   user_id: string;
   username: string | null;
   avatar_url: string | null;
-  producer_tier: string | null;
-  xp: number;
-  level: number;
-  rank_tier: ReputationRankTier;
-  reputation_score: number;
-  created_at: string;
-  updated_at: string;
+  rank: ReputationRankTier;
+  reputation: number;
 }
 
 export async function fetchForumPublicProfilesMap(
@@ -24,8 +19,8 @@ export async function fetchForumPublicProfilesMap(
   }
 
   const { data, error } = await supabase
-    .from('forum_public_profiles' as any)
-    .select('user_id, username, avatar_url, producer_tier, xp, level, rank_tier, reputation_score, created_at, updated_at')
+    .from('forum_public_profiles_public' as any)
+    .select('user_id, username, avatar_url, rank, reputation')
     .in('user_id', uniqueIds);
 
   if (error) {

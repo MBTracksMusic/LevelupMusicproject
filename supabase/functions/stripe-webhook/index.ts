@@ -1338,14 +1338,14 @@ async function upsertProducerSubscription(
 
   let { data: profile } = await supabase
     .from("user_profiles")
-    .select("id, stripe_customer_id, stripe_subscription_id, producer_tier")
+    .select("id, stripe_customer_id, stripe_subscription_id, producer_tier, role")
     .eq("stripe_customer_id", customerId)
     .maybeSingle();
 
   if (!profile && userId) {
     const { data: profileById } = await supabase
       .from("user_profiles")
-      .select("id, stripe_customer_id, stripe_subscription_id, producer_tier")
+      .select("id, stripe_customer_id, stripe_subscription_id, producer_tier, role")
       .eq("id", userId)
       .maybeSingle();
 
@@ -1378,11 +1378,13 @@ async function upsertProducerSubscription(
         stripe_customer_id: null,
         stripe_subscription_id: null,
         producer_tier: null,
+        role: null,
       } as {
         id: string;
         stripe_customer_id: string | null;
         stripe_subscription_id: string | null;
         producer_tier: ProducerTier | null;
+        role: string | null;
       };
     }
   }
@@ -1390,7 +1392,7 @@ async function upsertProducerSubscription(
   if (!profile) {
     const { data: profileBySubscription } = await supabase
       .from("user_profiles")
-      .select("id, stripe_customer_id, stripe_subscription_id, producer_tier")
+      .select("id, stripe_customer_id, stripe_subscription_id, producer_tier, role")
       .eq("stripe_subscription_id", subscriptionId)
       .maybeSingle();
 
@@ -1421,6 +1423,21 @@ async function upsertProducerSubscription(
   }
 
   const isActive = ["active", "trialing"].includes(status) && Date.parse(currentEndIso) > Date.now();
+  let profileRole = (profile as { role?: string | null }).role ?? null;
+  if (profileRole === null) {
+    const { data: profileRoleRow, error: profileRoleErr } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", profile.id)
+      .maybeSingle();
+
+    if (profileRoleErr) {
+      console.error("[upsertProducerSubscription] Failed to resolve current role", profileRoleErr);
+    } else {
+      profileRole = (profileRoleRow as { role?: string | null } | null)?.role ?? null;
+    }
+  }
+
   const currentTier = asProducerTier((profile as { producer_tier?: unknown })?.producer_tier ?? null);
   const tierResolution = await resolveProducerTierFromSubscription(supabase, {
     isActive,
@@ -1438,6 +1455,9 @@ async function upsertProducerSubscription(
   };
   if (!profile.stripe_customer_id) {
     profileUpdates.stripe_customer_id = customerId;
+  }
+  if (isActive && profileRole !== "producer" && profileRole !== "admin") {
+    profileUpdates.role = "producer";
   }
 
   const { error: profileUpdateErr } = await supabase

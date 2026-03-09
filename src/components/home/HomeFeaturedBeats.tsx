@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Headphones, ShoppingCart } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -26,9 +26,23 @@ interface HomeBeatRow {
   };
 }
 
+interface HomeFeaturedBeatRpcRow {
+  id: string;
+  title: string;
+  slug: string;
+  price: number;
+  play_count: number | null;
+  cover_image_url: string | null;
+  is_sold: boolean | null;
+  producer_id: string;
+  producer_username: string | null;
+}
+
 export function HomeFeaturedBeats() {
   const { t } = useTranslation();
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { addToCart } = useCartStore();
   const [beats, setBeats] = useState<HomeBeatRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,47 +53,79 @@ export function HomeFeaturedBeats() {
     async function fetchFeaturedBeats() {
       setIsLoading(true);
 
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          id,
-          title,
-          slug,
-          price,
-          play_count,
-          cover_image_url,
-          is_sold,
-          producer_id
-        `)
-        .eq('product_type', 'beat')
-        .eq('is_published', true)
-        .is('deleted_at', null)
-        .order('play_count', { ascending: false })
-        .limit(10);
+      let featuredBeats: HomeBeatRow[] = [];
+      const rpcRes = await supabase.rpc('get_public_home_featured_beats' as any, { p_limit: 10 });
+      if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+        featuredBeats = (rpcRes.data as HomeFeaturedBeatRpcRow[]).map((row) => ({
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          price: row.price,
+          play_count: typeof row.play_count === 'number' ? row.play_count : 0,
+          cover_image_url: row.cover_image_url,
+          is_sold: row.is_sold === true,
+          producer_id: row.producer_id,
+          producer: {
+            id: row.producer_id,
+            username: row.producer_username,
+          },
+        }));
+      }
+
+      if (featuredBeats.length === 0) {
+        const { data, error } = await supabase
+          .from('products')
+          .select(`
+            id,
+            title,
+            slug,
+            price,
+            play_count,
+            cover_image_url,
+            is_sold,
+            producer_id
+          `)
+          .eq('product_type', 'beat')
+          .eq('is_published', true)
+          .is('deleted_at', null)
+          .order('play_count', { ascending: false })
+          .limit(10);
+
+        if (error) {
+          if (!isCancelled) {
+            console.error('Error fetching featured beats for home:', error);
+            if (rpcRes.error) {
+              console.error('Error fetching featured beats RPC for home:', rpcRes.error);
+            }
+            setBeats([]);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const rows = ((data as HomeBeatRow[] | null) ?? []);
+        const producerProfilesMap = await fetchPublicProducerProfilesMap(
+          rows.map((row) => row.producer_id)
+        );
+        featuredBeats = rows.map((row) => {
+          const producer = producerProfilesMap.get(row.producer_id);
+          return {
+            ...row,
+            producer: producer
+              ? {
+                  id: producer.user_id,
+                  username: producer.username,
+                }
+              : undefined,
+          };
+        });
+      }
 
       if (!isCancelled) {
-        if (error) {
-          console.error('Error fetching featured beats for home:', error);
-          setBeats([]);
-        } else {
-          const rows = ((data as HomeBeatRow[] | null) ?? []);
-          const producerProfilesMap = await fetchPublicProducerProfilesMap(
-            rows.map((row) => row.producer_id)
-          );
-          const withProducer = rows.map((row) => {
-            const producer = producerProfilesMap.get(row.producer_id);
-            return {
-              ...row,
-              producer: producer
-                ? {
-                    id: producer.user_id,
-                    username: producer.username,
-                  }
-                : undefined,
-            };
-          });
-          setBeats(withProducer);
+        if (rpcRes.error && featuredBeats.length > 0) {
+          console.warn('Featured beats RPC failed, fallback succeeded:', rpcRes.error);
         }
+        setBeats(featuredBeats);
         setIsLoading(false);
       }
     }
@@ -92,7 +138,10 @@ export function HomeFeaturedBeats() {
   }, []);
 
   const handleAddToCart = async (beatId: string) => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: location.pathname } } });
+      return;
+    }
 
     setAddingBeatId(beatId);
     try {
@@ -170,8 +219,8 @@ export function HomeFeaturedBeats() {
                     <Button
                       size="sm"
                       isLoading={addingBeatId === beat.id}
-                      disabled={!isAuthenticated}
                       leftIcon={<ShoppingCart className="w-4 h-4" />}
+                      variant={isAuthenticated ? 'primary' : 'outline'}
                       onClick={() => {
                         void handleAddToCart(beat.id);
                       }}

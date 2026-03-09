@@ -231,8 +231,24 @@ export function ForumTopicPage() {
           )
         ) : (
           <Card className="border-zinc-800">
-            <CardContent className="py-8 text-center text-zinc-400">
-              {t('forum.loginToReply')}
+            <CardHeader>
+              <CardTitle>{t('forum.replyTitle')}</CardTitle>
+              <CardDescription>{t('forum.loginToParticipate')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <textarea
+                  disabled
+                  rows={7}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-white placeholder-zinc-500 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/50 disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder={t('forum.replyPlaceholder')}
+                />
+                <div className="flex justify-end">
+                  <Button type="button" disabled>
+                    {t('forum.publishReply')}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

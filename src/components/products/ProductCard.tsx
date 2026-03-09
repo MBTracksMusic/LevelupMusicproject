@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Play, Pause, Heart, ShoppingCart, Star, Lock } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -21,6 +21,8 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuth();
   const permissions = usePermissions();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { currentTrack, setCurrentTrack, isPlaying, setIsPlaying } = usePlayerStore();
   const { addToCart } = useCartStore();
   const [isHovered, setIsHovered] = useState(false);
@@ -47,7 +49,10 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
     e.preventDefault();
     e.stopPropagation();
 
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: location.pathname } } });
+      return;
+    }
 
     setIsAddingToCart(true);
     try {
@@ -192,14 +197,15 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted }: Product
             <span className="text-lg font-bold text-white">
               {formatPrice(product.price)}
             </span>
-            {!product.is_sold && isAuthenticated && (
+            {!product.is_sold && (
               <Button
                 size="sm"
                 onClick={handleAddToCart}
                 isLoading={isAddingToCart}
                 leftIcon={<ShoppingCart className="w-4 h-4" />}
+                variant={isAuthenticated ? 'primary' : 'outline'}
               >
-                {t('products.addToCart')}
+                {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
               </Button>
             )}
           </div>

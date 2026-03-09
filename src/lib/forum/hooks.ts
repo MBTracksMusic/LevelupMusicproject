@@ -50,11 +50,20 @@ const getFallbackAuthor = (userId: string, profile: UserProfile | null | undefin
   };
 };
 
+const loadForumProfilesMap = async (userIds: string[]) => {
+  try {
+    return await fetchForumPublicProfilesMap(userIds);
+  } catch (error) {
+    console.warn('Forum public profiles unavailable, using fallback author labels', error);
+    return new Map();
+  }
+};
+
 const attachAuthorsToTopics = async (
   rows: ForumTopicRow[],
   profile: UserProfile | null | undefined,
 ): Promise<ForumTopic[]> => {
-  const producerMap = await fetchForumPublicProfilesMap(rows.map((row) => row.user_id));
+  const producerMap = await loadForumProfilesMap(rows.map((row) => row.user_id));
 
   return rows.map((row) => {
     const producer = producerMap.get(row.user_id);
@@ -67,10 +76,8 @@ const attachAuthorsToTopics = async (
             id: producer.user_id,
             username: producer.username,
             avatar_url: producer.avatar_url,
-            xp: producer.xp,
-            level: producer.level,
-            rank_tier: producer.rank_tier,
-            reputation_score: producer.reputation_score,
+            rank_tier: producer.rank,
+            reputation_score: producer.reputation,
           }
         : fallback,
     };
@@ -150,7 +157,7 @@ const attachAuthorsToPosts = async (
   rows: ForumPostRow[],
   profile: UserProfile | null | undefined,
 ): Promise<ForumPost[]> => {
-  const producerMap = await fetchForumPublicProfilesMap(rows.map((row) => row.user_id));
+  const producerMap = await loadForumProfilesMap(rows.map((row) => row.user_id));
 
   return rows.map((row) => {
     const producer = producerMap.get(row.user_id);
@@ -163,10 +170,8 @@ const attachAuthorsToPosts = async (
             id: producer.user_id,
             username: producer.username,
             avatar_url: producer.avatar_url,
-            xp: producer.xp,
-            level: producer.level,
-            rank_tier: producer.rank_tier,
-            reputation_score: producer.reputation_score,
+            rank_tier: producer.rank,
+            reputation_score: producer.reputation,
           }
         : row.is_ai_generated && row.ai_agent_name
         ? {

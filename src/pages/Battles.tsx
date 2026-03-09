@@ -54,53 +54,66 @@ export function BattlesPage() {
 
         if (error) throw error;
         const rows = ((data as BattleWithRelations[] | null) ?? []);
-        const producerProfilesMap = await fetchPublicProducerProfilesMap(
-          rows.flatMap((row) => [row.producer1_id, row.producer2_id, row.winner_id])
-        );
-        const withProducers = rows.map((row) => {
-          const producer1 = producerProfilesMap.get(row.producer1_id);
-          const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
-          const winner = row.winner_id ? producerProfilesMap.get(row.winner_id) : undefined;
+        let nextBattles: BattleWithRelations[] = rows;
 
-          return {
+        try {
+          const producerProfilesMap = await fetchPublicProducerProfilesMap(
+            rows.flatMap((row) => [row.producer1_id, row.producer2_id, row.winner_id])
+          );
+
+          nextBattles = rows.map((row) => {
+            const producer1 = producerProfilesMap.get(row.producer1_id);
+            const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
+            const winner = row.winner_id ? producerProfilesMap.get(row.winner_id) : undefined;
+
+            return {
+              ...row,
+              producer1: producer1
+                ? {
+                    id: producer1.user_id,
+                    username: producer1.username,
+                    avatar_url: producer1.avatar_url,
+                    xp: producer1.xp,
+                    level: producer1.level,
+                    rank_tier: producer1.rank_tier,
+                    reputation_score: producer1.reputation_score,
+                  }
+                : undefined,
+              producer2: producer2
+                ? {
+                    id: producer2.user_id,
+                    username: producer2.username,
+                    avatar_url: producer2.avatar_url,
+                    xp: producer2.xp,
+                    level: producer2.level,
+                    rank_tier: producer2.rank_tier,
+                    reputation_score: producer2.reputation_score,
+                  }
+                : undefined,
+              winner: winner
+                ? {
+                    id: winner.user_id,
+                    username: winner.username,
+                    avatar_url: winner.avatar_url,
+                    xp: winner.xp,
+                    level: winner.level,
+                    rank_tier: winner.rank_tier,
+                    reputation_score: winner.reputation_score,
+                  }
+                : undefined,
+            };
+          }) as BattleWithRelations[];
+        } catch (enrichError) {
+          console.error('Error enriching battles with producer profiles:', enrichError);
+          nextBattles = rows.map((row) => ({
             ...row,
-            producer1: producer1
-              ? {
-                  id: producer1.user_id,
-                  username: producer1.username,
-                  avatar_url: producer1.avatar_url,
-                  xp: producer1.xp,
-                  level: producer1.level,
-                  rank_tier: producer1.rank_tier,
-                  reputation_score: producer1.reputation_score,
-                }
-              : undefined,
-            producer2: producer2
-              ? {
-                  id: producer2.user_id,
-                  username: producer2.username,
-                  avatar_url: producer2.avatar_url,
-                  xp: producer2.xp,
-                  level: producer2.level,
-                  rank_tier: producer2.rank_tier,
-                  reputation_score: producer2.reputation_score,
-                }
-              : undefined,
-            winner: winner
-              ? {
-                  id: winner.user_id,
-                  username: winner.username,
-                  avatar_url: winner.avatar_url,
-                  xp: winner.xp,
-                  level: winner.level,
-                  rank_tier: winner.rank_tier,
-                  reputation_score: winner.reputation_score,
-                }
-              : undefined,
-          };
-        });
+            producer1: undefined,
+            producer2: undefined,
+            winner: undefined,
+          })) as BattleWithRelations[];
+        }
 
-        setBattles(withProducers as BattleWithRelations[]);
+        setBattles(nextBattles);
       } catch (error) {
         console.error('Error fetching battles:', error);
         setError(t('battles.loadError'));

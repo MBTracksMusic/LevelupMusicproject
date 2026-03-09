@@ -24,6 +24,7 @@ interface BattleSnapshot {
   id: string;
   title: string;
   status: string;
+  battle_type: "user" | "admin" | string;
   producer1_id: string;
   producer2_id: string | null;
   product1_id: string | null;
@@ -162,6 +163,7 @@ Deno.serve(async (req: Request) => {
       id,
       title,
       status,
+      battle_type,
       producer1_id,
       producer2_id,
       product1_id,
@@ -209,6 +211,7 @@ Deno.serve(async (req: Request) => {
     battle_snapshot: {
       id: battle.id,
       status: battle.status,
+      battle_type: battle.battle_type,
       producer1_id: battle.producer1_id,
       producer2_id: battle.producer2_id,
       product1_id: battle.product1_id,
