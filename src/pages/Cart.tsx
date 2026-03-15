@@ -6,7 +6,46 @@ import { useTranslation } from '../lib/i18n';
 import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
 import { LogoLoader } from '../components/ui/LogoLoader';
-import { invokeProtectedEdgeFunction } from '../lib/supabase/edgeAuth';
+import { supabase } from '../lib/supabase/client';
+
+const asNonEmptyString = (value: unknown) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const parseCheckoutErrorMessage = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return null;
+  const record = payload as Record<string, unknown>;
+  return asNonEmptyString(record.error) || asNonEmptyString(record.message);
+};
+
+const toEdgeInvokeErrorMessage = async (error: unknown) => {
+  if (!error || typeof error !== 'object') return null;
+
+  const message = 'message' in error
+    ? asNonEmptyString((error as { message?: unknown }).message)
+    : null;
+  const context = 'context' in error
+    ? (error as { context?: unknown }).context
+    : null;
+
+  if (!(context instanceof Response)) {
+    return message;
+  }
+
+  try {
+    const payload = await context.clone().json() as Record<string, unknown>;
+    return parseCheckoutErrorMessage(payload) || message;
+  } catch {
+    try {
+      const text = asNonEmptyString(await context.clone().text());
+      return text || message;
+    } catch {
+      return message;
+    }
+  }
+};
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -64,16 +103,71 @@ export function CartPage() {
     setIsCheckoutLoading(true);
 
     try {
-      const data = await invokeProtectedEdgeFunction<{ url?: string }>('create-checkout', {
-        body: {
-          beatId: firstItem.product_id,
-          licenseType: firstItem.license_type,
-          successUrl: `${window.location.origin}/cart?status=success`,
-          cancelUrl: `${window.location.origin}/cart?status=cancel`,
-        },
-      });
+      const forceReLogin = async () => {
+        await supabase.auth.signOut({ scope: 'global' }).catch(() => undefined);
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('sb-') && key.includes('auth')) {
+            localStorage.removeItem(key);
+          }
+        }
+        navigate('/login', { replace: true, state: { from: { pathname: '/cart' } } });
+      };
 
-      const url = data?.url;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        await forceReLogin();
+        throw new Error('User must be logged in to purchase');
+      }
+
+      const invokeCheckout = async (token: string) => (
+        supabase.functions.invoke<{ url?: string }>('create-checkout', {
+          body: {
+            beatId: firstItem.product_id,
+            licenseType: firstItem.license_type,
+            successUrl: `${window.location.origin}/cart?status=success`,
+            cancelUrl: `${window.location.origin}/cart?status=cancel`,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+      );
+
+      let { data, error } = await invokeCheckout(sessionData.session.access_token);
+      if (error) {
+        const firstMessage = await toEdgeInvokeErrorMessage(error);
+        const mustRetryWithRefresh = Boolean(
+          firstMessage && /invalid\s+jwt|jwt verification failed/i.test(firstMessage),
+        );
+
+        if (!mustRetryWithRefresh) {
+          if (firstMessage && /unauthorized/i.test(firstMessage)) {
+            await forceReLogin();
+          }
+          throw new Error(firstMessage || t('checkout.paymentStartError'));
+        }
+
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshed?.session) {
+          await forceReLogin();
+          throw new Error('Session invalid. Please log in again.');
+        }
+
+        const retry = await invokeCheckout(refreshed.session.access_token);
+        data = retry.data;
+        error = retry.error;
+
+        if (error) {
+          const retryMessage = await toEdgeInvokeErrorMessage(error);
+          if (retryMessage && /invalid\s+jwt|jwt verification failed|unauthorized/i.test(retryMessage)) {
+            await forceReLogin();
+            throw new Error('Session invalid. Please log in again.');
+          }
+          throw new Error(retryMessage || t('checkout.paymentStartError'));
+        }
+      }
+
+      const url = asNonEmptyString(data?.url);
       if (url) {
         window.location.href = url;
       } else {
