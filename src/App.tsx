@@ -51,6 +51,7 @@ import { useCartStore } from './lib/stores/cart';
 import { useAuth } from './lib/auth/hooks';
 import { useTranslation } from './lib/i18n';
 import { AdminMessagesPage } from './pages/admin/AdminMessages';
+import { AdminMessageDetailPage } from './pages/admin/AdminMessageDetail';
 import { AdminReputationPage } from './pages/admin/AdminReputation';
 import { LogoLoader } from './components/ui/LogoLoader';
 
@@ -191,6 +192,7 @@ function AppContent() {
           <Route path="news" element={<AdminNewsPage />} />
           <Route path="battles" element={<AdminBattlesWrapper />} />
           <Route path="messages" element={<AdminMessagesPage />} />
+          <Route path="messages/:id" element={<AdminMessageDetailPage />} />
           <Route path="forum" element={<AdminForumPage />} />
           <Route path="forum/categories" element={<AdminForumCategoriesPage />} />
           <Route path="beat-analytics" element={<AdminBeatAnalyticsPage />} />

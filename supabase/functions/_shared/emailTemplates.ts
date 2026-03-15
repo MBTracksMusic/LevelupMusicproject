@@ -5,7 +5,8 @@ export type EmailTemplate =
   | "purchase_receipt"
   | "license_ready"
   | "battle_won"
-  | "comment_received";
+  | "comment_received"
+  | "contact_reply";
 
 export const UNIQUE_EMAIL_TEMPLATES = new Set<EmailTemplate>([
   "confirm_account",
@@ -18,6 +19,7 @@ export const REPEATABLE_EMAIL_TEMPLATES = new Set<EmailTemplate>([
   "license_ready",
   "battle_won",
   "comment_received",
+  "contact_reply",
 ]);
 
 export const ALL_EMAIL_TEMPLATES = new Set<EmailTemplate>([

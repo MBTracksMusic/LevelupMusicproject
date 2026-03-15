@@ -312,6 +312,36 @@ const getTemplateContent = (params: {
     };
   }
 
+  if (template === "contact_reply") {
+    const contactMessageId = asNonEmptyString(payload?.contact_message_id);
+    const originalSubject = asNonEmptyString(payload?.subject) ?? "votre message";
+    const contactName = asNonEmptyString(payload?.name);
+    const reply = asNonEmptyString(payload?.reply) ?? "Notre equipe vous a repondu.";
+    const greetingName = contactName ? `Bonjour ${contactName},` : "Bonjour,";
+    const metaLines = [
+      `Sujet initial: ${originalSubject}`,
+      ...(contactMessageId ? [`Reference message: ${contactMessageId}`] : []),
+    ];
+
+    return {
+      subject: "Reponse a votre message de contact",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Reponse de l'equipe BeatElion",
+        preheader: "Nous avons repondu a votre message",
+        bodyLines: [
+          greetingName,
+          "Merci pour votre message.",
+          "Voici notre reponse:",
+          reply,
+        ],
+        ctaLabel: "Nous contacter",
+        ctaUrl: `${safeAppUrl}/contact`,
+        metaLines,
+      }),
+    };
+  }
+
   return {
     subject: "Ton compte producteur est prêt",
     ...buildBrandedEmailContent({

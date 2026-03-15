@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '../../lib/supabase/types';
@@ -168,6 +170,34 @@ export function AdminMessagesPage() {
     setActionKey(null);
   };
 
+  const deleteRow = async (row: AdminMessageRow) => {
+    if (actionKey !== null) return;
+
+    const confirmed = window.confirm(
+      t('admin.messages.deleteConfirm', { subject: row.subject }),
+    );
+    if (!confirmed) return;
+
+    const key = `delete:${row.id}`;
+    setActionKey(key);
+
+    const { error } = await supabase
+      .from(contactMessagesSource)
+      .delete()
+      .eq('id', row.id);
+
+    if (error) {
+      console.error('Error deleting contact message:', error);
+      toast.error(t('admin.messages.deleteError'));
+      setActionKey(null);
+      return;
+    }
+
+    setRows((prev) => prev.filter((item) => item.id !== row.id));
+    toast.success(t('admin.messages.deleteSuccess'));
+    setActionKey(null);
+  };
+
   const getCategoryLabel = (category: ContactCategory) => {
     if (category === 'support') return t('myMessages.categorySupport');
     if (category === 'battle') return t('myMessages.categoryBattle');
@@ -231,9 +261,19 @@ export function AdminMessagesPage() {
         ) : filteredCount === 0 ? (
           <div className="p-6 text-zinc-500">{t('admin.messages.empty')}</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
-              <thead className="bg-zinc-900/90 text-zinc-400">
+          <div className="overflow-x-auto [scrollbar-gutter:stable]">
+            <table className="w-full min-w-[980px] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[160px]" />
+                <col className="w-[250px]" />
+                <col className="w-[170px]" />
+                <col className="w-[120px]" />
+                <col className="w-[150px]" />
+                <col className="w-[150px]" />
+                <col className="w-[150px]" />
+                <col className="w-[220px]" />
+              </colgroup>
+              <thead className="bg-zinc-900/95 text-zinc-400">
                 <tr>
                   <th className="text-left p-3 font-medium">{t('common.date')}</th>
                   <th className="text-left p-3 font-medium">{t('admin.messages.contact')}</th>
@@ -242,23 +282,27 @@ export function AdminMessagesPage() {
                   <th className="text-left p-3 font-medium">{t('admin.messages.origin')}</th>
                   <th className="text-left p-3 font-medium">{t('common.status')}</th>
                   <th className="text-left p-3 font-medium">{t('common.priority')}</th>
-                  <th className="text-left p-3 font-medium">{t('common.message')}</th>
+                  <th className="sticky right-0 border-l border-zinc-800 bg-zinc-900/95 text-right p-3 font-medium">{t('common.action')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-t border-zinc-800 text-zinc-200 align-top">
+                  <tr key={row.id} className="border-t border-zinc-800 text-zinc-200 align-top hover:bg-zinc-900/30">
                     <td className="p-3 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
-                    <td className="p-3 whitespace-nowrap">
-                      <p>{row.name || t('admin.messages.anonymous')}</p>
-                      <p className="text-zinc-500">{row.email || t('common.notAvailable')}</p>
+                    <td className="p-3">
+                      <p className="truncate font-medium">{row.name || t('admin.messages.anonymous')}</p>
+                      <p className="truncate text-zinc-500">{row.email || t('common.notAvailable')}</p>
                     </td>
-                    <td className="p-3">{row.subject}</td>
+                    <td className="p-3">
+                      <p className="line-clamp-2">{row.subject}</p>
+                    </td>
                     <td className="p-3 whitespace-nowrap">{getCategoryLabel(row.category)}</td>
-                    <td className="p-3 whitespace-nowrap">{row.origin_page || t('common.notAvailable')}</td>
+                    <td className="p-3">
+                      <p className="truncate text-zinc-300">{row.origin_page || t('common.notAvailable')}</p>
+                    </td>
                     <td className="p-3">
                       <select
-                        className="h-9 rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
+                        className="h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
                         value={row.status}
                         disabled={actionKey !== null}
                         onChange={(event) =>
@@ -272,7 +316,7 @@ export function AdminMessagesPage() {
                     </td>
                     <td className="p-3">
                       <select
-                        className="h-9 rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
+                        className="h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100"
                         value={row.priority}
                         disabled={actionKey !== null}
                         onChange={(event) =>
@@ -284,8 +328,30 @@ export function AdminMessagesPage() {
                         <option value="high">{getPriorityLabel('high')}</option>
                       </select>
                     </td>
-                    <td className="p-3 max-w-[360px]">
-                      <p className="line-clamp-4 whitespace-pre-wrap text-zinc-300">{row.message}</p>
+                    <td className="sticky right-0 border-l border-zinc-800 bg-zinc-950/95 p-3 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-2">
+                        <Link
+                          to={`/admin/messages/${row.id}`}
+                          onClick={(event) => {
+                            if (actionKey !== null) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
+                          <Button size="sm" variant="secondary" disabled={actionKey !== null}>
+                            {t('myMessages.viewDetails')}
+                          </Button>
+                        </Link>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          isLoading={actionKey === `delete:${row.id}`}
+                          disabled={actionKey !== null}
+                          onClick={() => void deleteRow(row)}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

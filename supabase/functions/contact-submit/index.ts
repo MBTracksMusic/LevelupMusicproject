@@ -101,6 +101,7 @@ const ALLOWED_FIELDS = new Set([
   "name",
   "email",
   "subject",
+  "category",
   "message",
   "honeypot",
   "website",
@@ -128,6 +129,14 @@ const PLACEHOLDER_VALUES = new Set([
   "lorem ipsum",
 ]);
 
+const CONTACT_CATEGORIES = new Set([
+  "support",
+  "battle",
+  "payment",
+  "partnership",
+  "other",
+]);
+
 type JsonObject = Record<string, unknown>;
 type ContactLogStatus = "accepted" | "rejected";
 type SupabaseAdminClient = any;
@@ -146,6 +155,12 @@ const asNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const normalizeContactCategory = (value: unknown) => {
+  const category = asNonEmptyString(value)?.toLowerCase();
+  if (!category) return "support";
+  return CONTACT_CATEGORIES.has(category) ? category : null;
 };
 
 const DEFAULT_ALLOWED_CAPTCHA_HOSTNAMES = [
@@ -499,6 +514,7 @@ const sendAdminEmail = async (params: {
     name: string;
     email: string;
     subject: string;
+    category: string;
     message: string;
     ip_hash: string | null;
     user_agent: string | null;
@@ -517,6 +533,7 @@ const sendAdminEmail = async (params: {
       `Name: ${item.name}`,
       `Email: ${item.email}`,
       `Subject: ${item.subject}`,
+      `Category: ${item.category}`,
       `IP hash: ${item.ip_hash ?? "-"}`,
       `User-Agent: ${item.user_agent ?? "-"}`,
       "",
@@ -529,6 +546,7 @@ const sendAdminEmail = async (params: {
         <p style="margin:0 0 6px;"><strong>Nom:</strong> ${escapeHtml(item.name)}</p>
         <p style="margin:0 0 6px;"><strong>Email:</strong> ${escapeHtml(item.email)}</p>
         <p style="margin:0 0 6px;"><strong>Sujet:</strong> ${escapeHtml(item.subject)}</p>
+        <p style="margin:0 0 6px;"><strong>Categorie:</strong> ${escapeHtml(item.category)}</p>
         <p style="margin:0 0 6px;"><strong>IP hash:</strong> ${escapeHtml(item.ip_hash ?? "-")}</p>
         <p style="margin:0 0 14px;"><strong>User-Agent:</strong> ${escapeHtml(item.user_agent ?? "-")}</p>
         <div style="white-space:pre-wrap;line-height:1.55;background:#f4f4f5;padding:14px;border-radius:8px;">${escapeHtml(item.message)}</div>
@@ -784,6 +802,7 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
 
   const name = nameRaw ? sanitizeSingleLineField(nameRaw) : null;
   const subject = sanitizeSingleLineField(subjectRaw);
+  const category = normalizeContactCategory(payload.category);
   const message = messageRaw ? sanitizeMessageField(messageRaw) : null;
 
   if (!name || name.length < MIN_NAME_LENGTH || name.length > MAX_NAME_LENGTH) {
@@ -806,6 +825,13 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
     return new Response(JSON.stringify({
       error: `Subject must be between ${MIN_SUBJECT_LENGTH} and ${MAX_SUBJECT_LENGTH} characters`,
     }), {
+      status: 400,
+      headers: corsHeaders,
+    });
+  }
+
+  if (!category) {
+    return new Response(JSON.stringify({ error: "Invalid category" }), {
       status: 400,
       headers: corsHeaders,
     });
@@ -869,7 +895,7 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
         name,
         email,
         subject,
-        category: "support",
+        category,
         message,
         origin_page: "/contact",
         user_agent: userAgent,
@@ -927,6 +953,7 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
           name,
           email,
           subject,
+          category,
           message,
           ip_hash: ipHash,
           user_agent: userAgent,

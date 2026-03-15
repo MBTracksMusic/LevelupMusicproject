@@ -19,6 +19,9 @@ verify_jwt = true
 [functions.admin-upload-watermark]
 verify_jwt = false
 
+[functions.admin-reply-contact-message]
+verify_jwt = false
+
 [functions.contact-submit]
 verify_jwt = false
 
@@ -32,7 +35,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.broadcast-news]
-verify_jwt = true
+verify_jwt = false
 
 [functions.collect-pipeline-metrics]
 verify_jwt = false

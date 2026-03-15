@@ -14,6 +14,8 @@ interface ContactSubmitResponse {
   error?: string;
 }
 
+type ContactCategory = 'support' | 'battle' | 'payment' | 'partnership' | 'other';
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_MESSAGE_LENGTH = 20;
 
@@ -27,6 +29,7 @@ export function ContactPage() {
   const isCaptchaConfigured = captchaSiteKey.length > 0;
 
   const [message, setMessage] = useState('');
+  const [category, setCategory] = useState<ContactCategory>('support');
   const [name, setName] = useState(defaultName);
   const [email, setEmail] = useState(defaultEmail);
   const [honeypot, setHoneypot] = useState('');
@@ -80,6 +83,7 @@ export function ContactPage() {
 
       const payload = {
         message: message.trim(),
+        category,
         name: resolvedName,
         email: resolvedEmail,
         captchaToken,
@@ -174,6 +178,24 @@ export function ContactPage() {
                 value={honeypot}
                 onChange={(event) => setHoneypot(event.target.value)}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5" htmlFor="contact-category">
+                {t('common.category')}
+              </label>
+              <select
+                id="contact-category"
+                className="w-full h-11 bg-zinc-900 border border-zinc-700 rounded-lg px-3 text-white focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500"
+                value={category}
+                onChange={(event) => setCategory(event.target.value as ContactCategory)}
+              >
+                <option value="support">{t('support.contact.categorySupport')}</option>
+                <option value="battle">{t('support.contact.categoryBattle')}</option>
+                <option value="payment">{t('support.contact.categoryPayment')}</option>
+                <option value="partnership">{t('support.contact.categoryPartnership')}</option>
+                <option value="other">{t('support.contact.categoryOther')}</option>
+              </select>
             </div>
 
             <div>
