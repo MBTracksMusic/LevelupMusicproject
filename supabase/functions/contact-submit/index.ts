@@ -95,10 +95,6 @@ const MIN_MESSAGE_LENGTH = 20;
 const MAX_MESSAGE_LENGTH = 5000;
 const MIN_HUMAN_SUBMISSION_DELAY_MS = 1500;
 
-const RATE_LIMIT_IP_MAX_15_MIN = 3;
-const RATE_LIMIT_IP_MAX_24_HOURS = 10;
-const RATE_LIMIT_EMAIL_MAX_15_MIN = 2;
-const RATE_LIMIT_IP_ATTEMPTS_MAX_15_MIN = 25;
 const DUPLICATE_WINDOW_MINUTES = 10;
 
 const ALLOWED_FIELDS = new Set([
@@ -474,139 +470,24 @@ const insertRejectedLogBestEffort = async (
   }
 };
 
-const countContactSubmitLogs = async (
-  supabase: SupabaseAdminClient,
-  params: {
-    sinceIso: string;
-    status?: ContactLogStatus;
-    ipAddress?: string;
-    emailHash?: string;
-    submissionHash?: string;
-  },
-) => {
-  let query = supabase
-    .from(CONTACT_SUBMIT_LOG_TABLE)
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", params.sinceIso);
-
-  if (params.status) {
-    query = query.eq("status", params.status);
-  }
-
-  if (params.ipAddress) {
-    query = query.eq("ip_address", params.ipAddress);
-  }
-
-  if (params.emailHash) {
-    query = query.eq("email_hash", params.emailHash);
-  }
-
-  if (params.submissionHash) {
-    query = query.eq("submission_hash", params.submissionHash);
-  }
-
-  const { count, error } = await query;
-
-  if (error) {
-    throw new Error(`contact_submit_log_count_failed:${error.message}`);
-  }
-
-  return count ?? 0;
-};
-
-const enforceRateLimits = async (
-  supabase: SupabaseAdminClient,
-  params: {
-    ipAddressBucket: string;
-    emailHash: string | null;
-  },
-) => {
-  const nowMs = Date.now();
-  const since15MinutesIso = new Date(nowMs - (15 * 60 * 1000)).toISOString();
-  const since24HoursIso = new Date(nowMs - (24 * 60 * 60 * 1000)).toISOString();
-
-  const ipCount15m = await countContactSubmitLogs(supabase, {
-    sinceIso: since15MinutesIso,
-    status: "accepted",
-    ipAddress: params.ipAddressBucket,
-  });
-
-  if (ipCount15m >= RATE_LIMIT_IP_MAX_15_MIN) {
-    return {
-      allowed: false as const,
-      reason: "ip_15m_limit",
-      error: "Rate limit exceeded",
-    };
-  }
-
-  const ipCount24h = await countContactSubmitLogs(supabase, {
-    sinceIso: since24HoursIso,
-    status: "accepted",
-    ipAddress: params.ipAddressBucket,
-  });
-
-  if (ipCount24h >= RATE_LIMIT_IP_MAX_24_HOURS) {
-    return {
-      allowed: false as const,
-      reason: "ip_24h_limit",
-      error: "Rate limit exceeded",
-    };
-  }
-
-  if (params.emailHash) {
-    const emailCount15m = await countContactSubmitLogs(supabase, {
-      sinceIso: since15MinutesIso,
-      status: "accepted",
-      emailHash: params.emailHash,
-    });
-
-    if (emailCount15m >= RATE_LIMIT_EMAIL_MAX_15_MIN) {
-      return {
-        allowed: false as const,
-        reason: "email_15m_limit",
-        error: "Rate limit exceeded",
-      };
-    }
-  }
-
-  return { allowed: true as const };
-};
-
-const enforceAttemptRateLimit = async (
-  supabase: SupabaseAdminClient,
-  ipAddressBucket: string,
-) => {
-  const since15MinutesIso = new Date(Date.now() - (15 * 60 * 1000)).toISOString();
-
-  const ipAttemptCount15m = await countContactSubmitLogs(supabase, {
-    sinceIso: since15MinutesIso,
-    ipAddress: ipAddressBucket,
-  });
-
-  if (ipAttemptCount15m >= RATE_LIMIT_IP_ATTEMPTS_MAX_15_MIN) {
-    return {
-      allowed: false as const,
-      reason: "ip_attempts_15m_limit",
-      error: "Rate limit exceeded",
-    };
-  }
-
-  return { allowed: true as const };
-};
-
 const hasRecentDuplicateSubmission = async (
   supabase: SupabaseAdminClient,
   submissionHash: string,
 ) => {
   const sinceIso = new Date(Date.now() - (DUPLICATE_WINDOW_MINUTES * 60 * 1000)).toISOString();
+  const { data, error } = await supabase
+    .from(CONTACT_SUBMIT_LOG_TABLE)
+    .select("id")
+    .eq("status", "accepted")
+    .eq("submission_hash", submissionHash)
+    .gte("created_at", sinceIso)
+    .limit(1);
 
-  const duplicateCount = await countContactSubmitLogs(supabase, {
-    sinceIso,
-    status: "accepted",
-    submissionHash,
-  });
+  if (error) {
+    throw new Error(`contact_submit_log_duplicate_check_failed:${error.message}`);
+  }
 
-  return duplicateCount > 0;
+  return Array.isArray(data) && data.length > 0;
 };
 
 const sendAdminEmail = async (params: {
@@ -681,6 +562,7 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
 
   const supabaseUrl = asNonEmptyString(Deno.env.get("SUPABASE_URL"));
   const serviceRoleKey = asNonEmptyString(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+  const anonKey = asNonEmptyString(Deno.env.get("SUPABASE_ANON_KEY"));
   const captchaSecret = asNonEmptyString(Deno.env.get("HCAPTCHA_SECRET_KEY"))
     ?? asNonEmptyString(Deno.env.get("HCAPTCHA_SECRET"));
 
@@ -704,6 +586,30 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  const authorizationHeader = asNonEmptyString(req.headers.get("authorization"))
+    ?? asNonEmptyString(req.headers.get("Authorization"));
+  let authenticatedUser: { id: string; email: string | null } | null = null;
+
+  const userClientKey = anonKey ?? serviceRoleKey;
+  if (authorizationHeader) {
+    const supabaseUser = createClient(supabaseUrl, userClientKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        headers: {
+          Authorization: authorizationHeader,
+        },
+      },
+    });
+
+    const { data: userData, error: userError } = await supabaseUser.auth.getUser();
+    if (!userError && userData.user) {
+      authenticatedUser = {
+        id: userData.user.id,
+        email: asNonEmptyString(userData.user.email),
+      };
+    }
+  }
 
   const userAgent = asNonEmptyString(req.headers.get("user-agent"));
   const ipAddress = extractIpAddress(req);
@@ -775,21 +681,29 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
   }
 
   try {
-    const attemptRateLimit = await enforceAttemptRateLimit(supabase, ipAddressBucket);
-    if (!attemptRateLimit.allowed) {
-      await insertRejectedLogBestEffort(supabase, {
-        ip_address: ipAddressBucket,
-        email_hash: null,
-        submission_hash: null,
-        user_agent: userAgent,
-        subject: null,
-        reason: attemptRateLimit.reason,
-      });
+    const { error: rateLimitError } = await supabase.rpc("rpc_contact_submit_rate_limit", {
+      p_ip_hash: ipHash,
+    });
 
-      return new Response(JSON.stringify({ error: attemptRateLimit.error }), {
-        status: 429,
-        headers: corsHeaders,
-      });
+    if (rateLimitError) {
+      const normalizedMessage = rateLimitError.message.toLowerCase();
+      if (normalizedMessage.includes("rate_limit_exceeded")) {
+        await insertRejectedLogBestEffort(supabase, {
+          ip_address: ipAddressBucket,
+          email_hash: null,
+          submission_hash: null,
+          user_agent: userAgent,
+          subject: null,
+          reason: "rpc_rate_limit_exceeded",
+        });
+
+        return new Response(JSON.stringify({ error: "Rate limit exceeded" }), {
+          status: 429,
+          headers: corsHeaders,
+        });
+      }
+
+      throw new Error(`rpc_contact_submit_rate_limit_failed:${rateLimitError.message}`);
     }
   } catch (error) {
     console.error("[contact-submit] ATTEMPT_RATE_LIMIT_ERROR", {
@@ -842,7 +756,9 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
   }
 
   const nameRaw = asNonEmptyString(payload.name);
-  const email = normalizeEmail(payload.email);
+  const email = authenticatedUser
+    ? normalizeEmail(authenticatedUser.email)
+    : normalizeEmail(payload.email);
   const subjectRaw = asNonEmptyString(payload.subject) ?? DEFAULT_SUBJECT;
   const messageRaw = asNonEmptyString(payload.message);
 
@@ -929,27 +845,6 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
   const submissionHash = await sha256Hex(submissionFingerprintBase);
 
   try {
-    const rateLimit = await enforceRateLimits(supabase, {
-      ipAddressBucket,
-      emailHash,
-    });
-
-    if (!rateLimit.allowed) {
-      await insertRejectedLogBestEffort(supabase, {
-        ip_address: ipAddressBucket,
-        email_hash: emailHash,
-        submission_hash: submissionHash,
-        user_agent: userAgent,
-        subject,
-        reason: rateLimit.reason,
-      });
-
-      return new Response(JSON.stringify({ error: rateLimit.error }), {
-        status: 429,
-        headers: corsHeaders,
-      });
-    }
-
     const duplicateDetected = await hasRecentDuplicateSubmission(supabase, submissionHash);
     if (duplicateDetected) {
       await insertRejectedLogBestEffort(supabase, {
@@ -970,7 +865,7 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
     const { data: insertedMessage, error: insertError } = await supabase
       .from("contact_messages")
       .insert({
-        user_id: null,
+        user_id: authenticatedUser?.id ?? null,
         name,
         email,
         subject,

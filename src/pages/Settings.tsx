@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth/hooks';
 import { useTranslation } from '../lib/i18n';
 import { updateProfile, updatePassword } from '../lib/auth/service';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { extractStoragePathFromCandidate } from '../lib/utils/storage';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';

@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../lib/auth/hooks';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useMyReputation } from '../lib/reputation/hooks';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { invokeProtectedEdgeFunction } from '../lib/supabase/edgeAuth';
 import type { License, ProductWithRelations, Purchase } from '../lib/supabase/types';
 import { fetchPublicProducerProfilesMap, type PublicProducerProfileRow } from '../lib/supabase/publicProfiles';

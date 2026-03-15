@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../supabase/selects';
 import type { CartItemWithProduct } from '../supabase/types';
 

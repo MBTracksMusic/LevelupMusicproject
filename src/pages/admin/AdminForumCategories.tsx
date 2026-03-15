@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { formatRankTier } from '../../components/reputation/ReputationBadge';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { formatDateTime, slugify } from '../../lib/utils/format';
 import type { ReputationRankTier } from '../../lib/supabase/types';
 

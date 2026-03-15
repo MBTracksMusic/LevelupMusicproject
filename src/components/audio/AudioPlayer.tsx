@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react';
 import type { ProductWithRelations } from '../../lib/supabase/types';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { useTranslation } from '../../lib/i18n';
 import { usePlayerStore } from '../../lib/stores/player';
 
@@ -35,8 +35,6 @@ const describeMediaError = (
 const PREVIEW_PROXY_BASE = '/preview';
 const WATERMARKED_BUCKET =
   import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET?.trim() || 'beats-watermarked';
-
-const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
 const hasTrackPreviewAsset = (track: ProductWithRelations | null | undefined) => {
   if (!track) return false;
@@ -125,12 +123,6 @@ const resolvePreviewUrls = async (track: ProductWithRelations | null) => {
   const encodedTrackId = encodeURIComponent(trackId);
   const proxyUrl = `${PREVIEW_PROXY_BASE}/${encodedTrackId}`;
   const candidates = [proxyUrl];
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-  if (supabaseUrl) {
-    const directFunctionProxy = `${trimTrailingSlash(supabaseUrl)}/functions/v1/preview-audio/${encodedTrackId}`;
-    candidates.push(directFunctionProxy);
-  }
 
   const fallbackBucket = toNonEmptyString(track?.watermarked_bucket) || WATERMARKED_BUCKET;
   const directCandidates = [

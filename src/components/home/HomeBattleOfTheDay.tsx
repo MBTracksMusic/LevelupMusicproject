@@ -4,7 +4,7 @@ import { CalendarDays, Trophy } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { BattleStatus } from '../../lib/supabase/types';
 
 interface BattleOfTheDayRow {

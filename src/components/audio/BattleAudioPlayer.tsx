@@ -64,12 +64,6 @@ export function BattleAudioPlayer({
       if (trimmedProductId) {
         const encodedProductId = encodeURIComponent(trimmedProductId);
         resolved.push(`/preview/${encodedProductId}`);
-
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-        if (supabaseUrl) {
-          const base = supabaseUrl.replace(/\/+$/, '');
-          resolved.push(`${base}/functions/v1/preview-audio/${encodedProductId}`);
-        }
       }
 
       if (trimmed) {

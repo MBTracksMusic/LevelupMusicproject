@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { useTranslation } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { useAuth, useIsEmailVerified } from '../lib/auth/hooks';
 import type { BattleWithRelations } from '../lib/supabase/types';

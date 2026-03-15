@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { useTranslation, type TranslateFn } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 const FEEDBACK_CRITERIA = [
   'groove',

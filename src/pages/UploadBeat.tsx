@@ -12,7 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { Database } from '../lib/supabase/types';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -159,6 +159,126 @@ const isProductSchemaMismatchError = (error: unknown) => {
     (message.includes('column') || message.includes('schema cache') || message.includes('does not exist'))
   );
 };
+
+interface UploadBeatProductResult {
+  product: Pick<Database['public']['Tables']['products']['Row'], 'id' | 'producer_id' | 'title' | 'slug'>;
+  masterPath: string;
+}
+
+interface UploadBeatProductParams {
+  producerId: string;
+  bucket: string;
+  file: File;
+  payload: Database['public']['Tables']['products']['Insert'];
+}
+
+const sanitizeStorageFilename = (value: string) => {
+  const sanitized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return sanitized || 'master.wav';
+};
+
+export async function uploadBeatProduct({
+  producerId,
+  bucket,
+  file,
+  payload,
+}: UploadBeatProductParams): Promise<UploadBeatProductResult> {
+  const insertCandidates: Database['public']['Tables']['products']['Insert'][] = [
+    {
+      ...payload,
+      preview_url: null,
+      watermarked_path: null,
+      master_path: null,
+      master_url: null,
+    },
+    {
+      ...payload,
+      preview_url: null,
+      master_url: null,
+    },
+  ];
+
+  let createdProduct: Pick<Database['public']['Tables']['products']['Row'], 'id' | 'producer_id' | 'title' | 'slug'> | null = null;
+  let insertError: unknown = null;
+
+  for (const insertPayload of insertCandidates) {
+    const { data, error } = await supabase
+      .from('products')
+      .insert(insertPayload)
+      .select('id, producer_id, title, slug')
+      .maybeSingle();
+
+    if (!error && data) {
+      createdProduct = data as Pick<Database['public']['Tables']['products']['Row'], 'id' | 'producer_id' | 'title' | 'slug'>;
+      insertError = null;
+      break;
+    }
+
+    insertError = error ?? new Error('product_insert_failed');
+    if (!isProductSchemaMismatchError(error)) {
+      break;
+    }
+  }
+
+  if (!createdProduct) {
+    throw insertError ?? new Error('product_insert_failed');
+  }
+
+  const safeFileName = sanitizeStorageFilename(file.name);
+  const uploadPath = `${producerId}/${createdProduct.id}/${safeFileName}`;
+
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(uploadPath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (uploadError) {
+    await supabase.from('products').delete().eq('id', createdProduct.id);
+    throw uploadError;
+  }
+
+  const normalizedMasterPath = normalizeStoragePath(uploadData?.path || uploadPath, bucket);
+  if (!normalizedMasterPath) {
+    await supabase.storage.from(bucket).remove([uploadPath]);
+    await supabase.from('products').delete().eq('id', createdProduct.id);
+    throw new Error('Invalid master path after upload');
+  }
+
+  const { error: updateError } = await supabase
+    .from('products')
+    .update({
+      master_path: normalizedMasterPath,
+      master_url: normalizedMasterPath,
+    })
+    .eq('id', createdProduct.id);
+
+  if (updateError) {
+    await supabase.storage.from(bucket).remove([normalizedMasterPath]);
+    await supabase.from('products').delete().eq('id', createdProduct.id);
+    throw updateError;
+  }
+
+  const { data: finalProduct, error: finalProductError } = await supabase
+    .from('products')
+    .select('id, producer_id, title, slug')
+    .eq('id', createdProduct.id)
+    .maybeSingle();
+
+  if (finalProductError || !finalProduct) {
+    throw finalProductError ?? new Error('Failed to load final product');
+  }
+
+  return {
+    product: finalProduct as Pick<Database['public']['Tables']['products']['Row'], 'id' | 'producer_id' | 'title' | 'slug'>,
+    masterPath: normalizedMasterPath,
+  };
+}
 
 // Page d'upload minimaliste pour les producteurs actifs.
 export function UploadBeatPage() {
@@ -612,8 +732,11 @@ export function UploadBeatPage() {
       }
 
       let masterStorageReference: string | null = null;
-      if (audioFile) {
-        audioPath = `${producerId}/audio/${timestamp}-${audioFile.name.replace(/\s+/g, '-')}`;
+      if (audioFile && (versionSource || editingProduct)) {
+        const safeAudioFilename = sanitizeStorageFilename(audioFile.name);
+        audioPath = editingProduct
+          ? `${producerId}/${editingProduct.id}/${safeAudioFilename}`
+          : `${producerId}/audio/${timestamp}-${safeAudioFilename}`;
         setUploadProgress((prev) => ({ ...prev, audio: 15 }));
         const { data: audioData, error: audioError } = await supabase.storage
           .from(MASTER_BUCKET)
@@ -630,7 +753,7 @@ export function UploadBeatPage() {
         if (!normalizedMasterPath) {
           throw new Error(t('uploadBeat.masterPathInvalid'));
         }
-        masterStorageReference = `${MASTER_BUCKET}/${normalizedMasterPath}`;
+        masterStorageReference = normalizedMasterPath;
 
         setUploadStatus((prev) => ({ ...prev, audio: 'success' }));
         setUploadProgress((prev) => ({ ...prev, audio: 100 }));
@@ -722,39 +845,20 @@ export function UploadBeatPage() {
 
         updatedExistingProduct = true;
       } else {
-        const legacyPayload: Database['public']['Tables']['products']['Insert'] = {
-          ...basePayload,
-          preview_url: null,
-          master_url: masterStorageReference,
-        };
-
-        const modernPayload: Database['public']['Tables']['products']['Insert'] = {
-          ...basePayload,
-          preview_url: null,
-          watermarked_path: null,
-          master_path: masterStorageReference,
-          master_url: masterStorageReference,
-        };
-
-        const payloads = [modernPayload, legacyPayload];
-
-        let productError: unknown = null;
-        for (const payload of payloads) {
-          const { error } = await supabase.from('products').insert(payload);
-          if (!error) {
-            productError = null;
-            break;
-          }
-
-          productError = error;
-          if (!isProductSchemaMismatchError(error)) {
-            break;
-          }
+        if (!audioFile) {
+          throw new Error(t('producer.audioRequired'));
         }
 
-        if (productError) {
-          throw productError;
-        }
+        setUploadProgress((prev) => ({ ...prev, audio: 15 }));
+        const created = await uploadBeatProduct({
+          producerId,
+          bucket: MASTER_BUCKET,
+          file: audioFile,
+          payload: basePayload,
+        });
+        masterStorageReference = created.masterPath;
+        setUploadStatus((prev) => ({ ...prev, audio: 'success' }));
+        setUploadProgress((prev) => ({ ...prev, audio: 100 }));
       }
 
       setIsWatermarkProcessing(Boolean(versionSource || audioFile));

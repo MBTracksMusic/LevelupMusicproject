@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import { useCartStore } from '../../lib/stores/cart';
 import { formatNumber, formatPrice } from '../../lib/utils/format';

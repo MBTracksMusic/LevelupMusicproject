@@ -17,13 +17,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.admin-upload-watermark]
-verify_jwt = true
+verify_jwt = false
 
 [functions.contact-submit]
 verify_jwt = false
 
 [functions.agent-finalize-expired-battles]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-evaluate-battle]
 verify_jwt = true
@@ -38,7 +38,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.enqueue-preview-reprocess]
-verify_jwt = true
+verify_jwt = false
 
 [functions.forum-assistant-dispatch]
 verify_jwt = true
@@ -71,10 +71,10 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.process-audio-jobs]
-verify_jwt = true
+verify_jwt = false
 
 [functions.process-contract-jobs]
-verify_jwt = true
+verify_jwt = false
 
 [functions.process-email-queue]
 verify_jwt = false

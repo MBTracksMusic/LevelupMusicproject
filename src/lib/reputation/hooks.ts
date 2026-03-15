@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../auth/hooks';
 import { useTranslation } from '../i18n';
 import type { ReputationRankTier, UserReputation } from '../supabase/types';

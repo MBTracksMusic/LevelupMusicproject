@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, Twitter, Instagram, Youtube } from 'lucide-react';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import beatelionIcon from '../../assets/beatelion-icon.svg';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';

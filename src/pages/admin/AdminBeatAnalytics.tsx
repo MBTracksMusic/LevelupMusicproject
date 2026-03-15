@@ -4,7 +4,7 @@ import { RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { formatDateTime } from '../../lib/utils/format';
 
 interface TopCriterion {

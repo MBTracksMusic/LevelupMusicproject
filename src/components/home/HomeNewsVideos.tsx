@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Play } from 'lucide-react';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { useTranslation } from '../../lib/i18n';
 import { Button } from '../ui/Button';
 

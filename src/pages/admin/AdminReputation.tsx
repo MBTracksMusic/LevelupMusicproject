@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ReputationBadge } from '../../components/reputation/ReputationBadge';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { ReputationRankTier } from '../../lib/supabase/types';
 import { formatDateTime } from '../../lib/utils/format';
 

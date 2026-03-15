@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
 import type { UserProfile } from '../supabase/types';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { resolveInitialLanguage, syncI18nLanguage } from '../i18n';
 
 interface AuthState {

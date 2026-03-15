@@ -8,7 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { useAuth } from '../lib/auth/hooks';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
 import { formatDate, formatDateTime } from '../lib/utils/format';
 

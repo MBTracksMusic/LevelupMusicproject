@@ -8,7 +8,7 @@ import { VotePanel } from '../components/battles/VotePanel';
 import { CommentsPanel } from '../components/battles/CommentsPanel';
 import { BattleAudioPlayer } from '../components/audio/BattleAudioPlayer';
 import { useTranslation } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import type { BattleProductSnapshot, BattleWithRelations, ProductWithRelations } from '../lib/supabase/types';
 import { formatDateTime } from '../lib/utils/format';

@@ -4522,6 +4522,159 @@ export type Database = {
         }
         Relationships: []
       }
+      public_catalog_products: {
+        Row: {
+          archived_at: string | null
+          bpm: number | null
+          cover_image_url: string | null
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          exclusive_preview_url: string | null
+          file_format: string | null
+          genre_id: string | null
+          genre_name: string | null
+          genre_name_de: string | null
+          genre_name_en: string | null
+          genre_slug: string | null
+          id: string | null
+          is_exclusive: boolean | null
+          is_published: boolean | null
+          is_sold: boolean | null
+          key_signature: string | null
+          license_terms: Json | null
+          mood_id: string | null
+          mood_name: string | null
+          mood_name_de: string | null
+          mood_name_en: string | null
+          mood_slug: string | null
+          original_beat_id: string | null
+          parent_product_id: string | null
+          play_count: number | null
+          preview_url: string | null
+          price: number | null
+          producer_avatar_url: string | null
+          producer_id: string | null
+          producer_is_active: boolean | null
+          producer_raw_username: string | null
+          producer_username: string | null
+          product_type: Database["public"]["Enums"]["product_type"] | null
+          slug: string | null
+          sold_at: string | null
+          sold_to_user_id: string | null
+          status: string | null
+          tags: string[] | null
+          title: string | null
+          updated_at: string | null
+          version: number | null
+          version_number: number | null
+          watermark_profile_id: string | null
+          watermarked_bucket: string | null
+          watermarked_path: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          bpm?: number | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          exclusive_preview_url?: string | null
+          file_format?: string | null
+          genre_id?: string | null
+          genre_name?: string | null
+          genre_name_de?: string | null
+          genre_name_en?: string | null
+          genre_slug?: string | null
+          id?: string | null
+          is_exclusive?: boolean | null
+          is_published?: boolean | null
+          is_sold?: boolean | null
+          key_signature?: string | null
+          license_terms?: Json | null
+          mood_id?: string | null
+          mood_name?: string | null
+          mood_name_de?: string | null
+          mood_name_en?: string | null
+          mood_slug?: string | null
+          original_beat_id?: string | null
+          parent_product_id?: string | null
+          play_count?: number | null
+          preview_url?: string | null
+          price?: number | null
+          producer_avatar_url?: string | null
+          producer_id?: string | null
+          producer_is_active?: boolean | null
+          producer_raw_username?: string | null
+          producer_username?: string | null
+          product_type?: Database["public"]["Enums"]["product_type"] | null
+          slug?: string | null
+          sold_at?: string | null
+          sold_to_user_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+          version?: number | null
+          version_number?: number | null
+          watermark_profile_id?: string | null
+          watermarked_bucket?: string | null
+          watermarked_path?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          bpm?: number | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          exclusive_preview_url?: string | null
+          file_format?: string | null
+          genre_id?: string | null
+          genre_name?: string | null
+          genre_name_de?: string | null
+          genre_name_en?: string | null
+          genre_slug?: string | null
+          id?: string | null
+          is_exclusive?: boolean | null
+          is_published?: boolean | null
+          is_sold?: boolean | null
+          key_signature?: string | null
+          license_terms?: Json | null
+          mood_id?: string | null
+          mood_name?: string | null
+          mood_name_de?: string | null
+          mood_name_en?: string | null
+          mood_slug?: string | null
+          original_beat_id?: string | null
+          parent_product_id?: string | null
+          play_count?: number | null
+          preview_url?: string | null
+          price?: number | null
+          producer_avatar_url?: string | null
+          producer_id?: string | null
+          producer_is_active?: boolean | null
+          producer_raw_username?: string | null
+          producer_username?: string | null
+          product_type?: Database["public"]["Enums"]["product_type"] | null
+          slug?: string | null
+          sold_at?: string | null
+          sold_to_user_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title?: string | null
+          updated_at?: string | null
+          version?: number | null
+          version_number?: number | null
+          watermark_profile_id?: string | null
+          watermarked_bucket?: string | null
+          watermarked_path?: string | null
+        }
+        Relationships: []
+      }
       public_producer_profiles: {
         Row: {
           avatar_url: string | null

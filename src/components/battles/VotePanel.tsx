@@ -6,7 +6,7 @@ import { Card } from '../ui/Card';
 import { BattleVoteFeedbackModal } from './BattleVoteFeedbackModal';
 import { useAuth, useIsEmailVerified } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { BattleWithRelations } from '../../lib/supabase/types';
 
 interface VotePanelProps {

@@ -5,7 +5,7 @@ import { fr, type TranslationSchema } from './translations/fr';
 import { en } from './translations/en';
 import { de } from './translations/de';
 import { updateProfile } from '../auth/service';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 const I18N_STORAGE_KEY = 'levelup-language';
 const SUPPORTED_LANGUAGES = ['fr', 'en', 'de'] as const;

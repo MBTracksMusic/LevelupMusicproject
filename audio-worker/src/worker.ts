@@ -402,6 +402,7 @@ export class AudioWorkerService {
     const masterExt = guessMasterExtension(product, masterRef.path);
     const masterFilePath = path.join(tempDir, `master.${masterExt}`);
     const watermarkFilePath = path.join(tempDir, "watermark.mp3");
+    const firstLayerOutputFilePath = path.join(tempDir, "preview-layer1.mp3");
     const outputFilePath = path.join(tempDir, "preview.mp3");
 
     try {
@@ -417,17 +418,38 @@ export class AudioWorkerService {
       await fs.writeFile(watermarkFilePath, watermarkAsset.buffer);
       throwIfAborted(signal);
 
-      const renderResult = await renderWatermarkedPreview({
+      const primaryGainDb = Number.isFinite(settings.gain_db) ? Number(settings.gain_db) : -10;
+      const subtleGainDb = Math.max(primaryGainDb - 18, -60);
+      const minIntervalSec = Number.isFinite(settings.min_interval_sec)
+        ? Number(settings.min_interval_sec)
+        : 20;
+      const maxIntervalSec = Number.isFinite(settings.max_interval_sec)
+        ? Number(settings.max_interval_sec)
+        : 45;
+
+      const primaryRenderResult = await renderWatermarkedPreview({
         masterFilePath,
         watermarkFilePath,
+        outputFilePath: firstLayerOutputFilePath,
+        gainDb: primaryGainDb,
+        minIntervalSec,
+        maxIntervalSec,
+        ffmpegBin: this.config.ffmpegBin,
+        ffprobeBin: this.config.ffprobeBin,
+        ffmpegTimeoutMs: Math.min(this.config.ffmpegTimeoutMs, this.config.jobTimeoutMs),
+        audioBitrate: this.config.previewAudioBitrate,
+        audioSampleRate: this.config.previewAudioSampleRate,
+        ...(signal ? { signal } : {}),
+      });
+      throwIfAborted(signal);
+
+      const secondaryRenderResult = await renderWatermarkedPreview({
+        masterFilePath: firstLayerOutputFilePath,
+        watermarkFilePath,
         outputFilePath,
-        gainDb: Number.isFinite(settings.gain_db) ? Number(settings.gain_db) : -10,
-        minIntervalSec: Number.isFinite(settings.min_interval_sec)
-          ? Number(settings.min_interval_sec)
-          : 20,
-        maxIntervalSec: Number.isFinite(settings.max_interval_sec)
-          ? Number(settings.max_interval_sec)
-          : 45,
+        gainDb: subtleGainDb,
+        minIntervalSec,
+        maxIntervalSec,
         ffmpegBin: this.config.ffmpegBin,
         ffprobeBin: this.config.ffprobeBin,
         ffmpegTimeoutMs: Math.min(this.config.ffmpegTimeoutMs, this.config.jobTimeoutMs),
@@ -473,8 +495,10 @@ export class AudioWorkerService {
         previewRef: storageRefToString(targetRef),
         previewVersion: nextVersion,
         outputBytes: outputStat.size,
-        durationSec: renderResult.durationSec,
-        positionsSec: renderResult.positionsSec,
+        durationSec: secondaryRenderResult.durationSec,
+        positionsSec: secondaryRenderResult.positionsSec,
+        primaryWatermarkPositionsSec: primaryRenderResult.positionsSec,
+        secondaryWatermarkGainDb: subtleGainDb,
       });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });

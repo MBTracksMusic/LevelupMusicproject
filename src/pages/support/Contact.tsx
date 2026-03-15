@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 interface ContactSubmitResponse {
   ok?: boolean;

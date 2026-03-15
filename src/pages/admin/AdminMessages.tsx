@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { Database } from '../../lib/supabase/types';
 import { formatDateTime } from '../../lib/utils/format';
 

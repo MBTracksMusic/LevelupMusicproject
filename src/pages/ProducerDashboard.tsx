@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Music, BarChart3, ShoppingBag, UploadCloud, Trash2 } from 'lucide-react';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { invokeProtectedEdgeFunction } from '../lib/supabase/edgeAuth';
 import { PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import type { Database, Product, ProducerTier } from '../lib/supabase/types';

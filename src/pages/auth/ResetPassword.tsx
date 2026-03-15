@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
 import { updatePassword } from '../../lib/auth/service';
 import toast from 'react-hot-toast';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export function ResetPasswordPage() {
   const { t } = useTranslation();

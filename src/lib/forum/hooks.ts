@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { ForumAuthor, ForumCategory, ForumPost, ForumTopic, LatestForumTopic, UserProfile } from '../supabase/types';
 import { fetchForumPublicProfilesMap } from '../supabase/forumProfiles';
 import { useAuth } from '../auth/hooks';

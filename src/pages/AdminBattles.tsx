@@ -9,7 +9,7 @@ import { Card } from '../components/ui/Card';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { AdminPriorityCards } from '../components/admin/AdminPriorityCards';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
 import type { Json } from '../lib/supabase/database.types';
 import { formatDateTime, slugify } from '../lib/utils/format';

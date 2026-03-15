@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 export default function EmailConfirmation() {
   const { t } = useTranslation();

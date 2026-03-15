@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Instagram, Twitter, Users, Youtube } from 'lucide-react';
 import { ReputationBadge, formatRankTier } from '../components/reputation/ReputationBadge';
 import { useTranslation } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { ProducerTier, ReputationRankTier } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 

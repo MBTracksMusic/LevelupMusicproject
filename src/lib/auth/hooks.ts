@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from './store';
-import { supabase } from '../supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { UserProfile, UserRole } from '../supabase/types';
 
 const isConfirmedProfile = (profile: Pick<UserProfile, 'role' | 'is_confirmed'> | null | undefined) => {

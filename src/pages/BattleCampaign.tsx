@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LogoLoader } from '../components/ui/LogoLoader';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { formatDateTime } from '../lib/utils/format';
 
 interface CampaignRow {

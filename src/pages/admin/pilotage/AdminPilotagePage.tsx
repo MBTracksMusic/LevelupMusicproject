@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode, useCallback, useEffect, useM
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useTranslation } from '../../../lib/i18n';
-import { supabase } from '../../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { AdminPilotageAlerts } from './AdminPilotageAlerts';
 import { AdminPilotageCharts } from './AdminPilotageCharts';
 import { AdminPilotageKpiGrid } from './AdminPilotageKpiGrid';

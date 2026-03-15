@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { Database } from '../../lib/supabase/types';
 import { NewsForm, type NewsFormValues } from '../../components/admin/NewsForm';
 import { NewsTable, type AdminNewsVideoRow } from '../../components/admin/NewsTable';

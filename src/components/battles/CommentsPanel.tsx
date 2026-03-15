@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAuth, useIsAdmin, useIsEmailVerified } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../../lib/supabase/publicProfiles';
 import type { Json } from '../../lib/supabase/database.types';
 import { formatDateTime } from '../../lib/utils/format';

@@ -6,7 +6,7 @@ import { ProductCard } from '../components/products/ProductCard';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { useTranslation } from '../lib/i18n';
 import { useAuth } from '../lib/auth/hooks';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import type { ProductWithRelations } from '../lib/supabase/types';

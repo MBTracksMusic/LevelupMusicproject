@@ -19,7 +19,7 @@ import { HomeTopProducers } from '../components/home/HomeTopProducers';
 import { HomeWeeklyTopProducers } from '../components/home/HomeWeeklyTopProducers';
 import { HomeNewsVideos } from '../components/home/HomeNewsVideos';
 import { useTranslation } from '../lib/i18n';
-import { supabase } from '../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';

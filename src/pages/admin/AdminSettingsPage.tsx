@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useTranslation } from '../../lib/i18n';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import type { Json } from '../../lib/supabase/database.types';
 import { formatDateTime } from '../../lib/utils/format';
 
@@ -86,6 +86,41 @@ const isAllowedUrl = (value: string) => value.length === 0 || HTTP_URL_REGEX.tes
 const asFiniteNumber = (value: string) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const asNonEmptyString = (value: unknown) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toEdgeInvokeErrorMessage = async (error: unknown) => {
+  if (!error || typeof error !== 'object') return null;
+
+  const message = 'message' in error
+    ? asNonEmptyString((error as { message?: unknown }).message)
+    : null;
+  const context = 'context' in error
+    ? (error as { context?: unknown }).context
+    : null;
+
+  if (!(context instanceof Response)) {
+    return message;
+  }
+
+  try {
+    const payload = await context.clone().json() as Record<string, unknown>;
+    const apiError = asNonEmptyString(payload.error);
+    const apiMessage = asNonEmptyString(payload.message);
+    return apiError || apiMessage || message;
+  } catch {
+    try {
+      const text = asNonEmptyString(await context.clone().text());
+      return text || message;
+    } catch {
+      return message;
+    }
+  }
 };
 
 const adminDb = supabase as any;
@@ -375,16 +410,29 @@ export function AdminSettingsPage() {
     if (!selectedWatermarkFile || isUploadingWatermark) return;
 
     setIsUploadingWatermark(true);
+
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !refreshed?.session) {
+      toast.error('Authentication expired. Please log in again.');
+      setIsUploadingWatermark(false);
+      return;
+    }
+    const token = refreshed.session.access_token;
+
     const formData = new FormData();
     formData.append('file', selectedWatermarkFile);
 
     const { data, error } = await supabase.functions.invoke('admin-upload-watermark', {
       body: formData,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     });
 
     if (error) {
       console.error('admin-upload-watermark invoke error', error);
-      toast.error(t('admin.settingsPage.uploadError'));
+      const detailedMessage = await toEdgeInvokeErrorMessage(error);
+      toast.error(detailedMessage || t('admin.settingsPage.uploadError'));
       setIsUploadingWatermark(false);
       return;
     }
@@ -512,7 +560,7 @@ export function AdminSettingsPage() {
               <input
                 id="watermark-file"
                 type="file"
-                accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave"
+                accept="audio/wav,audio/x-wav,audio/wave"
                 onChange={(event) => setSelectedWatermarkFile(event.target.files?.[0] ?? null)}
                 disabled={isUploadingWatermark}
                 className="block w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-300 file:mr-4 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-2 file:text-sm file:text-zinc-200"

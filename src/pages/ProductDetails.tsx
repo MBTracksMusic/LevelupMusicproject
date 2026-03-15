@@ -4,9 +4,7 @@ import { ArrowLeft, Pause, Play, ShoppingCart } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useTranslation } from '../lib/i18n';
 import { getLocalizedName } from '../lib/i18n/localized';
-import { supabase } from '../lib/supabase/client';
-import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
-import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from '../lib/supabase/selects';
+import { fetchCatalogProductBySlug } from '../lib/supabase/catalog';
 import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
 import { usePlayerStore } from '../lib/stores/player';
@@ -43,76 +41,18 @@ export function ProductDetailsPage() {
       setError(null);
 
       try {
-        let query = supabase
-          .from('products')
-          .select(`
-            ${PRODUCT_SAFE_COLUMNS},
-            genre:genres(${GENRE_SAFE_COLUMNS}),
-            mood:moods(${MOOD_SAFE_COLUMNS})
-          `)
-          .eq('slug', slug)
-          .eq('is_published', true);
-
-        if (routePrefix === 'exclusives') {
-          query = query.eq('is_exclusive', true);
-        } else if (routePrefix === 'kits') {
-          query = query.eq('product_type', 'kit');
-        } else if (routePrefix === 'beats') {
-          query = query.eq('product_type', 'beat').eq('is_exclusive', false);
-        }
-
-        let { data, error: fetchError } = await query.maybeSingle();
-
-        // Fallback for anon/public mode when relation embeds are restricted.
-        if (fetchError) {
-          let fallbackQuery = supabase
-            .from('products')
-            .select(`${PRODUCT_SAFE_COLUMNS}` as any)
-            .eq('slug', slug)
-            .eq('is_published', true);
-
-          if (routePrefix === 'exclusives') {
-            fallbackQuery = fallbackQuery.eq('is_exclusive', true);
-          } else if (routePrefix === 'kits') {
-            fallbackQuery = fallbackQuery.eq('product_type', 'kit');
-          } else if (routePrefix === 'beats') {
-            fallbackQuery = fallbackQuery.eq('product_type', 'beat').eq('is_exclusive', false);
-          }
-
-          const fallbackRes = await fallbackQuery.maybeSingle();
-          data = fallbackRes.data as typeof data;
-          fetchError = fallbackRes.error;
-        }
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
         if (!isCancelled) {
-          const row = (data as ProductWithRelations | null) ?? null;
-          if (!row) {
+          const row = await fetchCatalogProductBySlug({
+            slug,
+            routePrefix,
+          });
+
+          if (isCancelled) return;
+
+          if (row === null) {
             setProduct(null);
           } else {
-            try {
-              const producerProfilesMap = await fetchPublicProducerProfilesMap([row.producer_id]);
-              const producer = producerProfilesMap.get(row.producer_id);
-              setProduct({
-                ...row,
-                producer: producer
-                  ? {
-                      id: producer.user_id,
-                      username: producer.username,
-                      avatar_url: producer.avatar_url,
-                    }
-                  : undefined,
-              } as ProductWithRelations);
-            } catch (enrichError) {
-              console.error('Error enriching product details with producer profile', enrichError);
-              setProduct({
-                ...row,
-                producer: undefined,
-              } as ProductWithRelations);
-            }
+            setProduct(row);
           }
         }
       } catch (e) {

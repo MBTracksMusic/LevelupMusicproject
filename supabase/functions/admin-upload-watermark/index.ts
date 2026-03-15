@@ -85,10 +85,7 @@ const ALLOWED_TYPES = new Set(["audio/wav", "audio/x-wav", "audio/wave"]);
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const requireAdmin = async (req: Request, jsonHeaders: Record<string, string>) => {
-  const authorizationHeader = req.headers.get("Authorization");
-  if (!authorizationHeader) {
-    return { error: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders }) };
-  }
+  const authorizationHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -97,15 +94,23 @@ const requireAdmin = async (req: Request, jsonHeaders: Record<string, string>) =
     return { error: new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: jsonHeaders }) };
   }
 
+  const authHeaders = authorizationHeader
+    ? {
+        Authorization: authorizationHeader,
+      }
+    : undefined;
+
   const supabaseUser = createClient(supabaseUrl, anonKey, {
     auth: {
       persistSession: false,
     },
-    global: {
-      headers: {
-        Authorization: authorizationHeader,
-      },
-    },
+    ...(authHeaders
+      ? {
+          global: {
+            headers: authHeaders,
+          },
+        }
+      : {}),
   });
 
   const { data: authData, error: authError } = await supabaseUser.auth.getUser();
