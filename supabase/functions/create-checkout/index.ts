@@ -56,6 +56,10 @@ const asNonEmptyString = (value: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const TRUSTED_VERCEL_PREVIEW_ORIGIN_REGEX = /^https:\/\/[a-z0-9-]+-mbtracksmusics-projects\.vercel\.app$/i;
+
+const isTrustedVercelPreviewOrigin = (origin: string) => TRUSTED_VERCEL_PREVIEW_ORIGIN_REGEX.test(origin);
+
 const resolveAllowedRedirectOrigins = () => {
   const allowed = new Set<string>();
 
@@ -131,7 +135,9 @@ const resolveRequestOrigin = (req: Request) => {
   if (!rawOrigin) return null;
   const normalized = normalizeOrigin(rawOrigin);
   if (!normalized) return null;
-  return ALLOWED_CORS_ORIGINS.has(normalized) ? normalized : null;
+  if (ALLOWED_CORS_ORIGINS.has(normalized)) return normalized;
+  if (isTrustedVercelPreviewOrigin(normalized)) return normalized;
+  return null;
 };
 
 const buildCorsHeaders = (origin: string | null) => ({
@@ -159,7 +165,7 @@ const validateRedirectUrl = (rawValue: unknown): string | null => {
     return null;
   }
 
-  if (!ALLOWED_REDIRECT_ORIGINS.has(parsed.origin)) {
+  if (!ALLOWED_REDIRECT_ORIGINS.has(parsed.origin) && !isTrustedVercelPreviewOrigin(parsed.origin)) {
     return null;
   }
 
@@ -280,14 +286,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
   }
 
   try {
-    const authorizationHeader = req.headers.get("Authorization");
-    if (!authorizationHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -300,6 +298,11 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       });
     }
 
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization") ??
+      "";
+
     const supabaseUser = createClient(
       supabaseUrl,
       supabaseAnonKey,
@@ -310,7 +313,7 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         },
         global: {
           headers: {
-            Authorization: authorizationHeader,
+            Authorization: authHeader,
           },
         },
       },

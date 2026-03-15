@@ -103,68 +103,37 @@ export function CartPage() {
     setIsCheckoutLoading(true);
 
     try {
-      const forceReLogin = async () => {
-        await supabase.auth.signOut({ scope: 'global' }).catch(() => undefined);
-        for (const key of Object.keys(localStorage)) {
-          if (key.startsWith('sb-') && key.includes('auth')) {
-            localStorage.removeItem(key);
-          }
-        }
-        navigate('/login', { replace: true, state: { from: { pathname: '/cart' } } });
-      };
-
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !sessionData.session) {
-        await forceReLogin();
-        throw new Error('User must be logged in to purchase');
+        console.error('No active session', sessionError);
+        setCheckoutError('Please login again');
+        alert('Please login again');
+        return;
       }
 
-      const invokeCheckout = async (token: string) => (
-        supabase.functions.invoke<{ url?: string }>('create-checkout', {
-          body: {
-            beatId: firstItem.product_id,
-            licenseType: firstItem.license_type,
-            successUrl: `${window.location.origin}/cart?status=success`,
-            cancelUrl: `${window.location.origin}/cart?status=cancel`,
-          },
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-      );
+      const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshedData.session) {
+        console.error('Checkout session refresh error:', refreshError);
+        setCheckoutError('Please login again');
+        alert('Please login again');
+        return;
+      }
 
-      let { data, error } = await invokeCheckout(sessionData.session.access_token);
+      const { data, error } = await supabase.functions.invoke<{ url?: string }>('create-checkout', {
+        body: {
+          beatId: firstItem.product_id,
+          licenseType: firstItem.license_type,
+          successUrl: `${window.location.origin}/checkout/success`,
+          cancelUrl: `${window.location.origin}/checkout/cancel`,
+        },
+      });
+
       if (error) {
-        const firstMessage = await toEdgeInvokeErrorMessage(error);
-        const mustRetryWithRefresh = Boolean(
-          firstMessage && /invalid\s+jwt|jwt verification failed/i.test(firstMessage),
-        );
-
-        if (!mustRetryWithRefresh) {
-          if (firstMessage && /unauthorized/i.test(firstMessage)) {
-            await forceReLogin();
-          }
-          throw new Error(firstMessage || t('checkout.paymentStartError'));
-        }
-
-        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-        if (refreshError || !refreshed?.session) {
-          await forceReLogin();
-          throw new Error('Session invalid. Please log in again.');
-        }
-
-        const retry = await invokeCheckout(refreshed.session.access_token);
-        data = retry.data;
-        error = retry.error;
-
-        if (error) {
-          const retryMessage = await toEdgeInvokeErrorMessage(error);
-          if (retryMessage && /invalid\s+jwt|jwt verification failed|unauthorized/i.test(retryMessage)) {
-            await forceReLogin();
-            throw new Error('Session invalid. Please log in again.');
-          }
-          throw new Error(retryMessage || t('checkout.paymentStartError'));
-        }
+        const message = await toEdgeInvokeErrorMessage(error);
+        console.error('Checkout error:', message || error);
+        setCheckoutError(message || 'Unable to start checkout. Please try again.');
+        alert(message || 'Unable to start checkout. Please try again.');
+        return;
       }
 
       const url = asNonEmptyString(data?.url);
