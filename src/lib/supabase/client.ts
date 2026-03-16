@@ -22,12 +22,4 @@ if (isServiceRole(supabaseAnonKey)) {
   throw new Error('Do not use the service_role key in the frontend. Provide the anon public key.');
 }
 
-// Use a dedicated storage key to avoid multiple GoTrueClient instances sharing the same storage bucket
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storageKey: 'sb-beatelion-auth',
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);

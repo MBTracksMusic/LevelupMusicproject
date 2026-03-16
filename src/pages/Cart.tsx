@@ -8,45 +8,6 @@ import { Button } from '../components/ui/Button';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { supabase } from '../lib/supabase/client';
 
-const asNonEmptyString = (value: unknown) => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const parseCheckoutErrorMessage = (payload: unknown) => {
-  if (!payload || typeof payload !== 'object') return null;
-  const record = payload as Record<string, unknown>;
-  return asNonEmptyString(record.error) || asNonEmptyString(record.message);
-};
-
-const toEdgeInvokeErrorMessage = async (error: unknown) => {
-  if (!error || typeof error !== 'object') return null;
-
-  const message = 'message' in error
-    ? asNonEmptyString((error as { message?: unknown }).message)
-    : null;
-  const context = 'context' in error
-    ? (error as { context?: unknown }).context
-    : null;
-
-  if (!(context instanceof Response)) {
-    return message;
-  }
-
-  try {
-    const payload = await context.clone().json() as Record<string, unknown>;
-    return parseCheckoutErrorMessage(payload) || message;
-  } catch {
-    try {
-      const text = asNonEmptyString(await context.clone().text());
-      return text || message;
-    } catch {
-      return message;
-    }
-  }
-};
-
 export function CartPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -98,50 +59,57 @@ export function CartPage() {
     }
 
     if (!firstItem) return;
+    const selectedLicenseType = firstItem.license_type ?? 'standard';
 
     setCheckoutError(null);
     setIsCheckoutLoading(true);
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session) {
-        console.error('No active session', sessionError);
-        setCheckoutError('Please login again');
-        alert('Please login again');
-        return;
-      }
+      await supabase.auth.refreshSession();
 
-      const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshedData.session) {
-        console.error('Checkout session refresh error:', refreshError);
-        setCheckoutError('Please login again');
-        alert('Please login again');
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData?.session) {
+        alert('Session not ready. Please retry.');
         return;
       }
 
       const { data, error } = await supabase.functions.invoke<{ url?: string }>('create-checkout', {
         body: {
           beatId: firstItem.product_id,
-          licenseType: firstItem.license_type,
+          licenseType: selectedLicenseType,
           successUrl: `${window.location.origin}/checkout/success`,
           cancelUrl: `${window.location.origin}/checkout/cancel`,
         },
       });
 
       if (error) {
-        const message = await toEdgeInvokeErrorMessage(error);
-        console.error('Checkout error:', message || error);
-        setCheckoutError(message || 'Unable to start checkout. Please try again.');
-        alert(message || 'Unable to start checkout. Please try again.');
+        console.error('Checkout error:', error);
+
+        let message = 'Checkout failed';
+
+        try {
+          const parsed = await (error as {
+            context?: { json?: () => Promise<{ error?: string; message?: string }> };
+          }).context?.json?.();
+          message = parsed?.error || parsed?.message || message;
+        } catch {
+          // Keep default message when error payload cannot be parsed.
+        }
+
+        setCheckoutError(message);
+        alert(message);
         return;
       }
 
-      const url = asNonEmptyString(data?.url);
-      if (url) {
-        window.location.href = url;
-      } else {
-        throw new Error(t('checkout.paymentUrlMissing'));
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
       }
+
+      setCheckoutError('Checkout failed');
+      alert('Checkout failed');
+      return;
     } catch (err) {
       setCheckoutError((err as Error).message);
     } finally {

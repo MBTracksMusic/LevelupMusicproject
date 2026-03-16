@@ -263,6 +263,12 @@ async function resolveCheckoutLicense(
 }
 
 serveWithErrorHandling("create-checkout", async (req: Request) => {
+  console.log("[create-checkout] request diagnostics", {
+    origin: req.headers.get("origin"),
+    hasAuthorizationHeader: !!req.headers.get("authorization"),
+    authHeaderPreview: req.headers.get("authorization")?.slice(0, 30) ?? null,
+  });
+
   const requestOriginHeader = req.headers.get("origin");
   const requestOrigin = resolveRequestOrigin(req);
   const corsHeaders = buildCorsHeaders(requestOrigin);
@@ -298,10 +304,21 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       });
     }
 
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization") ??
-      "";
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing Authorization header" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log("[create-checkout] auth header received", {
+      hasToken: !!authHeader,
+      prefix: authHeader.slice(0, 20),
+    });
 
     const supabaseUser = createClient(
       supabaseUrl,
@@ -324,9 +341,17 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       error: authError,
     } = await supabaseUser.auth.getUser();
 
+    console.log("[create-checkout] auth result", {
+      userId: user?.id ?? null,
+      authError: authError?.message ?? null,
+    });
+
     if (!user || authError) {
       console.error("JWT verification failed", authError);
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({
+        error: "Unauthorized",
+        debug: authError?.message ?? null,
+      }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -582,6 +607,20 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
 
     const lineItems = new URLSearchParams();
     const checkoutAmount = productRow.price;
+
+    if (!checkoutAmount || checkoutAmount <= 0) {
+      console.error("[create-checkout] Invalid product price", {
+        beatId: productRow.id,
+        price: checkoutAmount,
+      });
+
+      return new Response(JSON.stringify({
+        error: "Invalid product price",
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     lineItems.append("line_items[0][price_data][currency]", "eur");
     lineItems.append("line_items[0][price_data][unit_amount]", checkoutAmount.toString());
