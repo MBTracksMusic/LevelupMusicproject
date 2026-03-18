@@ -922,9 +922,14 @@ async function handleCheckoutCompleted(
   const metadataLicenseId = asNonEmptyString(metadata.license_id);
   const metadataLicenseName = asNonEmptyString(metadata.license_name);
   const licenseType = asNonEmptyString(metadata.license_type) || metadataLicenseName || "standard";
-  const metadataDbPriceRaw = asNonEmptyString(metadata.db_price);
-  const metadataDbPrice = metadataDbPriceRaw && /^\d+$/.test(metadataDbPriceRaw)
-    ? Number.parseInt(metadataDbPriceRaw, 10)
+  // Source of truth for checkout pricing:
+  // Stripe paid amount must match immutable snapshot captured at checkout creation.
+  const metadataDbPriceSnapshotRaw =
+    asNonEmptyString(metadata.db_price_snapshot) ??
+    // Backward compatibility for sessions created before snapshot key rollout.
+    asNonEmptyString(metadata.db_price);
+  const metadataDbPriceSnapshot = metadataDbPriceSnapshotRaw && /^\d+$/.test(metadataDbPriceSnapshotRaw)
+    ? Number.parseInt(metadataDbPriceSnapshotRaw, 10)
     : null;
 
   const paymentIntentId =
@@ -945,9 +950,9 @@ async function handleCheckoutCompleted(
     throw new WebhookError("Missing secure checkout metadata for purchase completion", 400, true);
   }
 
-  if (metadataDbPrice === null || metadataDbPrice !== amountTotal) {
+  if (metadataDbPriceSnapshot === null || metadataDbPriceSnapshot !== amountTotal) {
     throw new WebhookError(
-      `Checkout amount mismatch (expected ${metadataDbPrice ?? "unknown"}, got ${amountTotal})`,
+      `Checkout amount mismatch (expected ${metadataDbPriceSnapshot ?? "unknown"}, got ${amountTotal})`,
       400,
       true,
     );
@@ -971,7 +976,8 @@ async function handleCheckoutCompleted(
       p_checkout_session_id: sessionId,
       p_payment_intent_id: paymentIntentId,
       p_license_id: resolvedLicenseId,
-      p_amount: amountTotal,
+      // Persist the immutable checkout snapshot after Stripe-vs-snapshot validation above.
+      p_amount: metadataDbPriceSnapshot,
     });
 
     if (error) {
@@ -1008,6 +1014,31 @@ async function handleCheckoutCompleted(
 
   if (!purchaseId) {
     throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
+  }
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .upsert(
+      {
+        user_id: userId,
+        purchase_id: purchaseId,
+        type: "purchase",
+        title: "Paiement confirme",
+        message: "Ton achat a ete valide, tu peux telecharger ton contenu.",
+      },
+      {
+        onConflict: "purchase_id",
+        ignoreDuplicates: true,
+      },
+    );
+
+  if (notificationError) {
+    console.error("[stripe-webhook] failed to upsert purchase notification", {
+      purchaseId,
+      userId,
+      message: notificationError.message,
+      code: notificationError.code,
+    });
   }
 
   await enqueueContractGenerationJob(supabase, purchaseId);

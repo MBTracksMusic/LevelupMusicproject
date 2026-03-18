@@ -25,6 +25,7 @@ import { ProducersPage } from './pages/Producers';
 import { ProducerPublicProfilePage } from './pages/ProducerPublicProfilePage';
 import { LeaderboardPage } from './pages/Leaderboard';
 import { LeaderboardWeeklyPage } from './pages/LeaderboardWeekly';
+import { NotificationsPage } from './pages/Notifications';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminDashboardPage } from './pages/admin/AdminDashboard';
 import { AdminNewsPage } from './pages/admin/AdminNews';
@@ -126,6 +127,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <WishlistPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <ProtectedRoute>
+              <NotificationsPage />
             </ProtectedRoute>
           }
         />

@@ -17,6 +17,7 @@ import {
   Globe,
   Trophy,
   Sparkles,
+  Bell,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { formatRankTier } from '../reputation/ReputationBadge';
@@ -239,6 +240,14 @@ export function Header() {
                         >
                           <MessageSquareText className="w-4 h-4" />
                           {t('myMessages.title')}
+                        </Link>
+                        <Link
+                          to="/notifications"
+                          onClick={() => setIsUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                        >
+                          <Bell className="w-4 h-4" />
+                          {t('user.notifications')}
                         </Link>
                         {profile?.is_producer_active && (
                           <Link

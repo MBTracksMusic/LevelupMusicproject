@@ -409,6 +409,9 @@ export const de: TranslationSchema = {
     wishlistEmptyTitle: 'Ihre Wunschliste ist leer',
     wishlistEmptySubtitle: 'Fugen Sie Beats zu Ihren Favoriten hinzu, um sie hier wiederzufinden.',
     reputationLoadError: 'Ihre Reputation kann derzeit nicht geladen werden.',
+    notificationsLoadError: 'Ihre Benachrichtigungen konnen derzeit nicht geladen werden.',
+    notificationsEmptyTitle: 'Noch keine Benachrichtigungen',
+    notificationsEmptySubtitle: 'Ihre nachsten Kaufbestatigungen erscheinen hier.',
   },
   settings: {
     subtitle: 'Verwalten Sie Ihre Informationen und Einstellungen',

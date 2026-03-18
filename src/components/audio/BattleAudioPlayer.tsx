@@ -44,7 +44,6 @@ export function BattleAudioPlayer({
     let isCancelled = false;
 
     const run = async () => {
-      const trimmedProductId = productId?.trim() ?? '';
       const trimmed = src?.trim() ?? '';
       setSourceCandidates([]);
       setSourceIndex(0);
@@ -53,7 +52,7 @@ export function BattleAudioPlayer({
       setIsReady(false);
       setErrorMessage(null);
 
-      if (!trimmedProductId && !trimmed) {
+      if (!trimmed) {
         setErrorMessage(t('audio.previewUnavailable'));
         return;
       }
@@ -61,13 +60,7 @@ export function BattleAudioPlayer({
       setIsResolving(true);
       const resolved: string[] = [];
 
-      if (trimmedProductId) {
-        const encodedProductId = encodeURIComponent(trimmedProductId);
-        resolved.push(`/preview/${encodedProductId}`);
-      }
-
       if (trimmed) {
-        // Legacy fallback kept for historical snapshots where the product row no longer exists.
         resolved.push(trimmed);
       }
 

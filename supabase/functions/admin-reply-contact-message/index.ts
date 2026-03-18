@@ -2,13 +2,75 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://dev.beatelion.local:5173",
+];
+
+const DEFAULT_CORS_ORIGIN = DEFAULT_ALLOWED_CORS_ORIGINS[0];
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolveAllowedCorsOrigins = () => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const normalized = normalizeOrigin(token.trim());
+      if (normalized) {
+        allowed.add(normalized);
+      }
+    }
+  }
+
+  for (const envValue of [
+    Deno.env.get("APP_URL"),
+    Deno.env.get("SITE_URL"),
+    Deno.env.get("PUBLIC_SITE_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ]) {
+    if (typeof envValue !== "string") continue;
+    const normalized = normalizeOrigin(envValue.trim());
+    if (normalized) {
+      allowed.add(normalized);
+    }
+  }
+
+  return allowed;
+};
+
+const ALLOWED_CORS_ORIGINS = resolveAllowedCorsOrigins();
+
+const resolveRequestOrigin = (req: Request) => {
+  const rawOrigin = req.headers.get("origin");
+  if (!rawOrigin) return null;
+  const normalized = normalizeOrigin(rawOrigin);
+  if (!normalized) return null;
+  return ALLOWED_CORS_ORIGINS.has(normalized) ? normalized : null;
+};
+
+const buildCorsHeaders = (origin: string | null) => ({
+  ...BASE_CORS_HEADERS,
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_CORS_ORIGIN,
+  "Vary": "Origin",
+});
+
+const ADMIN_REPLY_RATE_LIMIT_RPC = "admin_reply_contact_message";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -35,6 +97,14 @@ const normalizeEmail = (value: unknown) => {
   const lowered = email.toLowerCase();
   return EMAIL_RE.test(lowered) ? lowered : null;
 };
+
+const escapeHtml = (input: string): string =>
+  input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const createAdminClient = () => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -106,6 +176,10 @@ const requireAdmin = async (req: Request) => {
 };
 
 serveWithErrorHandling("admin-reply-contact-message", async (req: Request): Promise<Response> => {
+  const requestOrigin = resolveRequestOrigin(req);
+  const corsHeaders = buildCorsHeaders(requestOrigin);
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -124,6 +198,30 @@ serveWithErrorHandling("admin-reply-contact-message", async (req: Request): Prom
     }
 
     const { supabaseAdmin, userId } = authContext;
+
+    const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
+      "check_rpc_rate_limit",
+      {
+        p_user_id: userId,
+        p_rpc_name: ADMIN_REPLY_RATE_LIMIT_RPC,
+      },
+    );
+
+    if (rateLimitError) {
+      console.error("[admin-reply-contact-message] rate limit check failed", { userId, rateLimitError });
+      return new Response(JSON.stringify({ error: "Rate limit unavailable" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    if (!rateLimitAllowed) {
+      return new Response(JSON.stringify({ error: "Too many requests", code: "rate_limit_exceeded" }), {
+        status: 429,
+        headers: jsonHeaders,
+      });
+    }
+
     const payload = await req.json().catch(() => null) as Record<string, unknown> | null;
     if (!payload || Array.isArray(payload)) {
       return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
@@ -152,6 +250,8 @@ serveWithErrorHandling("admin-reply-contact-message", async (req: Request): Prom
         headers: jsonHeaders,
       });
     }
+
+    const safeReply = escapeHtml(reply);
 
     if (requestedStatusRaw && !requestedStatus) {
       return new Response(JSON.stringify({ error: "Invalid status" }), {
@@ -194,7 +294,7 @@ serveWithErrorHandling("admin-reply-contact-message", async (req: Request): Prom
       .insert({
         message_id: messageId,
         admin_id: userId,
-        reply,
+        reply: safeReply,
       })
       .select("id, created_at")
       .single();
@@ -232,7 +332,7 @@ serveWithErrorHandling("admin-reply-contact-message", async (req: Request): Prom
       message_reply_id: insertedReply.id,
       name: messageRow.name,
       subject: messageRow.subject,
-      reply,
+      reply: safeReply,
       status: statusToPersist,
       replied_at: insertedReply.created_at,
       admin_id: userId,

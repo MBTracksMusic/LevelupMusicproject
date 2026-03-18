@@ -184,6 +184,20 @@ const isEventType = (value: unknown): value is EventType =>
 const jsonResponse = (status: number, payload: Record<string, unknown>) =>
   new Response(JSON.stringify(payload), { status, headers: JSON_HEADERS });
 
+const REPAIR_EMAIL_DELIVERY_RATE_LIMIT_RPC = "repair_email_delivery";
+
+const timingSafeEqual = (a: string, b: string): boolean => {
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  const len = Math.max(aBytes.length, bBytes.length);
+  let diff = aBytes.length ^ bBytes.length;
+  for (let i = 0; i < len; i++) {
+    diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
+  }
+  return diff === 0;
+};
+
 const parseRequestBody = async (req: Request) => {
   const rawBody = await req.text();
   if (rawBody.trim() === "") {
@@ -298,7 +312,7 @@ serveWithErrorHandling("repair-email-delivery", async (req: Request) => {
   }
 
   const providedSecret = asNonEmptyString(req.headers.get("x-email-repair-secret"));
-  if (!providedSecret || providedSecret !== emailRepairSecret) {
+  if (!providedSecret || !timingSafeEqual(providedSecret, emailRepairSecret)) {
     return jsonResponse(401, { error: "Unauthorized" });
   }
 
@@ -359,6 +373,23 @@ serveWithErrorHandling("repair-email-delivery", async (req: Request) => {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   }) as SupabaseAdminClient;
+
+  const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
+    "check_rpc_rate_limit",
+    {
+      p_user_id: null,
+      p_rpc_name: REPAIR_EMAIL_DELIVERY_RATE_LIMIT_RPC,
+    },
+  );
+
+  if (rateLimitError) {
+    console.error("[repair-email-delivery] rate limit check failed", { rateLimitError });
+    return jsonResponse(500, { error: "Rate limit unavailable" });
+  }
+
+  if (!rateLimitAllowed) {
+    return jsonResponse(429, { error: "Too many requests" });
+  }
 
   const repairRunId = crypto.randomUUID();
   const nowIso = new Date().toISOString();

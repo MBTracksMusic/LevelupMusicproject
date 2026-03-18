@@ -4,13 +4,73 @@ import { PDFDocument, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
 import { invokeContractGeneration, resolveContractGenerateEndpoint } from "../_shared/contract-generation.js";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://dev.beatelion.local:5173",
+];
+
+const DEFAULT_CORS_ORIGIN = DEFAULT_ALLOWED_CORS_ORIGINS[0];
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolveAllowedCorsOrigins = () => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const normalized = normalizeOrigin(token.trim());
+      if (normalized) {
+        allowed.add(normalized);
+      }
+    }
+  }
+
+  for (const envValue of [
+    Deno.env.get("APP_URL"),
+    Deno.env.get("SITE_URL"),
+    Deno.env.get("PUBLIC_SITE_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ]) {
+    if (typeof envValue !== "string") continue;
+    const normalized = normalizeOrigin(envValue.trim());
+    if (normalized) {
+      allowed.add(normalized);
+    }
+  }
+
+  return allowed;
+};
+
+const ALLOWED_CORS_ORIGINS = resolveAllowedCorsOrigins();
+
+const resolveRequestOrigin = (req: Request) => {
+  const rawOrigin = req.headers.get("origin");
+  if (!rawOrigin) return null;
+  const normalized = normalizeOrigin(rawOrigin);
+  if (!normalized) return null;
+  return ALLOWED_CORS_ORIGINS.has(normalized) ? normalized : null;
+};
+
+const buildCorsHeaders = (origin: string | null) => ({
+  ...BASE_CORS_HEADERS,
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_CORS_ORIGIN,
+  "Vary": "Origin",
+});
 
 const CONTRACT_BUCKET = "contracts";
 const CONTRACT_SIGNED_URL_TTL_SECONDS = 60;
@@ -453,6 +513,10 @@ async function callContractServiceToGenerate(purchaseId: string) {
 }
 
 serveWithErrorHandling("get-contract-url", async (req: Request) => {
+  const requestOrigin = resolveRequestOrigin(req);
+  const corsHeaders = buildCorsHeaders(requestOrigin);
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

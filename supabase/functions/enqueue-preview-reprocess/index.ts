@@ -2,13 +2,75 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://dev.beatelion.local:5173",
+];
+
+const DEFAULT_CORS_ORIGIN = DEFAULT_ALLOWED_CORS_ORIGINS[0];
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const resolveAllowedCorsOrigins = () => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const normalized = normalizeOrigin(token.trim());
+      if (normalized) {
+        allowed.add(normalized);
+      }
+    }
+  }
+
+  for (const envValue of [
+    Deno.env.get("APP_URL"),
+    Deno.env.get("SITE_URL"),
+    Deno.env.get("PUBLIC_SITE_URL"),
+    Deno.env.get("VITE_APP_URL"),
+  ]) {
+    if (typeof envValue !== "string") continue;
+    const normalized = normalizeOrigin(envValue.trim());
+    if (normalized) {
+      allowed.add(normalized);
+    }
+  }
+
+  return allowed;
+};
+
+const ALLOWED_CORS_ORIGINS = resolveAllowedCorsOrigins();
+
+const resolveRequestOrigin = (req: Request) => {
+  const rawOrigin = req.headers.get("origin");
+  if (!rawOrigin) return null;
+  const normalized = normalizeOrigin(rawOrigin);
+  if (!normalized) return null;
+  return ALLOWED_CORS_ORIGINS.has(normalized) ? normalized : null;
+};
+
+const buildCorsHeaders = (origin: string | null) => ({
+  ...BASE_CORS_HEADERS,
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_CORS_ORIGIN,
+  "Vary": "Origin",
+});
+
+const ENQUEUE_PREVIEW_REPROCESS_RATE_LIMIT_RPC = "enqueue_preview_reprocess";
 
 const createAdminClient = () => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -80,6 +142,10 @@ const requireAdmin = async (req: Request) => {
 };
 
 serveWithErrorHandling("enqueue-preview-reprocess", async (req: Request): Promise<Response> => {
+  const requestOrigin = resolveRequestOrigin(req);
+  const corsHeaders = buildCorsHeaders(requestOrigin);
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -98,6 +164,30 @@ serveWithErrorHandling("enqueue-preview-reprocess", async (req: Request): Promis
     }
 
     const { supabaseAdmin, userId } = authContext;
+
+    const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
+      "check_rpc_rate_limit",
+      {
+        p_user_id: userId,
+        p_rpc_name: ENQUEUE_PREVIEW_REPROCESS_RATE_LIMIT_RPC,
+      },
+    );
+
+    if (rateLimitError) {
+      console.error("[enqueue-preview-reprocess] rate limit check failed", { userId, rateLimitError });
+      return new Response(JSON.stringify({ error: "Rate limit unavailable" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    if (!rateLimitAllowed) {
+      return new Response(JSON.stringify({ error: "Too many requests", code: "rate_limit_exceeded" }), {
+        status: 429,
+        headers: jsonHeaders,
+      });
+    }
+
     console.log("[enqueue-preview-reprocess] enqueue requested", { userId });
 
     const { data, error } = await supabaseAdmin.rpc("enqueue_reprocess_all_previews");

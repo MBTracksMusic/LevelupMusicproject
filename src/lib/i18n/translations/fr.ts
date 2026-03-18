@@ -408,6 +408,9 @@ export const fr = {
     wishlistEmptyTitle: 'Votre liste est vide',
     wishlistEmptySubtitle: 'Ajoutez des beats a vos favoris pour les retrouver ici.',
     reputationLoadError: 'Impossible de charger votre reputation.',
+    notificationsLoadError: "Impossible de charger vos notifications pour l'instant.",
+    notificationsEmptyTitle: 'Aucune notification',
+    notificationsEmptySubtitle: 'Vos prochaines confirmations d achat apparaitront ici.',
   },
   settings: {
     subtitle: 'Gerez vos informations et preferences',

@@ -32,7 +32,6 @@ const describeMediaError = (
   }
 };
 
-const PREVIEW_PROXY_BASE = '/preview';
 const WATERMARKED_BUCKET =
   import.meta.env.VITE_SUPABASE_WATERMARKED_BUCKET?.trim() || 'beats-watermarked';
 
@@ -117,12 +116,7 @@ const resolveDirectPreviewCandidate = (
 };
 
 const resolvePreviewUrls = async (track: ProductWithRelations | null) => {
-  const trackId = track?.id?.trim();
-  if (!trackId || !hasTrackPreviewAsset(track)) return [];
-
-  const encodedTrackId = encodeURIComponent(trackId);
-  const proxyUrl = `${PREVIEW_PROXY_BASE}/${encodedTrackId}`;
-  const candidates = [proxyUrl];
+  if (!hasTrackPreviewAsset(track)) return [];
 
   const fallbackBucket = toNonEmptyString(track?.watermarked_bucket) || WATERMARKED_BUCKET;
   const directCandidates = [
@@ -131,6 +125,7 @@ const resolvePreviewUrls = async (track: ProductWithRelations | null) => {
     toNonEmptyString(track?.watermarked_path),
   ].filter((value): value is string => Boolean(value));
 
+  const candidates: string[] = [];
   for (const candidate of directCandidates) {
     const resolved = resolveDirectPreviewCandidate(candidate, fallbackBucket);
     if (resolved) {

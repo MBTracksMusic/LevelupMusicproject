@@ -57,13 +57,6 @@ const asNonEmptyString = (value: unknown) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const extractAuthorizationHeader = (req: Request) =>
-  req.headers.get("authorization") ?? req.headers.get("Authorization");
-
-const isBearerAuthorizationHeader = (value: string | null): value is string => (
-  typeof value === "string" && /^Bearer\s+\S+$/i.test(value.trim())
-);
-
 const TRUSTED_VERCEL_PREVIEW_ORIGIN_REGEX = /^https:\/\/[a-z0-9-]+-mbtracksmusics-projects\.vercel\.app$/i;
 
 const isTrustedVercelPreviewOrigin = (origin: string) => TRUSTED_VERCEL_PREVIEW_ORIGIN_REGEX.test(origin);
@@ -301,59 +294,10 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-
-    if (!supabaseUrl || !supabaseServiceRoleKey || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       console.error("[create-checkout] Missing Supabase env vars");
       return new Response(JSON.stringify({ error: "Server not configured" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const authHeader = extractAuthorizationHeader(req);
-    if (!isBearerAuthorizationHeader(authHeader)) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const supabaseUser = createClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
-      },
-    );
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseUser.auth.getUser();
-
-    console.log("[create-checkout] auth result", {
-      userId: user?.id ?? null,
-      authError: authError?.message ?? null,
-    });
-
-    if (!user || authError) {
-      console.error("JWT verification failed", authError);
-      return new Response(JSON.stringify({
-        error: "Unauthorized",
-      }), {
-        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -368,6 +312,31 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         },
       },
     );
+
+    const authHeader =
+      req.headers.get("authorization") ||
+      req.headers.get("Authorization");
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const token = authHeader.replace("Bearer ", "").trim();
+
+    const { data: userData, error: userError } =
+      await supabaseAdmin.auth.getUser(token);
+
+    if (userError || !userData?.user) {
+      return new Response(JSON.stringify({ error: "Invalid JWT" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const user = userData.user;
 
     const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
       "check_rpc_rate_limit",
@@ -471,9 +440,103 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       });
     }
 
+    if (productRow.price < 2999) {
+      return new Response(JSON.stringify({
+        error: "Prix minimum 29,99€"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (productRow.is_exclusive && productRow.price < 5000) {
+      return new Response(JSON.stringify({
+        error: "Prix minimum 50€ pour une exclusive"
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (productRow.is_exclusive && productRow.is_sold) {
       return new Response(JSON.stringify({ error: "This exclusive has already been sold" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Block re-purchase: reject checkout if user already owns this product.
+    // This is a server-side guard; the DB partial unique index is the hard enforcement.
+    const { data: existingPurchase, error: purchaseCheckError } = await supabaseAdmin
+      .from("purchases")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("product_id", resolvedBeatId)
+      .eq("status", "completed")
+      .maybeSingle();
+
+    if (purchaseCheckError) {
+      console.error("[create-checkout] Failed to check existing purchase", {
+        userId: user.id,
+        beatId: resolvedBeatId,
+        message: purchaseCheckError.message,
+      });
+      return new Response(JSON.stringify({ error: "Failed to validate purchase eligibility" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (existingPurchase) {
+      console.warn("[create-checkout] User already owns this product", {
+        userId: user.id,
+        beatId: resolvedBeatId,
+        existingPurchaseId: existingPurchase.id,
+      });
+      return new Response(JSON.stringify({
+        error: "Vous avez déjà acheté ce produit.",
+        code: "already_purchased",
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Block concurrent checkout attempts: rate-limit per (user, product) pair.
+    // Purchases are only created after Stripe webhook, so no pending row exists before payment.
+    // The rate limit RPC uses a product-scoped key to prevent multiple active sessions.
+    const productRateLimitKey = `create_checkout_user_product_${resolvedBeatId}`;
+    const { data: productRateLimitAllowed, error: productRateLimitError } = await supabaseAdmin.rpc(
+      "check_rpc_rate_limit",
+      {
+        p_user_id: user.id,
+        p_rpc_name: productRateLimitKey,
+      },
+    );
+
+    if (productRateLimitError) {
+      console.error("[create-checkout] Product-level rate limit check failed", {
+        userId: user.id,
+        beatId: resolvedBeatId,
+        rpc: productRateLimitKey,
+        productRateLimitError,
+      });
+      return new Response(JSON.stringify({ error: "Rate limit unavailable" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (productRateLimitAllowed !== true) {
+      console.warn("[create-checkout] Concurrent checkout attempt blocked", {
+        userId: user.id,
+        beatId: resolvedBeatId,
+      });
+      return new Response(JSON.stringify({
+        error: "Un paiement est déjà en cours pour ce produit.",
+        code: "checkout_in_progress",
+      }), {
+        status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -682,6 +745,9 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       "metadata[license_id]": selectedLicense.id,
       "metadata[license_name]": selectedLicense.name,
       "metadata[license_type]": licenseType,
+      // Immutable checkout snapshot: used by webhook/RPC to avoid product price drift.
+      "metadata[db_price_snapshot]": checkoutAmount.toString(),
+      // Backward compatibility for in-flight sessions created before snapshot key rollout.
       "metadata[db_price]": checkoutAmount.toString(),
       "metadata[price_source]": "products.price",
     };
@@ -728,11 +794,46 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     });
 
     if (productRow.is_exclusive) {
-      await supabaseAdmin
+      const { data: boundLocks, error: lockBindError } = await supabaseAdmin
         .from("exclusive_locks")
         .update({ stripe_checkout_session_id: session.id })
         .eq("product_id", resolvedBeatId)
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .select("id");
+
+      if (lockBindError) {
+        console.error("[create-checkout] Failed to bind lock to checkout session", {
+          beatId: resolvedBeatId,
+          userId: user.id,
+          sessionId: session.id,
+          message: lockBindError.message,
+        });
+
+        return new Response(JSON.stringify({
+          error: "Exclusive lock binding failed",
+          code: "exclusive_lock_bind_failed",
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!boundLocks || boundLocks.length !== 1) {
+        console.error("[create-checkout] Missing lock row while binding checkout session", {
+          beatId: resolvedBeatId,
+          userId: user.id,
+          sessionId: session.id,
+          updatedRows: boundLocks?.length ?? 0,
+        });
+
+        return new Response(JSON.stringify({
+          error: "Exclusive lock is no longer valid",
+          code: "exclusive_lock_missing",
+        }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), {

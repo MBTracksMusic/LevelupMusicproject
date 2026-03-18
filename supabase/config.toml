@@ -35,7 +35,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.broadcast-news]
-verify_jwt = false
+verify_jwt = true
 
 [functions.collect-pipeline-metrics]
 verify_jwt = false
@@ -71,7 +71,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.preview-audio]
-verify_jwt = true
+verify_jwt = false
 
 [functions.process-audio-jobs]
 verify_jwt = false

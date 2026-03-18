@@ -409,6 +409,9 @@ export const en: TranslationSchema = {
     wishlistEmptyTitle: 'Your wishlist is empty',
     wishlistEmptySubtitle: 'Add beats to your favorites to find them here later.',
     reputationLoadError: 'Unable to load your reputation.',
+    notificationsLoadError: 'Unable to load your notifications right now.',
+    notificationsEmptyTitle: 'No notifications yet',
+    notificationsEmptySubtitle: 'Your next purchase confirmations will appear here.',
   },
   settings: {
     subtitle: 'Manage your information and preferences',

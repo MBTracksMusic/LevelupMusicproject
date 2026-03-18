@@ -65,14 +65,15 @@ export function CartPage() {
     setIsCheckoutLoading(true);
 
     try {
-      await supabase.auth.refreshSession();
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
 
-      const { data: sessionData } = await supabase.auth.getSession();
-
-      if (!sessionData?.session) {
-        alert('Session not ready. Please retry.');
+      if (refreshError || !refreshData.session) {
+        alert('Session refresh failed');
         return;
       }
+
+      const token = refreshData.session.access_token;
+
 
       const { data, error } = await supabase.functions.invoke<{ url?: string }>('create-checkout', {
         body: {
@@ -80,6 +81,9 @@ export function CartPage() {
           licenseType: selectedLicenseType,
           successUrl: `${window.location.origin}/cart?status=success`,
           cancelUrl: `${window.location.origin}/cart`,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`, // main auth fix
         },
       });
 
@@ -92,9 +96,14 @@ export function CartPage() {
           const parsed = await (error as {
             context?: { json?: () => Promise<{ error?: string; message?: string }> };
           }).context?.json?.();
+
+          if (import.meta.env.DEV) {
+            console.log('BACKEND ERROR:', parsed);
+          }
+
           message = parsed?.error || parsed?.message || message;
         } catch {
-          // Keep default message when error payload cannot be parsed.
+          // ignore
         }
 
         setCheckoutError(message);
@@ -111,6 +120,7 @@ export function CartPage() {
       alert('Checkout failed');
       return;
     } catch (err) {
+      console.error('CATCH ERROR:', err);
       setCheckoutError((err as Error).message);
     } finally {
       setIsCheckoutLoading(false);
