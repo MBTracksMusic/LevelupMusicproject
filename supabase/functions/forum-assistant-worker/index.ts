@@ -1,14 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
-  corsHeaders,
+  buildCorsHeaders,
   createAdminClient,
   enforceRateLimit,
+  ensureAssistantUser,
   evaluateForumContent,
   generateAssistantReply,
-  jsonResponse,
   loadForumSettings,
   requireInternalAgent,
-  ensureAssistantUser,
+  resolveRequestCorsOrigin,
 } from "../_shared/forumAgents.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
@@ -32,6 +32,13 @@ async function markJobFailed(
 }
 
 serveWithErrorHandling("forum-assistant-worker", async (req: Request): Promise<Response> => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

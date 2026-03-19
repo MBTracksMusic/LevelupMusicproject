@@ -12,7 +12,7 @@ export interface SignInData {
   password: string;
 }
 
-export async function signUp({ email, password, username, fullName }: SignUpData) {
+export async function signUp({ email, password, username, fullName, captchaToken }: SignUpData & { captchaToken: string }) {
   const cleanEmail = email.trim().toLowerCase();
   const cleanUsername = (username ?? cleanEmail.split('@')[0]).trim();
   const cleanFullName = fullName?.trim() || undefined;
@@ -26,6 +26,7 @@ export async function signUp({ email, password, username, fullName }: SignUpData
         username: cleanUsername,
         full_name: cleanFullName,
       },
+      captchaToken,
     },
   });
 
@@ -33,10 +34,11 @@ export async function signUp({ email, password, username, fullName }: SignUpData
   return data;
 }
 
-export async function signIn({ email, password }: SignInData) {
+export async function signIn({ email, password, captchaToken }: SignInData & { captchaToken: string }) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
+    options: { captchaToken },
   });
 
   if (error) throw error;
@@ -48,9 +50,10 @@ export async function signOut() {
   if (error) throw error;
 }
 
-export async function resetPassword(email: string) {
+export async function resetPassword(email: string, captchaToken: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/reset-password`,
+    captchaToken,
   });
 
   if (error) throw error;

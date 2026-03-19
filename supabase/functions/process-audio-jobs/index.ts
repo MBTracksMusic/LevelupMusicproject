@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { FFmpeg } from "npm:@ffmpeg/ffmpeg@0.12.6";
 import { fetchFile, toBlobURL } from "npm:@ffmpeg/util@0.12.1";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
+import { captureException, type RequestContext } from "../_shared/sentry.ts";
 
 const INTERNAL_SECRET_HEADER = "x-audio-worker-secret";
 
@@ -735,7 +736,7 @@ const processJob = async (
   }
 };
 
-serveWithErrorHandling("process-audio-jobs", async (req: Request): Promise<Response> => {
+serveWithErrorHandling("process-audio-jobs", async (req: Request, context: RequestContext): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -888,6 +889,7 @@ serveWithErrorHandling("process-audio-jobs", async (req: Request): Promise<Respo
     });
   } catch (error) {
     console.error("[process-audio-jobs] unexpected error", error);
+    captureException(error, context);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: jsonHeaders,

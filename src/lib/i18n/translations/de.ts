@@ -123,6 +123,8 @@ export const de: TranslationSchema = {
     forgotPasswordEmailSentTitle: 'E-Mail gesendet!',
     forgotPasswordEmailSentDescription: 'Prufen Sie Ihr Postfach und klicken Sie auf den Link, um Ihr Passwort zuruckzusetzen.',
     backToLogin: 'Zuruck zur Anmeldung',
+    captchaRequired: 'Bitte captcha abschliessen, bevor Sie fortfahren.',
+    captchaUnavailable: 'Captcha ist derzeit nicht verfugbar. Bitte erneut versuchen.',
     forgotPasswordRetryIn: 'Erneut versuchen in {count}s',
     forgotPasswordSendButton: 'E-Mail senden',
     resetPasswordInvalidLink: 'Ungultiger oder abgelaufener Link. Fordern Sie eine neue Zurucksetzungs-E-Mail an.',

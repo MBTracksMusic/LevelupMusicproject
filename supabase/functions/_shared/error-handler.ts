@@ -100,6 +100,7 @@ export const handleError = (
       status,
       headers: {
         "Content-Type": "application/json",
+        "X-Content-Type-Options": "nosniff",
         ...(options?.corsHeaders ?? {}),
       },
     },
@@ -129,6 +130,16 @@ export const serveWithErrorHandling = (
         });
 
         const response = await handler(req, context);
+
+        // Handlers that catch internally and return a 5xx Response bypass the
+        // outer catch. Capture those here so they appear in Sentry.
+        if (response.status >= 500) {
+          captureException(
+            new Error(`[${context.functionName}] HTTP ${response.status}`),
+            context,
+          );
+        }
+
         logger.info("request_completed", {
           status: response.status,
         });

@@ -8,6 +8,15 @@ import { updatePassword } from '../../lib/auth/service';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase/client';
 
+// Read URL params at module load time, before the Supabase SDK (detectSessionInUrl: true)
+// processes and potentially clears the URL hash.
+// Supports both implicit flow (#access_token) and PKCE flow (?code).
+const _initHashParams = new URLSearchParams(window.location.hash.substring(1));
+const _initQueryParams = new URLSearchParams(window.location.search);
+const _initHasRecoveryToken =
+  (_initHashParams.has('access_token') && _initHashParams.get('type') === 'recovery') ||
+  _initQueryParams.has('code');
+
 export function ResetPasswordPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -20,38 +29,53 @@ export function ResetPasswordPage() {
   const [status, setStatus] = useState<'pending' | 'ready' | 'error'>('pending');
   const [statusMessage, setStatusMessage] = useState('');
 
-  // Establish session from recovery link (access_token in URL hash)
+  // With detectSessionInUrl: true, the Supabase SDK automatically processes the
+  // #access_token from the URL hash and fires a PASSWORD_RECOVERY event.
+  // Do NOT call setSession() manually — the SDK has already done it.
   useEffect(() => {
-    const init = async () => {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      const type = hashParams.get('type');
+    if (!_initHasRecoveryToken) {
+      setStatus('error');
+      setStatusMessage(t('auth.resetPasswordInvalidLink'));
+      toast.error(t('auth.resetPasswordInvalidLinkShort'));
+      return;
+    }
 
-      if (!accessToken || type !== 'recovery') {
+    let settled = false;
+
+    const settle = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      if (ok) {
+        window.history.replaceState(null, '', window.location.pathname);
+        setStatus('ready');
+        setStatusMessage('');
+      } else {
         setStatus('error');
-        setStatusMessage(t('auth.resetPasswordInvalidLink'));
-        toast.error(t('auth.resetPasswordInvalidLinkShort'));
-        return;
-      }
-
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken ?? '',
-      });
-
-      if (error) {
-        setStatus('error');
-        setStatusMessage(error.message || t('auth.resetPasswordLinkValidationFailed'));
+        setStatusMessage(t('auth.resetPasswordLinkValidationFailed'));
         toast.error(t('auth.resetPasswordLinkValidationFailed'));
-        return;
       }
-
-      setStatus('ready');
-      setStatusMessage('');
     };
 
-    init();
+    // Timeout guard: if session validation never resolves, unblock the UI.
+    const timeoutId = setTimeout(() => settle(false), 10_000);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        settle(true);
+      }
+    });
+
+    // Fallback: SDK may have processed the token before this listener registered.
+    // getSession() reflects the recovery session the SDK already established.
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      settle(!error && !!session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,7 +111,12 @@ export function ResetPasswordPage() {
     try {
       await updatePassword(formData.password);
       toast.success(t('auth.resetPasswordUpdateSuccess'));
-      navigate('/login');
+      // Invalidate all sessions globally — password is already updated, so signOut
+      // failure is non-critical; swallow the error and proceed to redirect.
+      await supabase.auth.signOut({ scope: 'global' }).catch(() => {});
+      // Defer navigation by one microtask so the auth store's onAuthStateChange
+      // handler (SIGNED_OUT event) can flush before the /login route renders.
+      setTimeout(() => navigate('/login'), 0);
     } catch (error) {
       console.error('Reset password error:', error);
       toast.error(t('auth.resetPasswordUpdateError'));

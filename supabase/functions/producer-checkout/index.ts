@@ -122,13 +122,42 @@ const resolveDefaultRedirectOrigin = (req: Request): string => {
   return DEFAULT_ALLOWED_REDIRECT_ORIGINS[0];
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+];
+
+const ALLOWED_CORS_ORIGINS = (() => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const n = normalizeOrigin(token.trim());
+      if (n) allowed.add(n);
+    }
+  }
+  for (const o of ALLOWED_REDIRECT_ORIGINS) allowed.add(o);
+  return allowed;
+})();
+
+const buildCorsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_ALLOWED_CORS_ORIGINS[0],
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey",
+  "Vary": "Origin",
+});
+
+const resolveRequestCorsOrigin = (req: Request): string | null => {
+  const raw = req.headers.get("origin");
+  if (!raw) return null;
+  const n = normalizeOrigin(raw);
+  return n && ALLOWED_CORS_ORIGINS.has(n) ? n : null;
 };
 
 serveWithErrorHandling("producer-checkout", async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

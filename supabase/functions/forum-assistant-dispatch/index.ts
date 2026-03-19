@@ -1,13 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   asNonEmptyString,
-  corsHeaders,
+  buildCorsHeaders,
   createAdminClient,
   enforceRateLimit,
   invokeInternalForumFunction,
-  jsonResponse,
   loadForumSettings,
   requireInternalAgent,
+  resolveRequestCorsOrigin,
 } from "../_shared/forumAgents.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
@@ -18,6 +18,13 @@ interface DispatchBody {
 }
 
 serveWithErrorHandling("forum-assistant-dispatch", async (req: Request): Promise<Response> => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

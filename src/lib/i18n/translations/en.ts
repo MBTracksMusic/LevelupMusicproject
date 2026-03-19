@@ -123,6 +123,8 @@ export const en: TranslationSchema = {
     forgotPasswordEmailSentTitle: 'Email sent!',
     forgotPasswordEmailSentDescription: 'Check your inbox and click the link to reset your password.',
     backToLogin: 'Back to login',
+    captchaRequired: 'Complete the captcha before continuing.',
+    captchaUnavailable: 'Captcha is unavailable right now. Please try again shortly.',
     forgotPasswordRetryIn: 'Retry in {count}s',
     forgotPasswordSendButton: 'Send email',
     resetPasswordInvalidLink: 'Invalid or expired link. Request a new reset email.',

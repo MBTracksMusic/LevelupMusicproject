@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Music, ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -14,6 +15,11 @@ export function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const captchaSiteKey = (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string | undefined)?.trim() ?? '';
+  const isCaptchaConfigured = captchaSiteKey.length > 0;
+  const captchaTokenRef = useRef<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaInstanceKey, setCaptchaInstanceKey] = useState(0);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -21,13 +27,43 @@ export function ForgotPasswordPage() {
     return () => clearInterval(timer);
   }, [cooldown]);
 
+  const resetCaptcha = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    setCaptchaInstanceKey((current) => current + 1);
+  };
+
+  const handleCaptchaVerify = (token: string) => {
+    captchaTokenRef.current = token;
+    setCaptchaToken(token);
+  };
+
+  const handleCaptchaExpire = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+  };
+
+  const handleCaptchaError = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    toast.error(t('auth.captchaUnavailable'));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cooldown > 0) return;
+    if (!isCaptchaConfigured) {
+      toast.error(t('auth.captchaUnavailable'));
+      return;
+    }
+    if (!captchaTokenRef.current) {
+      toast.error(t('auth.captchaRequired'));
+      return;
+    }
     setIsLoading(true);
 
     try {
-      await resetPassword(email.trim());
+      await resetPassword(email.trim(), captchaTokenRef.current);
       setEmailSent(true);
       toast.success(t('auth.forgotPasswordEmailSentSuccess'));
     } catch (error) {
@@ -39,6 +75,7 @@ export function ForgotPasswordPage() {
         toast.error(t('auth.forgotPasswordSendError'));
       }
     } finally {
+      resetCaptcha();
       setIsLoading(false);
     }
   };
@@ -93,12 +130,30 @@ export function ForgotPasswordPage() {
                 autoComplete="email"
               />
 
+              {!isCaptchaConfigured && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                  {t('auth.captchaUnavailable')}
+                </div>
+              )}
+
+              {isCaptchaConfigured && (
+                <div className="space-y-1">
+                  <HCaptcha
+                    key={captchaInstanceKey}
+                    sitekey={captchaSiteKey}
+                    onVerify={handleCaptchaVerify}
+                    onExpire={handleCaptchaExpire}
+                    onError={handleCaptchaError}
+                  />
+                </div>
+              )}
+
               <Button
                 type="submit"
                 className="w-full"
                 size="lg"
                 isLoading={isLoading}
-                disabled={cooldown > 0}
+                disabled={cooldown > 0 || !isCaptchaConfigured || !captchaToken}
               >
                 {cooldown > 0
                   ? t('auth.forgotPasswordRetryIn', { count: cooldown })

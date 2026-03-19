@@ -122,6 +122,8 @@ export const fr = {
     forgotPasswordEmailSentTitle: 'Email envoye !',
     forgotPasswordEmailSentDescription: 'Verifiez votre boite mail et cliquez sur le lien pour reinitialiser votre mot de passe.',
     backToLogin: 'Retour a la connexion',
+    captchaRequired: 'Validez le captcha avant de continuer.',
+    captchaUnavailable: 'Captcha indisponible. Reessayez dans quelques instants.',
     forgotPasswordRetryIn: 'Reessayer dans {count}s',
     forgotPasswordSendButton: "Envoyer l'email",
     resetPasswordInvalidLink: 'Lien invalide ou expire. Demandez un nouvel email de reinitialisation.',

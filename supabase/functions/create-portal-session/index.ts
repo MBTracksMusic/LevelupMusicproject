@@ -6,17 +6,18 @@ interface PortalRequestBody {
   returnUrl?: string;
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+];
+
+const buildCorsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_ALLOWED_CORS_ORIGINS[0],
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey",
-};
-
-const jsonResponse = (payload: unknown, status = 200) =>
-  new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  "Vary": "Origin",
+});
 
 const asNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
@@ -74,6 +75,26 @@ const resolveAllowedRedirectOrigins = () => {
 
 const ALLOWED_REDIRECT_ORIGINS = resolveAllowedRedirectOrigins();
 
+const ALLOWED_CORS_ORIGINS = (() => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const n = normalizeOrigin(token.trim());
+      if (n) allowed.add(n);
+    }
+  }
+  for (const o of ALLOWED_REDIRECT_ORIGINS) allowed.add(o);
+  return allowed;
+})();
+
+const resolveRequestCorsOrigin = (req: Request): string | null => {
+  const raw = req.headers.get("origin");
+  if (!raw) return null;
+  const n = normalizeOrigin(raw);
+  return n && ALLOWED_CORS_ORIGINS.has(n) ? n : null;
+};
+
 const validateRedirectUrl = (value: string | null): string | null => {
   if (!value) return null;
   try {
@@ -112,6 +133,13 @@ const truncateUserId = (userId: string) => {
 };
 
 serveWithErrorHandling("create-portal-session", async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 import { invokeContractGeneration, resolveContractGenerateEndpoint } from "../_shared/contract-generation.js";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
+import { captureException, type RequestContext } from "../_shared/sentry.ts";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -660,7 +661,7 @@ async function claimStripeEventProcessingLock(
   return staleClaim;
 }
 
-serveWithErrorHandling("stripe-webhook", async (req: Request) => {
+serveWithErrorHandling("stripe-webhook", async (req: Request, context: RequestContext) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -863,6 +864,7 @@ serveWithErrorHandling("stripe-webhook", async (req: Request) => {
         eventType: event.type,
         message,
       });
+      captureException(error, context);
 
       return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
         status: 500,
@@ -876,6 +878,7 @@ serveWithErrorHandling("stripe-webhook", async (req: Request) => {
       error: message,
     });
     console.error("[stripe-webhook] Fatal webhook error", { message });
+    captureException(error, context);
 
     return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       status: 500,

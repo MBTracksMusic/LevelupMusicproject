@@ -1,13 +1,47 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/auth.ts";
 import { Resend } from "npm:resend";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+];
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const ALLOWED_CORS_ORIGINS = (() => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const n = normalizeOrigin(token.trim());
+      if (n) allowed.add(n);
+    }
+  }
+  return allowed;
+})();
+
+const buildCorsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_ALLOWED_CORS_ORIGINS[0],
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, apikey",
   "Content-Type": "application/json",
+  "Vary": "Origin",
+});
+
+const resolveRequestCorsOrigin = (req: Request): string | null => {
+  const raw = req.headers.get("origin");
+  if (!raw) return null;
+  const n = normalizeOrigin(raw);
+  return n && ALLOWED_CORS_ORIGINS.has(n) ? n : null;
 };
 
 const MAX_RECIPIENTS_PER_RUN = 500;
@@ -233,6 +267,8 @@ async function sendBroadcastEmail(
 }
 
 serveWithErrorHandling("broadcast-news", async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
@@ -244,69 +280,18 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
-
-  if (!supabaseUrl || !serviceRoleKey || !anonKey || !resendApiKey) {
-    console.error("[broadcast-news] ENV_ERROR", {
-      hasSupabaseUrl: Boolean(supabaseUrl),
-      hasServiceRoleKey: Boolean(serviceRoleKey),
-      hasAnonKey: Boolean(anonKey),
-      hasResendApiKey: Boolean(resendApiKey),
-    });
+  if (!resendApiKey) {
+    console.error("[broadcast-news] ENV_ERROR", { hasResendApiKey: false });
     return new Response(JSON.stringify({ error: "Server not configured" }), {
       status: 500,
       headers: corsHeaders,
     });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: corsHeaders,
-    });
-  }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  }) as any;
-
-  const supabaseUser = createClient(supabaseUrl, anonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-    global: {
-      headers: {
-        Authorization: authHeader,
-      },
-    },
-  });
-
-  const { data: authData, error: authError } = await supabaseUser.auth.getUser();
-  const actor = authData.user;
-  if (authError || !actor) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: corsHeaders,
-    });
-  }
-
-  const { data: isAdminData, error: isAdminError } = await supabase.rpc("is_admin", {
-    p_user_id: actor.id,
-  });
-  if (isAdminError || isAdminData !== true) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403,
-      headers: corsHeaders,
-    });
-  }
+  const authResult = await requireAdminUser(req, corsHeaders);
+  if ("error" in authResult) return authResult.error;
+  const { user: actor, supabaseAdmin: supabase } = authResult;
 
   const body = await req.json().catch(() => null) as JsonRecord | null;
   const newsId = asNonEmptyString(body?.news_id);

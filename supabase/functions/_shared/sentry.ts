@@ -29,52 +29,6 @@ const parseFloatOrDefault = (value: string | null | undefined, fallback: number)
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const normalizeJwtPayloadSegment = (segment: string): string => {
-  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = normalized.length % 4;
-  if (padding === 0) return normalized;
-  return normalized + "=".repeat(4 - padding);
-};
-
-const decodeJwtPayload = (jwt: string): Record<string, unknown> | null => {
-  try {
-    const payloadSegment = jwt.split(".")[1];
-    if (!payloadSegment) return null;
-    const decoded = atob(normalizeJwtPayloadSegment(payloadSegment));
-    const parsed = JSON.parse(decoded);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    return parsed as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-};
-
-const extractBearerToken = (req: Request): string | null => {
-  const candidates = [
-    req.headers.get("authorization"),
-    req.headers.get("Authorization"),
-  ];
-
-  for (const candidate of candidates) {
-    const raw = asNonEmptyString(candidate);
-    if (!raw) continue;
-    if (/^bearer\s+/i.test(raw)) {
-      return asNonEmptyString(raw.replace(/^bearer\s+/i, ""));
-    }
-    return raw;
-  }
-
-  return null;
-};
-
-const extractUserIdFromJwt = (req: Request): string | null => {
-  const token = extractBearerToken(req);
-  if (!token) return null;
-  const payload = decodeJwtPayload(token);
-  const subject = payload?.sub;
-  return typeof subject === "string" && subject.length > 0 ? subject : null;
-};
-
 const resolveExecutionId = (): string | null => {
   const candidates = [
     Deno.env.get("SB_EXECUTION_ID"),
@@ -196,6 +150,10 @@ export const initSentry = (functionName?: string) => {
       asNonEmptyString(Deno.env.get("ENVIRONMENT")) ||
       asNonEmptyString(Deno.env.get("ENV")) ||
       "development",
+    release:
+      asNonEmptyString(Deno.env.get("SENTRY_RELEASE")) ||
+      asNonEmptyString(resolveExecutionId()) ||
+      undefined,
     tracesSampleRate: parseFloatOrDefault(Deno.env.get("SENTRY_TRACES_SAMPLE_RATE"), 0),
     sendDefaultPii: false,
     initialScope: {
@@ -218,7 +176,7 @@ export const buildRequestContext = (functionName: string, req: Request): Request
     functionName,
     requestId: getRequestId(req),
     executionId: resolveExecutionId(),
-    userId: extractUserIdFromJwt(req),
+    userId: null,
     method: req.method,
     url: req.url,
     path: url.pathname,

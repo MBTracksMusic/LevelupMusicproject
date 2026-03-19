@@ -2,16 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   applyReputationEvent,
   asNonEmptyString,
+  buildCorsHeaders,
   containsAssistantMention,
-  corsHeaders,
   enforceRateLimit,
   evaluateForumContent,
   invokeInternalForumFunction,
-  jsonResponse,
   loadForumCategoryPolicyByTopicId,
   loadForumSettings,
   notifyForumAdmins,
   requireUser,
+  resolveRequestCorsOrigin,
 } from "../_shared/forumAgents.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
@@ -36,6 +36,13 @@ function mapRpcError(errorMessage: string) {
 }
 
 serveWithErrorHandling("forum-create-post", async (req: Request): Promise<Response> => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

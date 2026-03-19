@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/auth.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
 const BASE_CORS_HEADERS = {
@@ -69,75 +69,12 @@ const buildCorsHeaders = (origin: string | null) => ({
   "Vary": "Origin",
 });
 
-const supabaseAdmin = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  {
-    auth: {
-      persistSession: false,
-    },
-  }
-);
-
 const WATERMARK_BUCKET = "watermark-assets";
 const FIXED_WATERMARK_PATH = "admin/global-watermark.wav";
 const ALLOWED_TYPES = new Set(["audio/wav", "audio/x-wav", "audio/wave"]);
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-const requireAdmin = async (req: Request, jsonHeaders: Record<string, string>) => {
-  const authorizationHeader = req.headers.get("Authorization") ?? req.headers.get("authorization");
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseUrl || !anonKey) {
-    console.error("[admin-upload-watermark] missing auth env vars");
-    return { error: new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: jsonHeaders }) };
-  }
-
-  const authHeaders = authorizationHeader
-    ? {
-        Authorization: authorizationHeader,
-      }
-    : undefined;
-
-  const supabaseUser = createClient(supabaseUrl, anonKey, {
-    auth: {
-      persistSession: false,
-    },
-    ...(authHeaders
-      ? {
-          global: {
-            headers: authHeaders,
-          },
-        }
-      : {}),
-  });
-
-  const { data: authData, error: authError } = await supabaseUser.auth.getUser();
-  if (authError || !authData.user) {
-    console.error("[admin-upload-watermark] invalid auth token", authError);
-    return { error: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders }) };
-  }
-
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from("user_profiles")
-    .select("id, role")
-    .eq("id", authData.user.id)
-    .maybeSingle();
-
-  if (profileError) {
-    console.error("[admin-upload-watermark] failed to load profile", profileError);
-    return { error: new Response(JSON.stringify({ error: "Failed to verify admin" }), { status: 500, headers: jsonHeaders }) };
-  }
-
-  if (!profile || profile.role !== "admin") {
-    return { error: new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: jsonHeaders }) };
-  }
-
-  return { supabaseAdmin, userId: authData.user.id };
-};
-
-const cleanupLegacyWatermarks = async () => {
+const cleanupLegacyWatermarks = async (supabaseAdmin: any) => {
   const { data, error } = await supabaseAdmin.storage.from(WATERMARK_BUCKET).list("admin", {
     limit: 1000,
     sortBy: { column: "name", order: "asc" },
@@ -192,12 +129,10 @@ serveWithErrorHandling("admin-upload-watermark", async (req: Request): Promise<R
   }
 
   try {
-    const authContext = await requireAdmin(req, jsonHeaders);
-    if ("error" in authContext) {
-      return authContext.error as Response;
-    }
-
-    const { supabaseAdmin, userId } = authContext;
+    const authResult = await requireAdminUser(req, corsHeaders);
+    if ("error" in authResult) return authResult.error;
+    const { supabaseAdmin, user } = authResult;
+    const userId = user.id;
     const formData = await req.formData().catch(() => null);
     if (!formData) {
       return new Response(JSON.stringify({ error: "Invalid form-data body" }), {
@@ -293,7 +228,7 @@ serveWithErrorHandling("admin-upload-watermark", async (req: Request): Promise<R
       });
     }
 
-    await cleanupLegacyWatermarks();
+    await cleanupLegacyWatermarks(supabaseAdmin);
 
     console.log("[admin-upload-watermark] success", {
       userId,

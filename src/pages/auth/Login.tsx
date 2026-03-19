@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, Music } from 'lucide-react';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
@@ -17,15 +18,53 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const captchaSiteKey = (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string | undefined)?.trim() ?? '';
+  const isCaptchaConfigured = captchaSiteKey.length > 0;
+  const captchaTokenRef = useRef<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaInstanceKey, setCaptchaInstanceKey] = useState(0);
+
+  const resetCaptcha = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    setCaptchaInstanceKey((current) => current + 1);
+  };
+
+  const handleCaptchaVerify = (token: string) => {
+    captchaTokenRef.current = token;
+    setCaptchaToken(token);
+  };
+
+  const handleCaptchaExpire = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+  };
+
+  const handleCaptchaError = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    toast.error(t('auth.captchaUnavailable'));
+  };
+
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!isCaptchaConfigured) {
+      toast.error(t('auth.captchaUnavailable'));
+      return;
+    }
+    if (!captchaTokenRef.current) {
+      toast.error(t('auth.captchaRequired'));
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const result = await signIn({ email, password });
+      const result = await signIn({ email, password, captchaToken: captchaTokenRef.current });
 
       if (result.user && !result.user.email_confirmed_at) {
         navigate(`/email-confirmation?email=${encodeURIComponent(email)}`);
@@ -69,6 +108,7 @@ export function LoginPage() {
       console.error('Login error:', error);
       setError(t('auth.invalidCredentials'));
     } finally {
+      resetCaptcha();
       setIsLoading(false);
     }
   };
@@ -132,11 +172,29 @@ export function LoginPage() {
               </Link>
             </div>
 
+            {!isCaptchaConfigured && (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                {t('auth.captchaUnavailable')}
+              </div>
+            )}
+            {isCaptchaConfigured && (
+              <div className="space-y-1">
+                <HCaptcha
+                  key={captchaInstanceKey}
+                  sitekey={captchaSiteKey}
+                  onVerify={handleCaptchaVerify}
+                  onExpire={handleCaptchaExpire}
+                  onError={handleCaptchaError}
+                />
+              </div>
+            )}
+
             <Button
               type="submit"
               className="w-full"
               size="lg"
               isLoading={isLoading}
+              disabled={!isCaptchaConfigured || !captchaToken}
             >
               {t('auth.loginButton')}
             </Button>

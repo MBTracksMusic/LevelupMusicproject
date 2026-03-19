@@ -11,10 +11,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.producer-checkout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-portal-session]
-verify_jwt = true
+verify_jwt = false
 
 [functions.admin-upload-watermark]
 verify_jwt = false
@@ -29,13 +29,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.ai-evaluate-battle]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-moderate-comment]
-verify_jwt = true
+verify_jwt = false
 
 [functions.broadcast-news]
-verify_jwt = true
+verify_jwt = false
 
 [functions.collect-pipeline-metrics]
 verify_jwt = false
@@ -44,16 +44,16 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.forum-assistant-dispatch]
-verify_jwt = true
+verify_jwt = false
 
 [functions.forum-assistant-worker]
-verify_jwt = true
+verify_jwt = false
 
 [functions.forum-create-post]
-verify_jwt = true
+verify_jwt = false
 
 [functions.forum-create-topic]
-verify_jwt = true
+verify_jwt = false
 
 [functions.get-contract-url]
 verify_jwt = false
@@ -62,7 +62,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.get-producer-price]
-verify_jwt = true
+verify_jwt = false
 
 [functions.pipeline-health]
 verify_jwt = false

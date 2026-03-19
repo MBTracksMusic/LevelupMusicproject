@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAuthUser } from "../_shared/auth.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
 const BASE_CORS_HEADERS = {
@@ -292,51 +293,9 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error("[create-checkout] Missing Supabase env vars");
-      return new Response(JSON.stringify({ error: "Server not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseAdmin = createClient(
-      supabaseUrl,
-      supabaseServiceRoleKey,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      },
-    );
-
-    const authHeader =
-      req.headers.get("authorization") ||
-      req.headers.get("Authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "").trim();
-
-    const { data: userData, error: userError } =
-      await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Invalid JWT" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const user = userData.user;
+    const authResult = await requireAuthUser(req, corsHeaders);
+    if ("error" in authResult) return authResult.error;
+    const { user, supabaseAdmin } = authResult;
 
     const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
       "check_rpc_rate_limit",

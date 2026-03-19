@@ -2,10 +2,44 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+];
+
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const ALLOWED_CORS_ORIGINS = (() => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const n = normalizeOrigin(token.trim());
+      if (n) allowed.add(n);
+    }
+  }
+  return allowed;
+})();
+
+const buildCorsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_ALLOWED_CORS_ORIGINS[0],
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Vary": "Origin",
+});
+
+const resolveRequestCorsOrigin = (req: Request): string | null => {
+  const raw = req.headers.get("origin");
+  if (!raw) return null;
+  const n = normalizeOrigin(raw);
+  return n && ALLOWED_CORS_ORIGINS.has(n) ? n : null;
 };
 
 interface EvaluateBattleRequest {
@@ -33,13 +67,6 @@ interface BattleSnapshot {
   created_at: string;
   producer1: ProducerSnapshot | null;
   producer2: ProducerSnapshot | null;
-}
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 }
 
 const asNonEmptyString = (value: unknown) => {
@@ -107,6 +134,13 @@ function evaluateBattleRuleBased(battle: BattleSnapshot) {
 }
 
 serveWithErrorHandling("ai-evaluate-battle", async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }

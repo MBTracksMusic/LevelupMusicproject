@@ -1,15 +1,44 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, apikey, x-forum-agent-secret",
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://beatelion.com",
+  "https://www.beatelion.com",
+  "http://localhost:5173",
+];
+
+const _normalizeOrigin = (value: string): string | null => {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
 };
 
-export const jsonHeaders = {
-  ...corsHeaders,
-  "Content-Type": "application/json",
+const ALLOWED_CORS_ORIGINS = (() => {
+  const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const n = _normalizeOrigin(token.trim());
+      if (n) allowed.add(n);
+    }
+  }
+  return allowed;
+})();
+
+export const buildCorsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": origin ?? DEFAULT_ALLOWED_CORS_ORIGINS[0],
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, apikey, x-forum-agent-secret",
+  "Vary": "Origin",
+});
+
+export const resolveRequestCorsOrigin = (req: Request): string | null => {
+  const raw = req.headers.get("origin");
+  if (!raw) return null;
+  const n = _normalizeOrigin(raw);
+  return n && ALLOWED_CORS_ORIGINS.has(n) ? n : null;
 };
 
 const DEFAULT_REVIEW_THRESHOLD = 0.45;
@@ -56,13 +85,6 @@ export type ModerationDecision = {
   isFlagged: boolean;
   rawResponse: Record<string, unknown>;
 };
-
-export function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: jsonHeaders,
-  });
-}
 
 export function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -122,9 +144,16 @@ export function createUserClient(authorizationHeader: string) {
 }
 
 export async function requireUser(req: Request) {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const errorResponse = (payload: unknown, status: number) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   const authorizationHeader = asNonEmptyString(req.headers.get("Authorization"));
   if (!authorizationHeader) {
-    return { error: jsonResponse({ error: "Unauthorized", code: "unauthorized" }, 401) };
+    return { error: errorResponse({ error: "Unauthorized", code: "unauthorized" }, 401) };
   }
 
   try {
@@ -137,7 +166,7 @@ export async function requireUser(req: Request) {
 
     if (authError || !user) {
       console.error("[forum-agents] requireUser auth failed", authError);
-      return { error: jsonResponse({ error: "Unauthorized", code: "unauthorized" }, 401) };
+      return { error: errorResponse({ error: "Unauthorized", code: "unauthorized" }, 401) };
     }
 
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -148,7 +177,7 @@ export async function requireUser(req: Request) {
 
     if (profileError || !profile) {
       console.error("[forum-agents] requireUser profile failed", profileError);
-      return { error: jsonResponse({ error: "Profile not found", code: "profile_not_found" }, 403) };
+      return { error: errorResponse({ error: "Profile not found", code: "profile_not_found" }, 403) };
     }
 
     return {
@@ -161,20 +190,27 @@ export async function requireUser(req: Request) {
     };
   } catch (error) {
     console.error("[forum-agents] requireUser unexpected error", error);
-    return { error: jsonResponse({ error: "Internal server error", code: "internal_error" }, 500) };
+    return { error: errorResponse({ error: "Internal server error", code: "internal_error" }, 500) };
   }
 }
 
 export function requireInternalAgent(req: Request) {
+  const corsHeaders = buildCorsHeaders(resolveRequestCorsOrigin(req));
+  const errorResponse = (payload: unknown, status: number) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
   const secret = Deno.env.get("FORUM_AGENT_SECRET");
   const provided = req.headers.get("x-forum-agent-secret");
 
   if (!secret) {
-    return { error: jsonResponse({ error: "Server not configured", code: "missing_forum_agent_secret" }, 500) };
+    return { error: errorResponse({ error: "Server not configured", code: "missing_forum_agent_secret" }, 500) };
   }
 
   if (!provided || provided !== secret) {
-    return { error: jsonResponse({ error: "Forbidden", code: "forbidden" }, 403) };
+    return { error: errorResponse({ error: "Forbidden", code: "forbidden" }, 403) };
   }
 
   return { ok: true as const };

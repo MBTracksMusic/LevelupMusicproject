@@ -1,3 +1,4 @@
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Music, ArrowLeft } from 'lucide-react';
@@ -26,6 +27,11 @@ export function RegisterPage() {
   const [cooldown, setCooldown] = useState(0);
   const submitLockRef = useRef(false);
   const lastSubmitAtRef = useRef(0);
+  const captchaSiteKey = (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string | undefined)?.trim() ?? '';
+  const isCaptchaConfigured = captchaSiteKey.length > 0;
+  const captchaTokenRef = useRef<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaInstanceKey, setCaptchaInstanceKey] = useState(0);
 
   // Simple client-side throttle to avoid hitting Supabase email rate limits repeatedly
   useEffect(() => {
@@ -33,6 +39,28 @@ export function RegisterPage() {
     const timer = setInterval(() => setCooldown((prev) => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [cooldown]);
+
+  const resetCaptcha = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    setCaptchaInstanceKey((current) => current + 1);
+  };
+
+  const handleCaptchaVerify = (token: string) => {
+    captchaTokenRef.current = token;
+    setCaptchaToken(token);
+  };
+
+  const handleCaptchaExpire = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+  };
+
+  const handleCaptchaError = () => {
+    captchaTokenRef.current = null;
+    setCaptchaToken(null);
+    toast.error(t('auth.captchaUnavailable'));
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -75,10 +103,18 @@ export function RegisterPage() {
     e.preventDefault();
     if (submitLockRef.current || isLoading) return;
     if (cooldown > 0) return;
+    if (!isCaptchaConfigured) {
+      toast.error(t('auth.captchaUnavailable'));
+      return;
+    }
 
     const now = Date.now();
     if (now - lastSubmitAtRef.current < 2000) return;
     if (!validate()) return;
+    if (!captchaTokenRef.current) {
+      toast.error(t('auth.captchaRequired'));
+      return;
+    }
 
     lastSubmitAtRef.current = now;
     submitLockRef.current = true;
@@ -89,6 +125,7 @@ export function RegisterPage() {
         email: formData.email.trim(),
         password: formData.password,
         username: formData.username.trim(),
+        captchaToken: captchaTokenRef.current,
       });
 
       const producerRedirectPath = '/tarifs';
@@ -125,6 +162,7 @@ export function RegisterPage() {
         toast.error(error.message || t('errors.generic'));
       }
     } finally {
+      resetCaptcha();
       setIsLoading(false);
       submitLockRef.current = false;
     }
@@ -247,12 +285,30 @@ export function RegisterPage() {
               {t('auth.termsAgree')}
             </p>
 
+            {!isCaptchaConfigured && (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                {t('auth.captchaUnavailable')}
+              </div>
+            )}
+
+            {isCaptchaConfigured && (
+              <div className="space-y-1">
+                <HCaptcha
+                  key={captchaInstanceKey}
+                  sitekey={captchaSiteKey}
+                  onVerify={handleCaptchaVerify}
+                  onExpire={handleCaptchaExpire}
+                  onError={handleCaptchaError}
+                />
+              </div>
+            )}
+
             <Button
               type="submit"
               className="w-full"
               size="lg"
               isLoading={isLoading}
-              disabled={isLoading || cooldown > 0}
+              disabled={isLoading || cooldown > 0 || !isCaptchaConfigured || !captchaToken}
             >
               {t('auth.registerButton')}
             </Button>
