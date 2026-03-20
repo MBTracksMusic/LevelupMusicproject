@@ -330,6 +330,41 @@ serveWithErrorHandling("producer-checkout", async (req: Request) => {
       });
     }
 
+    const { data: existingUserSubscription, error: existingUserSubscriptionError } = await supabaseAdmin
+      .from("user_subscriptions")
+      .select("subscription_status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (existingUserSubscriptionError) {
+      console.error("DB_ERROR", {
+        function: "producer-checkout",
+        stage: "check_conflicting_user_subscription",
+        message: existingUserSubscriptionError.message,
+      });
+      return new Response(JSON.stringify({ error: "Unable to verify current subscription exclusivity" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const hasActiveUserSubscription = Boolean(
+      existingUserSubscription &&
+      typeof existingUserSubscription.subscription_status === "string" &&
+      ACTIVE_SUBSCRIPTION_STATUSES.has(existingUserSubscription.subscription_status) &&
+      (
+        typeof existingUserSubscription.current_period_end !== "string" ||
+        Date.parse(existingUserSubscription.current_period_end) > Date.now()
+      )
+    );
+
+    if (hasActiveUserSubscription) {
+      return new Response(JSON.stringify({ error: "subscription_conflict_user_active" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body: CheckoutBody = await req.json();
     const parsedTier = body.tier === undefined ? "producteur" : normalizeTier(body.tier);
     const requestedTier = parsedTier;

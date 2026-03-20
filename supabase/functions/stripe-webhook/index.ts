@@ -44,6 +44,7 @@ const asNonEmptyString = (value: unknown): string | null => {
 
 type ProducerTier = "user" | "producteur" | "elite";
 type SubscriptionKind = "producer" | "user";
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 
 const asProducerTier = (value: unknown): ProducerTier | null => {
   if (value === "user" || value === "producteur" || value === "elite") return value;
@@ -68,6 +69,52 @@ const extractSubscriptionPriceIds = (subscription: Stripe.Subscription | null | 
     .filter((id): id is string => Boolean(id));
 
   return [...new Set(ids)];
+};
+
+const extractInvoicePriceIds = (invoice: Stripe.Invoice | null | undefined) => {
+  const ids = (invoice?.lines?.data || [])
+    .map((line) => {
+      const price = line?.pricing?.price_details?.price;
+      if (typeof price === "string") return asNonEmptyString(price);
+      if (price && typeof price === "object" && "id" in price) {
+        return asNonEmptyString((price as { id?: unknown }).id);
+      }
+
+      const plan = (line as Record<string, unknown> | null)?.plan;
+      if (plan && typeof plan === "object" && "id" in plan) {
+        return asNonEmptyString((plan as { id?: unknown }).id);
+      }
+
+      return null;
+    })
+    .filter((id): id is string => Boolean(id));
+
+  return [...new Set(ids)];
+};
+
+const resolveInvoiceSubscriptionMetadata = (invoice: Stripe.Invoice | null | undefined): Record<string, unknown> | null => {
+  if (!invoice) return null;
+
+  if (invoice.subscription_details && typeof invoice.subscription_details === "object") {
+    const record = invoice.subscription_details as Record<string, unknown>;
+    const metadata = record.metadata;
+    if (metadata && typeof metadata === "object") {
+      return metadata as Record<string, unknown>;
+    }
+  }
+
+  const parent = (invoice as Record<string, unknown>).parent;
+  if (parent && typeof parent === "object") {
+    const subscriptionDetails = (parent as Record<string, unknown>).subscription_details;
+    if (subscriptionDetails && typeof subscriptionDetails === "object") {
+      const metadata = (subscriptionDetails as Record<string, unknown>).metadata;
+      if (metadata && typeof metadata === "object") {
+        return metadata as Record<string, unknown>;
+      }
+    }
+  }
+
+  return null;
 };
 
 const resolveSubscriptionCurrentPeriodEnd = (
@@ -1361,9 +1408,24 @@ async function handlePaymentSucceeded(
   const subscriptionKind = await resolveInvoiceSubscriptionKind(supabase, {
     customerId,
     subscriptionId,
+    invoice,
+  });
+
+  console.log("[handlePaymentSucceeded] Subscription payment routing", {
+    invoiceId: invoice.id,
+    customerId,
+    subscriptionId,
+    subscriptionKind,
+    invoicePriceIds: extractInvoicePriceIds(invoice),
+    hasInvoiceSubscriptionMetadata: Boolean(resolveInvoiceSubscriptionMetadata(invoice)),
   });
 
   if (subscriptionKind === "user") {
+    console.log("[handlePaymentSucceeded] CREDITS ALLOCATION START", {
+      invoiceId: invoice.id,
+      customerId,
+      subscriptionId,
+    });
     await allocateMonthlyCredits(supabase, {
       customerId,
       subscriptionId,
@@ -1418,6 +1480,7 @@ async function allocateMonthlyCredits(
       invoiceId,
       customerId,
       subscriptionId,
+      invoiceLineCount: invoice.lines?.data?.length ?? 0,
     });
     return;
   }
@@ -1436,6 +1499,14 @@ async function allocateMonthlyCredits(
   });
 
   if (error) {
+    console.error("[allocateMonthlyCredits] Allocation failed", {
+      invoiceId,
+      subscriptionId,
+      customerId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
     throw new Error(`allocate_monthly_user_credits_for_invoice failed: ${error.message}`);
   }
 
@@ -1447,7 +1518,7 @@ async function allocateMonthlyCredits(
   };
 
   if (payload.status === "processed") {
-    console.log("[allocateMonthlyCredits] Allocation succeeded", {
+    console.log("[allocateMonthlyCredits] CREDITS ALLOCATION RESULT", {
       invoiceId,
       subscriptionId,
       allocatedCredits: payload.allocated_credits ?? 0,
@@ -1458,9 +1529,10 @@ async function allocateMonthlyCredits(
   }
 
   if (payload.status === "skipped_max_balance") {
-    console.log("[allocateMonthlyCredits] Allocation skipped at max balance", {
+    console.log("[allocateMonthlyCredits] CREDITS ALLOCATION RESULT", {
       invoiceId,
       subscriptionId,
+      status: payload.status,
       previousBalance: payload.previous_balance ?? null,
       newBalance: payload.new_balance ?? null,
     });
@@ -1468,17 +1540,19 @@ async function allocateMonthlyCredits(
   }
 
   if (payload.status === "duplicate") {
-    console.log("[allocateMonthlyCredits] Allocation ignored duplicate invoice", {
+    console.log("[allocateMonthlyCredits] CREDITS ALLOCATION RESULT", {
       invoiceId,
       subscriptionId,
+      status: payload.status,
     });
     return;
   }
 
   if (payload.status === "skipped_inactive_subscription") {
-    console.log("[allocateMonthlyCredits] Allocation skipped inactive subscription", {
+    console.log("[allocateMonthlyCredits] CREDITS ALLOCATION RESULT", {
       invoiceId,
       subscriptionId,
+      status: payload.status,
     });
     return;
   }
@@ -1510,6 +1584,7 @@ async function handlePaymentFailed(
   const subscriptionKind = await resolveInvoiceSubscriptionKind(supabase, {
     customerId,
     subscriptionId,
+    invoice,
   });
 
   const { data: profile } = await supabase
@@ -1535,9 +1610,15 @@ async function resolveInvoiceSubscriptionKind(
   params: {
     customerId: string;
     subscriptionId: string;
+    invoice?: Stripe.Invoice;
   },
 ) {
-  const { customerId, subscriptionId } = params;
+  const { customerId, subscriptionId, invoice } = params;
+
+  const explicitKind = asSubscriptionKind(resolveInvoiceSubscriptionMetadata(invoice)?.subscription_kind);
+  if (explicitKind) {
+    return explicitKind;
+  }
 
   const { data: userSubscription } = await supabase
     .from("user_subscriptions")
@@ -1562,6 +1643,14 @@ async function resolveInvoiceSubscriptionKind(
     .maybeSingle();
 
   if (userByCustomer) return "user" as SubscriptionKind;
+
+  const invoicePriceIds = extractInvoicePriceIds(invoice);
+  if (invoicePriceIds.some((priceId) => USER_SUBSCRIPTION_PRICE_IDS.has(priceId))) {
+    return "user" as SubscriptionKind;
+  }
+
+  const producerPlanMatch = await resolveProducerTierFromDbPlans(supabase, invoicePriceIds);
+  if (producerPlanMatch) return "producer" as SubscriptionKind;
 
   return "producer" as SubscriptionKind;
 }
@@ -1703,6 +1792,42 @@ async function upsertUserSubscription(
     throw new Error(`No user found for customer ${customerId} / subscription ${subscriptionId}`);
   }
 
+  const shouldBeActive = ACTIVE_SUBSCRIPTION_STATUSES.has(status);
+  if (shouldBeActive) {
+    const { data: conflictingProducerSubscription, error: conflictingProducerSubscriptionError } = await supabase
+      .from("producer_subscriptions")
+      .select("id, subscription_status, current_period_end, is_producer_active")
+      .eq("user_id", profile.id)
+      .maybeSingle();
+
+    if (conflictingProducerSubscriptionError) {
+      throw new Error(
+        `Failed to validate producer subscription exclusivity for user ${profile.id}: ${conflictingProducerSubscriptionError.message}`,
+      );
+    }
+
+    const hasConflictingProducerSubscription = Boolean(
+      conflictingProducerSubscription && (
+        conflictingProducerSubscription.is_producer_active === true ||
+        (
+          typeof conflictingProducerSubscription.subscription_status === "string" &&
+          ACTIVE_SUBSCRIPTION_STATUSES.has(conflictingProducerSubscription.subscription_status) &&
+          typeof conflictingProducerSubscription.current_period_end === "string" &&
+          Date.parse(conflictingProducerSubscription.current_period_end) > Date.now()
+        )
+      ),
+    );
+
+    if (hasConflictingProducerSubscription) {
+      console.error("[upsertUserSubscription] Conflicting active producer subscription detected", {
+        userId: profile.id,
+        subscriptionId,
+        conflictingProducerSubscriptionId: conflictingProducerSubscription?.id ?? null,
+      });
+      throw new Error("subscription_conflict_producer_active");
+    }
+  }
+
   const currentStartIso = normalizeStripeTimestampToIso(currentPeriodStart);
   let currentEndIso = normalizeStripeTimestampToIso(currentPeriodEnd);
 
@@ -1825,6 +1950,40 @@ async function upsertProducerSubscription(
 
   if (!profile) {
     throw new Error(`No user found for customer ${customerId} / subscription ${subscriptionId}`);
+  }
+
+  const shouldBeActive = ACTIVE_SUBSCRIPTION_STATUSES.has(status);
+  if (shouldBeActive) {
+    const { data: conflictingUserSubscription, error: conflictingUserSubscriptionError } = await supabase
+      .from("user_subscriptions")
+      .select("id, subscription_status, current_period_end")
+      .eq("user_id", profile.id)
+      .maybeSingle();
+
+    if (conflictingUserSubscriptionError) {
+      throw new Error(
+        `Failed to validate user subscription exclusivity for user ${profile.id}: ${conflictingUserSubscriptionError.message}`,
+      );
+    }
+
+    const hasConflictingUserSubscription = Boolean(
+      conflictingUserSubscription &&
+      typeof conflictingUserSubscription.subscription_status === "string" &&
+      ACTIVE_SUBSCRIPTION_STATUSES.has(conflictingUserSubscription.subscription_status) &&
+      (
+        typeof conflictingUserSubscription.current_period_end !== "string" ||
+        Date.parse(conflictingUserSubscription.current_period_end) > Date.now()
+      )
+    );
+
+    if (hasConflictingUserSubscription) {
+      console.error("[upsertProducerSubscription] Conflicting active user subscription detected", {
+        userId: profile.id,
+        subscriptionId,
+        conflictingUserSubscriptionId: conflictingUserSubscription?.id ?? null,
+      });
+      throw new Error("subscription_conflict_user_active");
+    }
   }
 
   let periodEndMs: number | undefined;

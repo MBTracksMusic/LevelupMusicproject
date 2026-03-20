@@ -379,7 +379,7 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     const licenseType = asNonEmptyString(rawLicenseType) || "standard";
 
     if (subscriptionKind === "user") {
-      if (!successUrl || !cancelUrl || !requestedPriceId) {
+      if (!successUrl || !cancelUrl) {
         return new Response(JSON.stringify({ error: "Missing required fields" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -403,7 +403,16 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         });
       }
 
-      if (!USER_SUBSCRIPTION_PRICE_IDS.has(requestedPriceId)) {
+      const resolvedUserPriceId = requestedPriceId ?? USER_SUBSCRIPTION_PRICE_IDS.values().next().value ?? null;
+
+      if (!resolvedUserPriceId) {
+        return new Response(JSON.stringify({ error: "missing_user_subscription_price_id" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (requestedPriceId && !USER_SUBSCRIPTION_PRICE_IDS.has(requestedPriceId)) {
         return new Response(JSON.stringify({ error: "invalid_user_subscription_price" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -434,6 +443,45 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         return new Response(JSON.stringify({
           error: "already_subscribed_user",
           code: "already_subscribed_user",
+        }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: existingProducerSubscription, error: existingProducerSubscriptionError } = await supabaseAdmin
+        .from("producer_subscriptions")
+        .select("subscription_status, current_period_end, is_producer_active")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existingProducerSubscriptionError) {
+        console.error("[create-checkout] Failed to load producer subscription while checking user plan eligibility", {
+          userId: user.id,
+          message: existingProducerSubscriptionError.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate subscription exclusivity" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const hasActiveProducerSubscription = Boolean(
+        existingProducerSubscription && (
+          existingProducerSubscription.is_producer_active === true ||
+          (
+            typeof existingProducerSubscription.subscription_status === "string" &&
+            ["active", "trialing"].includes(existingProducerSubscription.subscription_status) &&
+            typeof existingProducerSubscription.current_period_end === "string" &&
+            Date.parse(existingProducerSubscription.current_period_end) > Date.now()
+          )
+        ),
+      );
+
+      if (hasActiveProducerSubscription) {
+        return new Response(JSON.stringify({
+          error: "subscription_conflict_producer_active",
+          code: "subscription_conflict_producer_active",
         }), {
           status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -512,7 +560,7 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         mode: "subscription",
         success_url: validatedSuccessUrl,
         cancel_url: validatedCancelUrl,
-        "line_items[0][price]": requestedPriceId,
+        "line_items[0][price]": resolvedUserPriceId,
         "line_items[0][quantity]": "1",
         "client_reference_id": user.id,
         "metadata[user_id]": user.id,

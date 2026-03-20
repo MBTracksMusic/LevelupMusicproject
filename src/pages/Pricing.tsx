@@ -194,12 +194,6 @@ export function PricingPage() {
     ? toProducerTier((profile as unknown as ProfileWithTier | null)?.producer_tier)
     : null;
   const proPlan = plans.pro;
-  const userSubscriptionPriceId = (
-    import.meta.env.VITE_STRIPE_USER_SUBSCRIPTION_PRICE_ID ||
-    import.meta.env.VITE_STRIPE_USER_MONTHLY_PRICE_ID ||
-    import.meta.env.VITE_STRIPE_USER_PRICE_ID ||
-    ''
-  ).trim();
 
   useEffect(() => {
     const fetchPlan = async () => {
@@ -237,6 +231,10 @@ export function PricingPage() {
   const startCheckout = async (tier: CheckoutTier) => {
     if (!user) {
       navigate('/register', { state: { from: { pathname: '/pricing' } } });
+      return;
+    }
+    if (hasActiveUserSubscription) {
+      setError(t('pricing.userSubscriptionBlocksProducerPlan'));
       return;
     }
     if (!session?.access_token) {
@@ -285,6 +283,12 @@ export function PricingPage() {
         ) {
           throw new Error(t('pricing.alreadySubscribed'));
         }
+        if (
+          normalizedRawError.includes('subscription_conflict_user_active') ||
+          normalizedRawError.includes('already_subscribed_other_plan')
+        ) {
+          throw new Error(t('pricing.userSubscriptionBlocksProducerPlan'));
+        }
         if (normalizedRawError.includes('plan_unavailable')) {
           throw new Error(t('pricing.planUnavailable'));
         }
@@ -293,7 +297,7 @@ export function PricingPage() {
           normalizedRawError.includes('stripe price id not configured') ||
           normalizedRawError.includes('missing_price_id')
         ) {
-          throw new Error(t('pricing.missingPriceId'));
+          throw new Error(t('pricing.checkoutUnavailable'));
         }
         if (normalizedRawError.includes('invalid_tier')) {
           throw new Error(t('pricing.invalidOffer'));
@@ -322,6 +326,11 @@ export function PricingPage() {
       return;
     }
 
+    if (hasActiveProducerSubscription) {
+      setError(t('pricing.producerSubscriptionBlocksUserPlan'));
+      return;
+    }
+
     if (hasActiveUserSubscription || isUserCheckoutLoading) {
       return;
     }
@@ -331,18 +340,12 @@ export function PricingPage() {
       return;
     }
 
-    if (!userSubscriptionPriceId) {
-      setError(t('pricing.userMissingPriceId'));
-      return;
-    }
-
     setError(null);
     setIsUserCheckoutLoading(true);
 
     try {
       const data = await invokeProtectedEdgeFunction<{ url?: string }>('create-checkout', {
         body: {
-          price_id: userSubscriptionPriceId,
           subscription_kind: 'user',
           successUrl: `${window.location.origin}/pricing?user_subscription=success`,
           cancelUrl: `${window.location.origin}/pricing?user_subscription=cancel`,
@@ -350,7 +353,7 @@ export function PricingPage() {
       });
 
       if (!data?.url) {
-        throw new Error(t('pricing.missingCheckoutUrl'));
+        throw new Error(t('pricing.userCheckoutUnavailable'));
       }
 
       window.location.href = data.url;
@@ -363,12 +366,13 @@ export function PricingPage() {
         rawMessage.includes('already subscribed')
       ) {
         setError(t('pricing.userSubscriptionActive'));
+      } else if (rawMessage.includes('subscription_conflict_producer_active')) {
+        setError(t('pricing.producerSubscriptionBlocksUserPlan'));
       } else if (
         rawMessage.includes('missing_user_subscription_price_id') ||
-        rawMessage.includes('invalid_user_subscription_price') ||
-        rawMessage.includes('missing_price_id')
+        rawMessage.includes('invalid_user_subscription_price')
       ) {
-        setError(t('pricing.userMissingPriceId'));
+        setError(t('pricing.userCheckoutUnavailable'));
       } else if (
         rawMessage.includes('invalid jwt') ||
         rawMessage.includes('unauthorized') ||
@@ -384,6 +388,8 @@ export function PricingPage() {
   };
 
   const hasActiveProducerSubscription = Boolean(user && profile?.is_producer_active === true);
+  const isBlockedByUserSubscription = hasActiveUserSubscription && !hasActiveProducerSubscription;
+  const isBlockedByProducerSubscription = hasActiveProducerSubscription && !hasActiveUserSubscription;
   const isUserCurrent = Boolean(user) && !hasActiveProducerSubscription && !hasActiveUserSubscription;
   const isProCurrent = hasActiveProducerSubscription && currentTier === 'pro';
   const isEliteCurrent = hasActiveProducerSubscription && currentTier === 'elite';
@@ -495,8 +501,8 @@ export function PricingPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-          <Card className="relative h-full flex flex-col border border-emerald-700/60 bg-zinc-900 p-6">
+        <div className="grid items-stretch gap-6 md:grid-cols-3">
+          <Card className="flex h-full flex-col justify-between border border-emerald-700/60 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.userPlanTitle')}</h3>
@@ -521,10 +527,10 @@ export function PricingPage() {
               {starterPlanItems.map(renderPlanItem)}
             </ul>
 
-            <div className="mt-auto pt-6">
+            <div className="pt-6">
               {user ? (
                 <Button
-                  className="w-full"
+                  className="mt-auto w-full"
                   variant="secondary"
                   size="lg"
                   onClick={() => navigate('/dashboard')}
@@ -534,7 +540,7 @@ export function PricingPage() {
               ) : (
                 <Link to="/register">
                   <Button
-                    className="w-full"
+                    className="mt-auto w-full"
                     variant="secondary"
                     size="lg"
                   >
@@ -545,7 +551,7 @@ export function PricingPage() {
             </div>
           </Card>
 
-          <Card className="h-full flex flex-col border border-sky-500/60 bg-zinc-900 p-6 shadow-md shadow-sky-900/20 transition-transform duration-200 hover:scale-[1.02]">
+          <Card className="flex h-full flex-col justify-between border border-sky-500/60 bg-zinc-900 p-6 shadow-md shadow-sky-900/20 transition duration-200 hover:scale-[1.02]">
             <div className="mb-3 flex justify-center">
               <span className="rounded-full bg-gradient-to-r from-pink-500 to-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-md">
                 {t('pricing.userPremiumPopular')}
@@ -589,7 +595,13 @@ export function PricingPage() {
               </div>
             )}
 
-            <div className="mt-auto pt-6">
+            {isBlockedByProducerSubscription && (
+              <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                <p className="font-medium">{t('pricing.producerSubscriptionBlocksUserPlan')}</p>
+              </div>
+            )}
+
+            <div className="pt-6">
               {error && (
                 <div className="mb-4 text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">
                   {error}
@@ -597,11 +609,11 @@ export function PricingPage() {
               )}
 
               <Button
-                className="w-full"
+                className="mt-auto w-full"
                 variant="primary"
                 size="lg"
                 isLoading={isUserCheckoutLoading}
-                disabled={hasActiveUserSubscription || isUserSubscriptionLoading || isUserCheckoutLoading}
+                disabled={hasActiveUserSubscription || isBlockedByProducerSubscription || isUserSubscriptionLoading || isUserCheckoutLoading}
                 onClick={() => void startUserSubscriptionCheckout()}
               >
                 {hasActiveUserSubscription ? t('pricing.userSubscriptionActiveBadge') : t('pricing.subscribeUser')}
@@ -609,7 +621,7 @@ export function PricingPage() {
             </div>
           </Card>
 
-          <Card className="relative h-full flex flex-col border border-rose-500 bg-zinc-900 p-6">
+          <Card className="flex h-full flex-col justify-between border border-rose-500 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.proPlanTitle')}</h3>
@@ -638,7 +650,13 @@ export function PricingPage() {
               {t('pricing.proVisibilityHint')}
             </p>
 
-            <div className="mt-auto pt-6">
+            {isBlockedByUserSubscription && (
+              <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                <p className="font-medium">{t('pricing.userSubscriptionBlocksProducerPlan')}</p>
+              </div>
+            )}
+
+            <div className="pt-6">
               {error && (
                 <div className="mb-4 text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-3 py-2">
                   {error}
@@ -646,10 +664,10 @@ export function PricingPage() {
               )}
 
               <Button
-                className="w-full"
+                className="mt-auto w-full"
                 variant="primary"
                 size="lg"
-                disabled={hasActiveProducerSubscription || isPlanLoading || !isProCheckoutAvailable}
+                disabled={hasActiveProducerSubscription || isBlockedByUserSubscription || isPlanLoading || !isProCheckoutAvailable}
                 onClick={() => void startCheckout('pro')}
               >
                 {hasActiveProducerSubscription ? t('subscription.currentPlan') : t('pricing.becomeProducer')}
@@ -657,7 +675,7 @@ export function PricingPage() {
             </div>
           </Card>
 
-          <Card className="relative h-full flex flex-col border border-red-700/60 bg-zinc-900 p-6">
+          <Card className="flex h-full flex-col justify-between border border-red-700/60 bg-zinc-900 p-6">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.elitePlanTitle')}</h3>
@@ -672,9 +690,9 @@ export function PricingPage() {
               {isEliteCurrent && <Badge variant="danger">{t('subscription.currentPlan')}</Badge>}
             </div>
 
-            <div className="mt-auto pt-6">
+            <div className="pt-6">
               <Button
-                className="w-full"
+                className="mt-auto w-full"
                 variant="outline"
                 size="lg"
                 disabled={isEliteCurrent || isEliteSubmitting}
