@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { getAuthRedirectUrl } from './redirects';
 
 export interface SignUpData {
   email: string;
@@ -21,7 +22,7 @@ export async function signUp({ email, password, username, fullName, captchaToken
     email: cleanEmail,
     password,
     options: {
-      emailRedirectTo: `${window.location.origin}/email-confirmation`,
+      emailRedirectTo: getAuthRedirectUrl('/email-confirmation'),
       data: {
         username: cleanUsername,
         full_name: cleanFullName,
@@ -52,7 +53,7 @@ export async function signOut() {
 
 export async function resetPassword(email: string, captchaToken: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: getAuthRedirectUrl('/reset-password'),
     captchaToken,
   });
 

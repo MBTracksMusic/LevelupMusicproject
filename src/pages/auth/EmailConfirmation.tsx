@@ -5,6 +5,7 @@ import { Mail, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
+import { getAuthRedirectUrl } from '../../lib/auth/redirects';
 
 export default function EmailConfirmation() {
   const { t } = useTranslation();
@@ -116,6 +117,9 @@ export default function EmailConfirmation() {
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email,
+        options: {
+          emailRedirectTo: getAuthRedirectUrl('/email-confirmation'),
+        },
       });
 
       if (error) throw error;
