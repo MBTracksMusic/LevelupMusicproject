@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, BarChart3, Inbox, Newspaper, Settings2, Swords } from 'lucide-react';
+import { ArrowRight, BarChart3, CreditCard, Euro, Inbox, Newspaper, Receipt, Settings2, ShoppingCart, Swords } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import {
+  getAverageOrderValue,
+  getRevenueToday,
+  getTopProducts,
+  getTotalPurchases,
+  getTotalRevenue,
+  type TopProductAnalytics,
+} from '../../lib/analyticsService';
+import { getFunnelData } from '../../lib/funnelService';
 import { useTranslation } from '../../lib/i18n';
 import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 
@@ -52,6 +61,18 @@ export function AdminDashboardPage() {
   const [launchVideoUrlInput, setLaunchVideoUrlInput] = useState(() => launchVideoUrl ?? '');
   const [isSavingLaunchDate, setIsSavingLaunchDate] = useState(false);
   const [isSavingLaunchVideoUrl, setIsSavingLaunchVideoUrl] = useState(false);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalPurchases, setTotalPurchases] = useState(0);
+  const [averageOrderValue, setAverageOrderValue] = useState(0);
+  const [revenueToday, setRevenueToday] = useState(0);
+  const [topProducts, setTopProducts] = useState<TopProductAnalytics[]>([]);
+  const [isFunnelLoading, setIsFunnelLoading] = useState(true);
+  const [funnelError, setFunnelError] = useState<string | null>(null);
+  const [funnelViews, setFunnelViews] = useState(0);
+  const [funnelCheckouts, setFunnelCheckouts] = useState(0);
+  const [funnelPurchases, setFunnelPurchases] = useState(0);
 
   useEffect(() => {
     if (!isSavingLaunchDate) {
@@ -64,6 +85,118 @@ export function AdminDashboardPage() {
       setLaunchVideoUrlInput(launchVideoUrl ?? '');
     }
   }, [isSavingLaunchVideoUrl, launchVideoUrl]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAnalytics = async () => {
+      setIsAnalyticsLoading(true);
+      setAnalyticsError(null);
+
+      try {
+        const [
+          nextTotalRevenue,
+          nextTotalPurchases,
+          nextAverageOrderValue,
+          nextRevenueToday,
+          nextTopProducts,
+        ] = await Promise.all([
+          getTotalRevenue(),
+          getTotalPurchases(),
+          getAverageOrderValue(),
+          getRevenueToday(),
+          getTopProducts(),
+        ]);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setTotalRevenue(nextTotalRevenue);
+        setTotalPurchases(nextTotalPurchases);
+        setAverageOrderValue(nextAverageOrderValue);
+        setRevenueToday(nextRevenueToday);
+        setTopProducts(nextTopProducts);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        setAnalyticsError("Impossible de charger les analytics business.");
+      } finally {
+        if (!isCancelled) {
+          setIsAnalyticsLoading(false);
+        }
+      }
+    };
+
+    void loadAnalytics();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadFunnel = async () => {
+      setIsFunnelLoading(true);
+      setFunnelError(null);
+
+      try {
+        const funnel = await getFunnelData();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setFunnelViews(funnel.views);
+        setFunnelCheckouts(funnel.checkouts);
+        setFunnelPurchases(funnel.purchases);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        setFunnelError('Impossible de charger le funnel de conversion.');
+      } finally {
+        if (!isCancelled) {
+          setIsFunnelLoading(false);
+        }
+      }
+    };
+
+    void loadFunnel();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const formatCurrency = (value: number) => new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+  }).format(value);
+
+  const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
+  const getSafeConversion = (from: number, to: number) => (from > 0 ? to / from : 0);
+  const getDropOffClassName = (rate: number) => {
+    if (rate >= 0.35) {
+      return 'text-emerald-300';
+    }
+
+    if (rate >= 0.15) {
+      return 'text-amber-300';
+    }
+
+    return 'text-rose-300';
+  };
+
+  const viewToCheckoutRate = getSafeConversion(funnelViews, funnelCheckouts);
+  const checkoutToPurchaseRate = getSafeConversion(funnelCheckouts, funnelPurchases);
+  const viewToPurchaseRate = getSafeConversion(funnelViews, funnelPurchases);
 
   const handleMaintenanceToggle = async () => {
     setIsSavingMaintenance(true);
@@ -136,6 +269,192 @@ export function AdminDashboardPage() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="border-zinc-800">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Chiffre d&apos;affaires</p>
+              <p className="mt-3 text-3xl font-semibold text-white">
+                {isAnalyticsLoading ? '...' : formatCurrency(totalRevenue)}
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">Revenu total confirmé</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-300">
+              <Euro className="h-5 w-5" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Achats</p>
+              <p className="mt-3 text-3xl font-semibold text-white">
+                {isAnalyticsLoading ? '...' : totalPurchases}
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">Nombre total de commandes</p>
+            </div>
+            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-300">
+              <Receipt className="h-5 w-5" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Panier moyen</p>
+              <p className="mt-3 text-3xl font-semibold text-white">
+                {isAnalyticsLoading ? '...' : formatCurrency(averageOrderValue)}
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">Valeur moyenne par achat</p>
+            </div>
+            <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 text-orange-300">
+              <CreditCard className="h-5 w-5" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Aujourd&apos;hui</p>
+              <p className="mt-3 text-3xl font-semibold text-white">
+                {isAnalyticsLoading ? '...' : formatCurrency(revenueToday)}
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">Revenu généré ce jour</p>
+            </div>
+            <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 p-3 text-sky-300">
+              <BarChart3 className="h-5 w-5" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2 border-zinc-800">
+        <CardHeader>
+          <CardTitle>Top produits</CardTitle>
+          <CardDescription>
+            Les 5 produits qui génèrent le plus de chiffre d&apos;affaires.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {analyticsError ? (
+            <p className="text-sm text-red-400">{analyticsError}</p>
+          ) : isAnalyticsLoading ? (
+            <p className="text-sm text-zinc-400">Chargement des analytics business...</p>
+          ) : topProducts.length === 0 ? (
+            <p className="text-sm text-zinc-400">Aucune vente confirmée pour le moment.</p>
+          ) : (
+            <div className="space-y-3">
+              {topProducts.map((product, index) => (
+                <div
+                  key={product.productId}
+                  className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm text-zinc-500">#{index + 1}</p>
+                    <p className="truncate text-base font-medium text-white">{product.productName}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-sm">
+                    <span className="text-zinc-400">{product.salesCount} ventes</span>
+                    <span className="font-medium text-emerald-300">{formatCurrency(product.revenue)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShoppingCart className="h-5 w-5 text-rose-400" />
+            Funnel de conversion
+          </CardTitle>
+          <CardDescription>
+            Vue d&apos;ensemble du parcours produit, du trafic jusqu&apos;à l&apos;achat confirmé.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {funnelError ? (
+            <p className="text-sm text-red-400">{funnelError}</p>
+          ) : isFunnelLoading ? (
+            <p className="text-sm text-zinc-400">Chargement du funnel...</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Views</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{funnelViews}</p>
+                  <p className="mt-2 text-sm text-zinc-400">Vues produit estimées</p>
+                </div>
+
+                <div className="hidden items-center justify-center lg:flex">
+                  <div className="rounded-full border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm font-medium text-zinc-300">
+                    {formatPercent(viewToCheckoutRate)}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Checkout</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{funnelCheckouts}</p>
+                  <p className={`mt-2 text-sm ${getDropOffClassName(viewToCheckoutRate)}`}>
+                    Conversion vues → checkout
+                  </p>
+                </div>
+
+                <div className="hidden items-center justify-center lg:flex">
+                  <div className="rounded-full border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm font-medium text-zinc-300">
+                    {formatPercent(checkoutToPurchaseRate)}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Purchases</p>
+                  <p className="mt-3 text-3xl font-semibold text-white">{funnelPurchases}</p>
+                  <p className={`mt-2 text-sm ${getDropOffClassName(checkoutToPurchaseRate)}`}>
+                    Conversion checkout → achat
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Views → Checkout</p>
+                  <p className={`mt-2 text-lg font-semibold ${getDropOffClassName(viewToCheckoutRate)}`}>
+                    {formatPercent(viewToCheckoutRate)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Checkout → Purchase</p>
+                  <p className={`mt-2 text-lg font-semibold ${getDropOffClassName(checkoutToPurchaseRate)}`}>
+                    {formatPercent(checkoutToPurchaseRate)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Views → Purchase</p>
+                  <p className={`mt-2 text-lg font-semibold ${getDropOffClassName(viewToPurchaseRate)}`}>
+                    {formatPercent(viewToPurchaseRate)}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-500">
+                Les achats proviennent de Supabase. Les vues et checkouts utilisent un fallback structuré en attendant le branchement GA4 côté reporting admin.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="md:col-span-2 border-zinc-800">
         <CardHeader className="mb-0">
           <div className="flex items-start justify-between gap-4">
