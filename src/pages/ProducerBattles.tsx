@@ -65,6 +65,9 @@ interface MatchmakingOpponent {
   battle_losses: number;
   battle_draws: number;
   elo_diff: number;
+  score?: number | null;
+  reason?: string | null;
+  source?: 'ai' | 'fallback_sql';
 }
 
 interface OfficialBattleCampaign {
@@ -355,6 +358,23 @@ export function ProducerBattlesPage() {
 
     setIsMatchmakingLoading(true);
 
+    const { data: suggestionData, error: suggestionError } = await supabase.functions.invoke(
+      'generate-battle-suggestions',
+      {
+        body: { limit: 5 },
+      }
+    );
+
+    if (!suggestionError && Array.isArray((suggestionData as { suggestions?: unknown[] } | null)?.suggestions)) {
+      setMatchmakingOpponents((((suggestionData as { suggestions?: MatchmakingOpponent[] }).suggestions) ?? []));
+      setIsMatchmakingLoading(false);
+      return;
+    }
+
+    if (suggestionError) {
+      console.error('Error loading AI battle suggestions, falling back to SQL matchmaking:', suggestionError);
+    }
+
     const { data, error: matchmakingError } = await supabase.rpc('get_matchmaking_opponents' as any);
     if (matchmakingError) {
       console.error('Error loading matchmaking opponents:', matchmakingError);
@@ -363,7 +383,14 @@ export function ProducerBattlesPage() {
       return;
     }
 
-    setMatchmakingOpponents((data as MatchmakingOpponent[] | null) ?? []);
+    setMatchmakingOpponents(
+      (((data as MatchmakingOpponent[] | null) ?? [])).map((row) => ({
+        ...row,
+        source: 'fallback_sql',
+        score: null,
+        reason: null,
+      }))
+    );
     setIsMatchmakingLoading(false);
   }, [profile?.id]);
 
@@ -975,6 +1002,9 @@ export function ProducerBattlesPage() {
                           diff: opponent.elo_diff,
                         })}
                       </p>
+                      {opponent.reason && (
+                        <p className="mt-1 text-xs text-zinc-500">{opponent.reason}</p>
+                      )}
                     </div>
                     <Button
                       size="sm"

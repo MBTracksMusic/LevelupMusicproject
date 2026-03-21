@@ -46,6 +46,9 @@ verify_jwt = false
 [functions.ai-moderate-comment]
 verify_jwt = false
 
+[functions.generate-battle-suggestions]
+verify_jwt = false
+
 [functions.broadcast-news]
 verify_jwt = false
 
