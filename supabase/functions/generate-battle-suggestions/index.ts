@@ -232,14 +232,19 @@ async function callOpenAiSuggestions(params: {
 }) {
   const apiKey = asNonEmptyString(Deno.env.get("OPENAI_API_KEY"));
   if (!apiKey) {
-    return null;
+    return {
+      ok: false as const,
+      stage: "missing_api_key",
+      message: "OPENAI_API_KEY is not configured",
+    };
   }
 
   const model = asNonEmptyString(Deno.env.get("BATTLE_SUGGESTIONS_MODEL")) ?? DEFAULT_MODEL;
 
   const systemPrompt = [
     "You rank fair and engaging music battle opponents for a producer platform.",
-    "Return JSON only.",
+    "Return a single JSON object only.",
+    "The JSON object must contain a top-level 'suggestions' array.",
     "Prioritize fairness, compatible style, engagement likelihood, and battle quality.",
     "Never invent opponents outside the provided list.",
     "Keep reasons short, concrete, and based on the provided data only.",
@@ -309,6 +314,11 @@ async function callOpenAiSuggestions(params: {
             content: [{ type: "input_text", text: userPrompt }],
           },
         ],
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
         max_output_tokens: 900,
       }),
     });
@@ -316,24 +326,41 @@ async function callOpenAiSuggestions(params: {
     if (!response.ok) {
       const body = await response.text();
       console.error("[generate-battle-suggestions] OpenAI response API failed", response.status, body);
-      return null;
+      return {
+        ok: false as const,
+        stage: "http_error",
+        message: `OpenAI API returned ${response.status}`,
+        status: response.status,
+        body,
+      };
     }
 
     const payload = await response.json() as Record<string, unknown>;
-    const parsed = parseJsonObject(extractResponseText(payload));
+    const outputText = extractResponseText(payload);
+    const parsed = parseJsonObject(outputText);
     if (!parsed) {
       console.error("[generate-battle-suggestions] OpenAI payload was not valid JSON");
-      return null;
+      return {
+        ok: false as const,
+        stage: "parse_error",
+        message: "OpenAI payload was not valid JSON",
+        outputText,
+      };
     }
 
     return {
+      ok: true as const,
       model,
       payload,
       parsed,
     };
   } catch (error) {
     console.error("[generate-battle-suggestions] OpenAI request failed", error);
-    return null;
+    return {
+      ok: false as const,
+      stage: "request_failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -526,7 +553,11 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
   let source: "ai" | "fallback_sql" = "fallback_sql";
   let model = "fallback-sql-matchmaking-v1";
 
-  if (aiResult) {
+  const aiStatus = aiResult.ok
+    ? { attempted: true, used: false, stage: "success", message: null }
+    : { attempted: true, used: false, stage: aiResult.stage, message: aiResult.message };
+
+  if (aiResult.ok) {
     const rawSuggestions = Array.isArray(aiResult.parsed.suggestions)
       ? aiResult.parsed.suggestions as Array<Record<string, unknown>>
       : [];
@@ -552,6 +583,10 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
       suggestions = parsedSuggestions.slice(0, limit);
       source = "ai";
       model = aiResult.model;
+      aiStatus.used = true;
+    } else {
+      aiStatus.stage = "empty_parsed_suggestions";
+      aiStatus.message = "OpenAI returned no usable opponent ids";
     }
   }
 
@@ -570,6 +605,7 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
     request_id: requestId,
     source,
     model,
+    ai_status: aiStatus,
     suggestions,
   });
 });
