@@ -8,6 +8,7 @@ import { captureException, type RequestContext } from "../_shared/sentry.ts";
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
+const GA4_COLLECT_ENDPOINT = "https://www.google-analytics.com/mp/collect";
 
 class WebhookError extends Error {
   status: number;
@@ -52,6 +53,134 @@ const asProducerTier = (value: unknown): ProducerTier | null => {
   if (value === "pro") return "producteur";
   return null;
 };
+
+const centsToCurrencyAmount = (amountInMinorUnits: number | null | undefined) => {
+  if (typeof amountInMinorUnits !== "number" || !Number.isFinite(amountInMinorUnits)) {
+    return null;
+  }
+
+  return Number((amountInMinorUnits / 100).toFixed(2));
+};
+
+type Ga4PurchaseItem = {
+  item_id: string;
+  item_name: string;
+  price: number;
+};
+
+type Ga4PurchasePayload = {
+  transactionId: string;
+  stripeEventId: string;
+  value: number;
+  currency: string;
+  userId: string | null;
+  customerEmail: string | null;
+  item: Ga4PurchaseItem;
+};
+
+async function claimGa4PurchaseTracking(
+  supabase: ReturnType<typeof createClient>,
+  transactionId: string,
+  stripeEventId: string,
+  eventName: string,
+) {
+  const { error } = await supabase
+    .from("ga4_tracked_purchases")
+    .insert({
+      transaction_id: transactionId,
+      stripe_event_id: stripeEventId,
+      event_name: eventName,
+    });
+
+  if (!error) {
+    return true;
+  }
+
+  if (error.code === "23505") {
+    return false;
+  }
+
+  throw new Error(`Failed to claim GA4 purchase tracking: ${error.message}`);
+}
+
+async function sendPurchaseToGA4(payload: Ga4PurchasePayload) {
+  const measurementId = asNonEmptyString(Deno.env.get("GA4_MEASUREMENT_ID"));
+  const apiSecret = asNonEmptyString(Deno.env.get("GA4_API_SECRET"));
+
+  if (!measurementId || !apiSecret) {
+    return;
+  }
+
+  const clientId = payload.userId ? `server-${payload.userId}` : crypto.randomUUID();
+  const response = await fetch(
+    `${GA4_COLLECT_ENDPOINT}?measurement_id=${encodeURIComponent(measurementId)}&api_secret=${encodeURIComponent(apiSecret)}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        user_id: payload.userId ?? undefined,
+        events: [
+          {
+            name: "purchase",
+            params: {
+              value: payload.value,
+              currency: payload.currency,
+              transaction_id: payload.transactionId,
+              customer_email: payload.customerEmail ?? undefined,
+              items: [
+                {
+                  item_id: payload.item.item_id,
+                  item_name: payload.item.item_name,
+                  price: payload.item.price,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`GA4 Measurement Protocol request failed with status ${response.status}`);
+  }
+}
+
+async function trackPurchaseViaGa4(
+  supabase: ReturnType<typeof createClient>,
+  payload: Ga4PurchasePayload,
+) {
+  const measurementId = asNonEmptyString(Deno.env.get("GA4_MEASUREMENT_ID"));
+  const apiSecret = asNonEmptyString(Deno.env.get("GA4_API_SECRET"));
+
+  if (!measurementId || !apiSecret) {
+    return;
+  }
+
+  const claimed = await claimGa4PurchaseTracking(
+    supabase,
+    payload.transactionId,
+    payload.stripeEventId,
+    "purchase",
+  );
+
+  if (!claimed) {
+    return;
+  }
+
+  try {
+    await sendPurchaseToGA4(payload);
+  } catch (error) {
+    await supabase
+      .from("ga4_tracked_purchases")
+      .delete()
+      .eq("transaction_id", payload.transactionId);
+    throw error;
+  }
+}
 
 const asSubscriptionKind = (value: unknown): SubscriptionKind | null => {
   if (value === "producer") return "producer";
@@ -1014,7 +1143,7 @@ serveWithErrorHandling("stripe-webhook", async (req: Request, context: RequestCo
           if (!isInvoice(event.data.object)) {
             throw new WebhookError(`Invalid payload for ${event.type}`, 400, true);
           }
-          await handlePaymentSucceeded(supabase, stripe, event.data.object);
+          await handlePaymentSucceeded(supabase, stripe, event.data.object, event.id);
           break;
         }
         case "invoice.payment_failed": {
@@ -1281,6 +1410,43 @@ async function handleCheckoutCompleted(
     await markContractGenerationJobFailure(supabase, purchaseId, composedReason);
     await triggerContractJobWorker(supabase, purchaseId);
   }
+
+  try {
+    const currency = asNonEmptyString(session.currency)?.toUpperCase() ?? "EUR";
+    const value = centsToCurrencyAmount(amountTotal);
+
+    if (value !== null) {
+      const productTitle = asNonEmptyString(metadata.product_name)
+        ?? (
+          await supabase
+            .from("products")
+            .select("title")
+            .eq("id", productId)
+            .maybeSingle()
+        ).data?.title
+        ?? "Product purchase";
+
+      await trackPurchaseViaGa4(supabase, {
+        transactionId: sessionId,
+        stripeEventId: eventId,
+        value,
+        currency,
+        userId,
+        customerEmail: asNonEmptyString(session.customer_details?.email) ?? asNonEmptyString(session.customer_email),
+        item: {
+          item_id: productId,
+          item_name: productTitle,
+          price: value,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("[stripe-webhook] GA4 purchase tracking failed after checkout.session.completed", {
+      eventId,
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function handleSubscriptionUpdate(
@@ -1385,6 +1551,7 @@ async function handlePaymentSucceeded(
   supabase: ReturnType<typeof createClient>,
   stripe: Stripe,
   invoice: Stripe.Invoice,
+  eventId: string,
 ) {
   const customerId = asNonEmptyString(
     typeof invoice.customer === "string"
@@ -1484,6 +1651,44 @@ async function handlePaymentSucceeded(
     });
   } else {
     console.warn("[handlePaymentSucceeded] No profile found for customer", { customerId });
+  }
+
+  try {
+    const invoiceId = asNonEmptyString(invoice.id);
+    const value = centsToCurrencyAmount(invoice.amount_paid);
+
+    if (!invoiceId || value === null) {
+      return;
+    }
+
+    const invoiceMetadata = resolveInvoiceSubscriptionMetadata(invoice) ?? {};
+    const productId = asNonEmptyString(invoiceMetadata.product_id)
+      ?? extractInvoicePriceIds(invoice)[0]
+      ?? subscriptionId;
+    const productName = asNonEmptyString(invoiceMetadata.product_name)
+      ?? asNonEmptyString(invoice.lines?.data?.[0]?.description)
+      ?? asNonEmptyString(invoiceMetadata.plan_code)
+      ?? "Subscription payment";
+
+    await trackPurchaseViaGa4(supabase, {
+      transactionId: invoiceId,
+      stripeEventId: eventId,
+      value,
+      currency: asNonEmptyString(invoice.currency)?.toUpperCase() ?? "EUR",
+      userId: profile?.id ?? asNonEmptyString(invoiceMetadata.user_id),
+      customerEmail: asNonEmptyString(invoice.customer_email),
+      item: {
+        item_id: productId,
+        item_name: productName,
+        price: value,
+      },
+    });
+  } catch (error) {
+    console.error("[stripe-webhook] GA4 purchase tracking failed after invoice payment success", {
+      eventId,
+      invoiceId: invoice.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

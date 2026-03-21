@@ -55,8 +55,9 @@ import { AdminMessagesPage } from './pages/admin/AdminMessages';
 import { AdminMessageDetailPage } from './pages/admin/AdminMessageDetail';
 import { AdminReputationPage } from './pages/admin/AdminReputation';
 import { LogoLoader } from './components/ui/LogoLoader';
-import { MaintenanceScreen } from './components/system/MaintenanceScreen';
 import { AnalyticsTracker } from './components/system/AnalyticsTracker';
+import { CookieBanner } from './components/system/CookieBanner';
+import { MaintenanceScreen } from './components/system/MaintenanceScreen';
 import { MaintenanceModeProvider } from './lib/supabase/MaintenanceModeContext';
 import { useMaintenanceMode } from './lib/supabase/useMaintenanceMode';
 
@@ -298,6 +299,7 @@ function App() {
           launchVideoUrl={launchVideoUrl}
           isMaintenanceLoading={isMaintenanceLoading}
         />
+        <CookieBanner />
         <Toaster
           position="bottom-right"
           toastOptions={{

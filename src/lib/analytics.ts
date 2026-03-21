@@ -1,19 +1,34 @@
 const MEASUREMENT_ID = (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined)?.trim() ?? '';
 const ALLOWED_HOSTNAMES = new Set(['beatelion.com', 'www.beatelion.com']);
 const ANALYTICS_CONSENT_KEY = 'beatelion_analytics_consent';
+const DEFAULT_CONSENT = {
+  analytics_storage: 'denied',
+} as const;
+const GRANTED_CONSENT = {
+  analytics_storage: 'granted',
+} as const;
 
 type GtagParams = Record<string, string | number | boolean | null | undefined>;
-type GtagCommand = 'js' | 'config' | 'event' | 'consent';
+type ConsentMode = 'default' | 'update';
+type ConsentParams = {
+  analytics_storage: 'denied' | 'granted';
+};
 
 declare global {
   interface Window {
     dataLayer?: unknown[];
-    gtag?: (command: GtagCommand, target: string | Date, params?: GtagParams) => void;
+    gtag?: {
+      (command: 'js', target: Date): void;
+      (command: 'config', target: string, params?: GtagParams): void;
+      (command: 'event', target: string, params?: GtagParams): void;
+      (command: 'consent', target: ConsentMode, params: ConsentParams): void;
+    };
   }
 }
 
 let analyticsInitialized = false;
 let analyticsInitPromise: Promise<void> | null = null;
+let consentDefaultApplied = false;
 
 function hasAnalyticsConsent() {
   try {
@@ -41,8 +56,19 @@ function ensureGtagRuntime() {
   if (typeof window.gtag !== 'function') {
     window.gtag = function gtag(...args: unknown[]) {
       window.dataLayer?.push(args);
-    };
+    } as Window['gtag'];
   }
+}
+
+function applyDefaultConsent() {
+  ensureGtagRuntime();
+
+  if (consentDefaultApplied) {
+    return;
+  }
+
+  window.gtag?.('consent', 'default', DEFAULT_CONSENT);
+  consentDefaultApplied = true;
 }
 
 function loadGtagScript() {
@@ -76,6 +102,10 @@ async function withAnalyticsReady(callback: () => void) {
 }
 
 export async function initAnalytics() {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    applyDefaultConsent();
+  }
+
   if (!canRunAnalytics()) {
     return;
   }
@@ -87,7 +117,7 @@ export async function initAnalytics() {
   if (!analyticsInitPromise) {
     analyticsInitPromise = loadGtagScript()
       .then(() => {
-        ensureGtagRuntime();
+        applyDefaultConsent();
         window.gtag?.('js', new Date());
         window.gtag?.('config', MEASUREMENT_ID, {
           send_page_view: false,
@@ -95,7 +125,10 @@ export async function initAnalytics() {
         });
         analyticsInitialized = true;
       })
-      .catch(() => {
+      .catch((err) => {
+        if (import.meta.env.DEV) {
+          console.error('GA init failed', err);
+        }
         analyticsInitialized = false;
       })
       .finally(() => {
@@ -122,9 +155,42 @@ export function trackEvent(name: string, params: GtagParams = {}) {
   });
 }
 
+export async function grantAnalyticsConsent() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(ANALYTICS_CONSENT_KEY, 'granted');
+  } catch {
+    return;
+  }
+
+  applyDefaultConsent();
+  window.gtag?.('consent', 'update', GRANTED_CONSENT);
+  await initAnalytics();
+}
+
+export function revokeAnalyticsConsent() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(ANALYTICS_CONSENT_KEY);
+  } catch {
+    return;
+  }
+
+  applyDefaultConsent();
+  window.gtag?.('consent', 'update', DEFAULT_CONSENT);
+}
+
 export function useAnalytics() {
   return {
     initAnalytics,
+    grantAnalyticsConsent,
+    revokeAnalyticsConsent,
     trackEvent,
     trackPage,
   };
