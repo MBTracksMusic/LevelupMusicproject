@@ -105,3 +105,6 @@ verify_jwt = false
 
 [functions.replay-events]
 verify_jwt = false
+
+[functions.send-waitlist-campaign]
+verify_jwt = false
