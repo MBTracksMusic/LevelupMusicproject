@@ -3,23 +3,26 @@ import { resolveCorsHeaders } from "../_shared/cors.ts";
 import { requireAdminUser } from "../_shared/auth.ts";
 import {
   buildStandardEmailShell,
-  getResendApiKey,
-  getResendFromEmail,
+  classifySendError,
+  getEmailConfig,
+  normalizeCampaignKey,
+  normalizeEmailForKey,
+  resolveMarketingSendWindow,
   sendEmailWithResend,
 } from "../_shared/email.ts";
 
 type CampaignResponse =
-  | { success: true; sent?: number }
+  | { success: true; sent?: number; warmupLimited?: boolean; attempted?: number }
   | {
       success: false;
-      error: "not_admin" | "missing_resend_key" | "db_error" | "unexpected_error";
+      error: "not_admin" | "missing_resend_key" | "db_error" | "unexpected_error" | "marketing_disabled";
     };
 
 type WaitlistRow = {
   email: string;
 };
 
-const CAMPAIGN_ID = "waitlist_launch";
+const CAMPAIGN_ID = normalizeCampaignKey("waitlist_launch");
 const CAMPAIGN_SUBJECT = "🚀 Beatelion est en ligne !";
 const MAX_EMAILS = 200;
 
@@ -46,6 +49,28 @@ const delay = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
+
+const updateDeliveryState = async (
+  supabaseAdmin: any,
+  dedupeKey: string,
+  patch: Record<string, unknown>,
+) => {
+  const { error } = await supabaseAdmin
+    .from("notification_email_log")
+    .update({
+      ...patch,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("dedupe_key", dedupeKey);
+
+  if (error) {
+    console.error("[send-waitlist-campaign] delivery state update failed", {
+      dedupeKey,
+      error: error.message,
+      patch,
+    });
+  }
+};
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const corsHeaders = resolveCorsHeaders(req.headers.get("origin")) as Record<string, string>;
@@ -85,9 +110,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ success: false, error: "db_error" }, 200, corsHeaders);
     }
 
+    let emailConfig;
     try {
-      getResendApiKey();
-      getResendFromEmail();
+      emailConfig = getEmailConfig();
     } catch {
       return jsonResponse({ success: false, error: "missing_resend_key" }, 200, corsHeaders);
     }
@@ -98,27 +123,37 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ success: true, sent: 0 }, 200, corsHeaders);
     }
 
+    if (!emailConfig.marketingSendsEnabled) {
+      return jsonResponse({ success: false, error: "marketing_disabled" }, 200, corsHeaders);
+    }
+
+    const marketingWindow = resolveMarketingSendWindow(users.length, "send-waitlist-campaign");
+    const recipients = users.slice(0, marketingWindow.allowedCount);
+
     let sent = 0;
 
-    for (const entry of users) {
+    for (const entry of recipients) {
       const email = asNonEmptyString(entry.email);
       if (!email) {
         continue;
       }
-      const dedupeKey = `${CAMPAIGN_ID}:${email}`;
-      const { data: claimData, error: claimError } = await (supabaseAdmin as any).rpc("claim_notification_email_send", {
+      const normalizedEmail = normalizeEmailForKey(email);
+      const dedupeKey = `waitlist_campaign/${CAMPAIGN_ID}/${normalizedEmail}`;
+      const { data: claimData, error: claimError } = await (supabaseAdmin as any).rpc("claim_notification_email_delivery", {
         p_category: "waitlist_campaign",
-        p_recipient_email: email,
+        p_recipient_email: normalizedEmail,
         p_dedupe_key: dedupeKey,
         p_rate_limit_seconds: 365 * 24 * 60 * 60,
         p_metadata: {
           campaign_id: CAMPAIGN_ID,
-          recipient_email: email,
+          recipient_email: normalizedEmail,
+          subject: CAMPAIGN_SUBJECT,
+          sender: emailConfig.resendFromEmail,
         },
       });
 
       if (claimError) {
-        console.error("[send-waitlist-campaign] claim_notification_email_send failed", {
+        console.error("[send-waitlist-campaign] claim_notification_email_delivery failed", {
           email,
           error: claimError.message,
         });
@@ -128,13 +163,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const claim = claimData as { allowed?: unknown; reason?: unknown } | null;
       if (claim?.allowed !== true) {
         console.log("[send-waitlist-campaign] skipped already-sent recipient", {
-          email,
+          email: normalizedEmail,
           reason: claim?.reason ?? "unknown",
         });
         continue;
       }
 
+      await updateDeliveryState(supabaseAdmin, dedupeKey, {
+        send_state: "sending",
+        last_attempted_at: new Date().toISOString(),
+      });
+
       const emailContent = buildStandardEmailShell({
+        type: "marketing",
         title: "Beatelion est ouvert",
         preheader: "La plateforme est maintenant disponible",
         appUrl: "https://beatelion.com",
@@ -150,24 +191,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
 
       try {
-        await sendEmailWithResend({
+        const sendResult = await sendEmailWithResend({
           functionName: "send-waitlist-campaign",
-          to: email,
+          category: "marketing",
+          to: normalizedEmail,
           subject: CAMPAIGN_SUBJECT,
           html: emailContent.html,
           text: emailContent.text,
-          idempotencyKey: `waitlist_campaign/${CAMPAIGN_ID}/${email}`,
+          idempotencyKey: dedupeKey,
+        });
+        await updateDeliveryState(supabaseAdmin, dedupeKey, {
+          send_state: "sent",
+          provider_message_id: sendResult.providerMessageId,
+          provider_accepted_at: new Date().toISOString(),
+          sent_at: new Date().toISOString(),
+          last_error: null,
         });
       } catch (error) {
+        const classification = classifySendError(error);
         console.error("[send-waitlist-campaign] send failure", {
-          email,
-          error: error instanceof Error ? error.message : String(error),
+          email: normalizedEmail,
+          error: classification.message,
+          nextState: classification.nextState,
         });
-        await supabaseAdmin
-          .from("notification_email_log")
-          .delete()
-          .eq("dedupe_key", dedupeKey);
-        // TODO: add monitoring for per-recipient campaign delivery failures.
+        await updateDeliveryState(supabaseAdmin, dedupeKey, {
+          send_state: classification.nextState,
+          last_error: classification.message,
+        });
         continue;
       }
 
@@ -176,7 +226,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       await delay(150);
     }
 
-    return jsonResponse({ success: true, sent }, 200, corsHeaders);
+    return jsonResponse({
+      success: true,
+      sent,
+      attempted: recipients.length,
+      warmupLimited: marketingWindow.warmupLimited,
+    }, 200, corsHeaders);
   } catch (err) {
     console.error("ERROR:", err);
     return jsonResponse({ success: false, error: "unexpected_error" }, 200, corsHeaders);

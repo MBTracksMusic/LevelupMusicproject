@@ -16,8 +16,8 @@ This package is not the canonical generator in production.
 
 ## Optional environment variables
 
-- `RESEND_API_KEY`
-- `RESEND_FROM_EMAIL` (default: `Beatelion <contact@beatelion.com>`)
+- `RESEND_API_KEY` (`required if this legacy service sends email`)
+- `RESEND_FROM_EMAIL` (`required if this legacy service sends email`; use `Beatelion <contact@beatelion.com>`)
 - `SUPPORT_EMAIL` (default: `support@beatelion.com`)
 - `SUPABASE_AUDIO_BUCKET` (default: `beats-audio`)
 - `CONTRACT_BUCKET` (default: `contracts`)

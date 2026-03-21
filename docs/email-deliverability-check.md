@@ -10,6 +10,26 @@ Applies to:
 
 - Supabase Auth emails (signup confirmation, reset password)
 - Transactional emails sent by Supabase Edge Functions via Resend
+- Marketing emails sent by Supabase Edge Functions via Resend
+
+## 0) Required server configuration
+
+Before testing delivery, confirm these server-side variables are set in Supabase secrets:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL="Beatelion <contact@beatelion.com>"`
+
+Optional operational guardrails:
+
+- `EMAIL_MARKETING_SENDS_ENABLED=true|false`
+- `EMAIL_DOMAIN_WARMUP_MODE=true|false`
+- `EMAIL_MAX_BATCH_SIZE=25`
+
+Recommended for a young domain:
+
+- keep `EMAIL_DOMAIN_WARMUP_MODE=true`
+- start with a low `EMAIL_MAX_BATCH_SIZE`
+- only disable warmup mode once inbox placement is stable
 
 ## 1) Send a test email
 

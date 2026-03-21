@@ -10,10 +10,11 @@ import {
   type EmailTemplate,
 } from "../_shared/emailTemplates.ts";
 import {
-  appendStandardFooterHtml,
-  appendStandardFooterText,
+  appendFooterHtmlByCategory,
+  appendFooterTextByCategory,
+  classifySendError,
   escapeHtml,
-  getResendFromEmail,
+  getEmailConfig,
   isValidHttpUrl,
   sendEmailWithResend,
 } from "../_shared/email.ts";
@@ -149,9 +150,10 @@ const buildBrandedEmailContent = (params: {
           ${ctaHtml}
           ${metaHtml}
         </div>
-        ${appendStandardFooterHtml(
-          `<div style="padding:0 24px 14px;color:#6b7280;font-size:12px;line-height:1.5;">Beatelion • ${escapeHtml(homeUrl)}</div>`,
-        )}
+        ${appendFooterHtmlByCategory({
+          type: "transactional",
+          contentHtml: `<div style="padding:0 24px 14px;color:#6b7280;font-size:12px;line-height:1.5;">Beatelion • ${escapeHtml(homeUrl)}</div>`,
+        })}
       </div>
     </div>
   `;
@@ -174,7 +176,7 @@ const buildBrandedEmailContent = (params: {
 
   return {
     html,
-    text: appendStandardFooterText(textLines.join("\n")),
+    text: appendFooterTextByCategory({ type: "transactional", contentText: textLines.join("\n") }),
   };
 };
 
@@ -451,7 +453,7 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
   if (!internalPipelineSecret) missingConfig.push("INTERNAL_PIPELINE_SECRET");
   if (!resendApiKey) missingConfig.push("RESEND_API_KEY");
   try {
-    getResendFromEmail();
+    getEmailConfig();
   } catch (error) {
     missingConfig.push(error instanceof Error ? error.message : "Missing RESEND_FROM_EMAIL");
   }
@@ -676,6 +678,8 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
         .update({
           attempts: nextAttempts,
           status: nextStatus,
+          send_state: nextStatus === "failed" ? "failed_final" : "failed_retryable",
+          send_state_updated_at: nowIso,
           processed_at: nextStatus === "failed" ? nowIso : null,
           locked_at: null,
           last_error: template ? "invalid_email" : "invalid_template",
@@ -709,9 +713,20 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
       );
     }
 
+    await supabaseAdmin
+      .from("email_queue")
+      .update({
+        send_state: "sending",
+        send_state_updated_at: new Date().toISOString(),
+        last_attempted_at: new Date().toISOString(),
+      })
+      .eq("id", row.id)
+      .eq("status", "processing");
+
     try {
       const sendResult = await sendEmailWithResend({
         functionName: "process-email-queue",
+        category: "transactional",
         resend,
         to: email,
         subject,
@@ -726,7 +741,11 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
         .from("email_queue")
         .update({
           status: "sent",
+          send_state: "sent",
+          send_state_updated_at: nowIso,
           processed_at: nowIso,
+          sent_at: nowIso,
+          provider_accepted_at: nowIso,
           locked_at: null,
           last_error: null,
           provider_message_id: sendResult.providerMessageId,
@@ -743,7 +762,11 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
           .from("email_queue")
           .update({
             status: "sent",
+            send_state: "provider_accepted_db_persist_failed",
+            send_state_updated_at: nowIso,
             processed_at: nowIso,
+            sent_at: nowIso,
+            provider_accepted_at: nowIso,
             locked_at: null,
             last_error: null,
             provider_message_id: sendResult.providerMessageId,
@@ -763,15 +786,19 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
       sent += 1;
       sentRowsForLatency.push({ row, processedAtIso: nowIso });
     } catch (error) {
+      const classification = classifySendError(error);
       const nextAttempts = row.attempts + 1;
       const nextStatus = nextAttempts >= row.max_attempts ? "failed" : "pending";
+      const persistedStatus = classification.ambiguous
+        ? "failed"
+        : nextStatus;
       const nowIso = new Date().toISOString();
-      const lastError = trimErrorMessage(error);
+      const lastError = trimErrorMessage(classification.message);
 
       console.error("[process-email-queue] email send failed", {
         emailQueueId: row.id,
         template: row.template,
-        nextStatus,
+        nextStatus: persistedStatus,
         lastError,
       });
 
@@ -779,8 +806,12 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
         .from("email_queue")
         .update({
           attempts: nextAttempts,
-          status: nextStatus,
-          processed_at: nextStatus === "failed" ? nowIso : null,
+          status: persistedStatus,
+          send_state: classification.nextState === "sending"
+            ? "sending"
+            : (nextStatus === "failed" ? "failed_final" : classification.nextState),
+          send_state_updated_at: nowIso,
+          processed_at: persistedStatus === "failed" ? nowIso : null,
           locked_at: null,
           last_error: lastError,
         })
@@ -795,7 +826,7 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
         stateUpdateFailures += 1;
       }
 
-      if (nextStatus === "failed") failed += 1;
+      if (persistedStatus === "failed") failed += 1;
       else pendingRetry += 1;
     }
   }

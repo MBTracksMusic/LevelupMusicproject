@@ -3,11 +3,13 @@ import { requireAdminUser } from "../_shared/auth.ts";
 import { Resend } from "npm:resend";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 import {
-  appendStandardFooterHtml,
-  appendStandardFooterText,
-  escapeHtml,
-  getResendFromEmail,
+  buildStandardEmailShell,
+  classifySendError,
+  getEmailConfig,
   isValidHttpUrl,
+  normalizeEmailForKey,
+  normalizeNewsKey,
+  resolveMarketingSendWindow,
   sendEmailWithResend,
 } from "../_shared/email.ts";
 
@@ -56,8 +58,6 @@ const MAX_RECIPIENTS_PER_RUN = 500;
 const DEFAULT_RATE_LIMIT_SECONDS = 15 * 60;
 const DEFAULT_SOCIAL_REPLY_TO = "social@beatelion.com";
 const BROADCAST_CATEGORY = "news_broadcast";
-const BROADCAST_RECIPIENT_SCOPE = "ALL_SUBSCRIBERS";
-
 type JsonRecord = Record<string, unknown>;
 type NewsVideoRow = {
   id: string;
@@ -88,44 +88,31 @@ const getRateLimitSeconds = () => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_RATE_LIMIT_SECONDS;
 };
 
-async function releaseClaim(
-  supabase: any,
-  dedupeKey: string,
-) {
-  const { error } = await supabase
-    .from("notification_email_log")
-    .delete()
-    .eq("dedupe_key", dedupeKey);
-
-  if (error) {
-    console.error("[broadcast-news] CLAIM_RELEASE_ERROR", { dedupeKey, error });
-  }
-}
-
 async function claimBroadcast(
   supabase: any,
   params: {
-    newsId: string;
+    dedupeKey: string;
+    recipientEmail: string;
     actorId: string;
     rateLimitSeconds: number;
+    metadata?: Record<string, unknown>;
   },
 ) {
-  const dedupeKey = `news_broadcast:${params.newsId}`;
-
-  const { data, error } = await supabase.rpc("claim_notification_email_send", {
+  const { data, error } = await supabase.rpc("claim_notification_email_delivery", {
     p_category: BROADCAST_CATEGORY,
-    p_recipient_email: BROADCAST_RECIPIENT_SCOPE,
-    p_dedupe_key: dedupeKey,
+    p_recipient_email: params.recipientEmail,
+    p_dedupe_key: params.dedupeKey,
     p_rate_limit_seconds: params.rateLimitSeconds,
     p_metadata: {
-      news_id: params.newsId,
+      recipient_email: params.recipientEmail,
       actor_id: params.actorId,
       category: BROADCAST_CATEGORY,
+      ...(params.metadata ?? {}),
     },
   });
 
   if (error) {
-    throw new Error(`claim_notification_email_send failed: ${error.message}`);
+    throw new Error(`claim_notification_email_delivery failed: ${error.message}`);
   }
 
   const decision = data && typeof data === "object"
@@ -133,10 +120,32 @@ async function claimBroadcast(
     : null;
 
   return {
-    dedupeKey,
+    dedupeKey: params.dedupeKey,
     allowed: decision?.allowed === true,
     reason: typeof decision?.reason === "string" ? decision.reason : "unknown",
   };
+}
+
+async function updateDeliveryState(
+  supabase: any,
+  dedupeKey: string,
+  patch: Record<string, unknown>,
+) {
+  const { error } = await supabase
+    .from("notification_email_log")
+    .update({
+      ...patch,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("dedupe_key", dedupeKey);
+
+  if (error) {
+    console.error("[broadcast-news] delivery state update failed", {
+      dedupeKey,
+      error: error.message,
+      patch,
+    });
+  }
 }
 
 async function getSubscriberEmails(supabase: any) {
@@ -218,54 +227,38 @@ async function sendBroadcastEmail(
   const logoUrl = `${safeAppUrl}/beatelion-logo.png`;
   const safeVideoUrl = isValidHttpUrl(news.videoUrl) ? news.videoUrl : homeUrl;
   const safeThumbnailUrl = isValidHttpUrl(news.thumbnailUrl) ? news.thumbnailUrl : null;
-  const safeTitleHtml = escapeHtml(safeTitle);
-  const safeDescriptionHtml = escapeHtml(safeDescription);
-
   const subject = `Nouvelle annonce vidéo: ${safeTitle}`;
-  const text = appendStandardFooterText([
-      "Beatelion",
-      "",
+  const content = buildStandardEmailShell({
+    type: "marketing",
+    title: safeTitle,
+    preheader: safeDescription,
+    appUrl: safeAppUrl,
+    bodyHtml: [
+      `<p style="margin:0 0 14px;line-height:1.55;color:#111827;">${safeDescription}</p>`,
+      safeThumbnailUrl
+        ? `<img src="${safeThumbnailUrl}" alt="${safeTitle}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px;margin:0 0 14px;" />`
+        : "",
+      `<p style="margin:0 0 10px;"><a href="${safeVideoUrl}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a></p>`,
+      `<p style="margin:0;"><a href="${homeUrl}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil Beatelion</a></p>`,
+    ].join(""),
+    bodyText: [
       safeTitle,
       "",
       safeDescription,
       "",
       `Voir la vidéo: ${safeVideoUrl}`,
       `Accueil: ${homeUrl}`,
-    ].join("\n"));
-  const html = `
-      <div lang="fr" style="margin:0;padding:20px 12px;background:#f4f4f5;">
-        <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
-          <div style="padding:20px 24px 8px;background:#111827;text-align:center;">
-            <a href="${escapeHtml(homeUrl)}" style="display:inline-block;text-decoration:none;">
-              <img
-                src="${escapeHtml(logoUrl)}"
-                alt="Beatelion logo"
-                width="164"
-                style="display:block;border:0;outline:none;text-decoration:none;width:164px;max-width:100%;height:auto;margin:0 auto;"
-              />
-            </a>
-          </div>
-          <div style="padding:24px;color:#111827;">
-            <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;">${safeTitleHtml}</h1>
-            <p style="margin:0 0 14px;line-height:1.55;color:#111827;">${safeDescriptionHtml}</p>
-            ${safeThumbnailUrl ? `<img src="${escapeHtml(safeThumbnailUrl)}" alt="${safeTitleHtml}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px;margin:0 0 14px;" />` : ""}
-            <p style="margin:0 0 10px;"><a href="${escapeHtml(safeVideoUrl)}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a></p>
-            <p style="margin:0;"><a href="${escapeHtml(homeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil Beatelion</a></p>
-          </div>
-          ${appendStandardFooterHtml(
-            `<div style="padding:0 24px 14px;color:#6b7280;font-size:12px;line-height:1.5;">Beatelion • ${escapeHtml(homeUrl)}</div>`,
-          )}
-        </div>
-      </div>
-    `;
+    ].join("\n"),
+  });
 
   return await sendEmailWithResend({
     functionName: "broadcast-news",
+    category: "marketing",
     resend,
     to: recipient,
     subject,
-    text,
-    html,
+    text: content.text,
+    html: content.html,
     replyTo,
     idempotencyKey: params.idempotencyKey,
   });
@@ -293,7 +286,7 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
       headers: corsHeaders,
     });
   }
-  getResendFromEmail();
+  const emailConfig = getEmailConfig();
 
   const authResult = await requireAdminUser(req, corsHeaders);
   if ("error" in authResult) return authResult.error;
@@ -351,10 +344,13 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
 
   // TODO: For higher precision anti-spam, switch to per-recipient claims
   // (dedupe key including email) instead of a single global claim.
+  const normalizedNewsId = normalizeNewsKey(newsId);
   const claim = await claimBroadcast(supabase, {
-    newsId,
+    dedupeKey: `broadcast-news/${normalizedNewsId}/run`,
+    recipientEmail: "all_subscribers",
     actorId: actor.id,
     rateLimitSeconds: getRateLimitSeconds(),
+    metadata: { news_id: normalizedNewsId },
   });
 
   if (!claim.allowed) {
@@ -375,14 +371,18 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
 
     if (recipients.length === 0) {
       console.log("[broadcast-news] EMAIL_SKIPPED", { newsId, reason: "no_recipients" });
-      await releaseClaim(supabase, claim.dedupeKey);
+      await updateDeliveryState(supabase, claim.dedupeKey, {
+        send_state: "failed_final",
+        last_error: "no_recipients",
+      });
       return new Response(JSON.stringify({ status: "no_recipients", sent: 0, total: 0 }), {
         status: 200,
         headers: corsHeaders,
       });
     }
 
-    const cappedRecipients = recipients.slice(0, MAX_RECIPIENTS_PER_RUN);
+    const marketingWindow = resolveMarketingSendWindow(recipients.length, "broadcast-news");
+    const cappedRecipients = recipients.slice(0, Math.min(MAX_RECIPIENTS_PER_RUN, marketingWindow.allowedCount));
     const hasOverflow = recipients.length > MAX_RECIPIENTS_PER_RUN;
     const resend = new Resend(resendApiKey);
     const replyTo = asNonEmptyString(Deno.env.get("SOCIAL_EMAIL")) || DEFAULT_SOCIAL_REPLY_TO;
@@ -402,10 +402,18 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
           }
         | null = null;
       try {
+        const normalizedRecipient = normalizeEmailForKey(recipient);
+        const recipientDedupeKey = `broadcast-news/${normalizedNewsId}/${normalizedRecipient}`;
         recipientClaim = await claimBroadcast(supabase, {
-          newsId: `${newsId}:${recipient}`,
+          dedupeKey: recipientDedupeKey,
+          recipientEmail: normalizedRecipient,
           actorId: actor.id,
           rateLimitSeconds: 365 * 24 * 60 * 60,
+          metadata: {
+            news_id: normalizedNewsId,
+            subject: `Nouvelle annonce vidéo: ${newsData.title}`,
+            sender: emailConfig.resendFromEmail,
+          },
         });
         if (!recipientClaim.allowed) {
           console.log("[broadcast-news] EMAIL_RECIPIENT_SKIPPED", {
@@ -415,11 +423,15 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
           });
           continue;
         }
+        await updateDeliveryState(supabase, recipientDedupeKey, {
+          send_state: "sending",
+          last_attempted_at: new Date().toISOString(),
+        });
 
-        await sendBroadcastEmail(resend, {
+        const sendResult = await sendBroadcastEmail(resend, {
           replyTo,
-          recipient,
-          idempotencyKey: `broadcast-news/${newsId}/${recipient}`,
+          recipient: normalizedRecipient,
+          idempotencyKey: recipientDedupeKey,
           appUrl,
           news: {
             title: newsData.title,
@@ -428,10 +440,21 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
             thumbnailUrl: newsData.thumbnail_url,
           },
         });
+        await updateDeliveryState(supabase, recipientDedupeKey, {
+          send_state: "sent",
+          provider_message_id: sendResult.providerMessageId,
+          provider_accepted_at: new Date().toISOString(),
+          sent_at: new Date().toISOString(),
+          last_error: null,
+        });
         sentCount += 1;
       } catch (error) {
         if (recipientClaim?.dedupeKey) {
-          await releaseClaim(supabase, recipientClaim.dedupeKey);
+          const classification = classifySendError(error);
+          await updateDeliveryState(supabase, recipientClaim.dedupeKey, {
+            send_state: classification.nextState,
+            last_error: classification.message,
+          });
         }
         failedRecipients.push(recipient);
         console.error("[broadcast-news] EMAIL_SEND_ERROR", {
@@ -455,7 +478,10 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
         overflow: hasOverflow,
       });
 
-      await releaseClaim(supabase, claim.dedupeKey);
+      await updateDeliveryState(supabase, claim.dedupeKey, {
+        send_state: "failed_retryable",
+        last_error: hasOverflow ? "warmup_or_batch_overflow" : "partial_recipient_failures",
+      });
       return new Response(JSON.stringify({
         status: "partial",
         sent: sentCount,
@@ -463,6 +489,7 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
         total: recipients.length,
         failed: failedRecipients.length,
         overflow: hasOverflow,
+        warmup_limited: marketingWindow.warmupLimited,
       }), {
         status: 200,
         headers: corsHeaders,
@@ -478,12 +505,22 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
 
     if (updateError) {
       console.error("[broadcast-news] NEWS_UPDATE_ERROR", { newsId, updateError });
-      await releaseClaim(supabase, claim.dedupeKey);
+      await updateDeliveryState(supabase, claim.dedupeKey, {
+        send_state: "provider_accepted_db_persist_failed",
+        last_error: "failed_to_persist_broadcast_sent_at",
+      });
       return new Response(JSON.stringify({ error: "Failed to persist broadcast_sent_at" }), {
         status: 500,
         headers: corsHeaders,
       });
     }
+
+    await updateDeliveryState(supabase, claim.dedupeKey, {
+      send_state: "sent",
+      sent_at: nowIso,
+      provider_accepted_at: nowIso,
+      last_error: null,
+    });
 
     console.log("[broadcast-news] EMAIL_SENT", {
       newsId,
@@ -502,7 +539,10 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
       headers: corsHeaders,
     });
   } catch (error) {
-    await releaseClaim(supabase, claim.dedupeKey);
+    await updateDeliveryState(supabase, claim.dedupeKey, {
+      send_state: "failed_retryable",
+      last_error: error instanceof Error ? error.message : String(error),
+    });
     console.error("[broadcast-news] UNEXPECTED_ERROR", {
       newsId,
       error: error instanceof Error ? error.message : String(error),

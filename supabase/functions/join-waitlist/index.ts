@@ -4,8 +4,9 @@ import { resolveCorsHeaders } from "../_shared/cors.ts";
 import { ApiError } from "../_shared/error-handler.ts";
 import {
   buildStandardEmailShell,
-  getResendApiKey,
-  getResendFromEmail,
+  classifySendError,
+  getEmailConfig,
+  normalizeEmailForKey,
   sendEmailWithResend,
 } from "../_shared/email.ts";
 import { extractIpAddress, verifyHcaptchaToken } from "../_shared/hcaptcha.ts";
@@ -60,6 +61,28 @@ const createAdminClient = () => {
       autoRefreshToken: false,
     },
   });
+};
+
+const updateDeliveryState = async (
+  adminClient: any,
+  dedupeKey: string,
+  patch: Record<string, unknown>,
+) => {
+  const { error } = await adminClient
+    .from("notification_email_log")
+    .update({
+      ...patch,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("dedupe_key", dedupeKey);
+
+  if (error) {
+    console.error("[join-waitlist] delivery state update failed", {
+      dedupeKey,
+      error: error.message,
+      patch,
+    });
+  }
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -123,9 +146,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     try {
-      getResendApiKey();
-      getResendFromEmail();
+      getEmailConfig();
+      const normalizedEmail = normalizeEmailForKey(email);
+      const dedupeKey = `join-waitlist/${normalizedEmail}`;
+      const { data: claimData, error: claimError } = await (adminClient as any).rpc(
+        "claim_notification_email_delivery",
+        {
+          p_category: "waitlist_confirmation",
+          p_recipient_email: normalizedEmail,
+          p_dedupe_key: dedupeKey,
+          p_rate_limit_seconds: 365 * 24 * 60 * 60,
+          p_metadata: {
+            recipient_email: normalizedEmail,
+            subject: "🎧 Tu es sur la waitlist",
+          },
+        },
+      );
+
+      if (claimError) {
+        throw claimError;
+      }
+
+      const claim = claimData as { allowed?: unknown; reason?: unknown } | null;
+      if (claim?.allowed !== true) {
+        console.log("[join-waitlist] confirmation email skipped", {
+          email: normalizedEmail,
+          reason: claim?.reason ?? "unknown",
+        });
+        return jsonResponse({ message: "success" }, 200, corsHeaders);
+      }
+
+      await updateDeliveryState(adminClient, dedupeKey, {
+        send_state: "sending",
+        last_attempted_at: new Date().toISOString(),
+      });
+
       const emailContent = buildStandardEmailShell({
+        type: "transactional",
         title: "Bienvenue",
         preheader: "Tu es sur la waitlist Beatelion",
         appUrl: "https://beatelion.com",
@@ -133,19 +190,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
         bodyText: "Tu es sur la waitlist. Nous te previendrons des que le lancement arrive.",
       });
 
-      await sendEmailWithResend({
+      const sendResult = await sendEmailWithResend({
         functionName: "join-waitlist",
-        to: email,
+        category: "transactional",
+        to: normalizedEmail,
         subject: "🎧 Tu es sur la waitlist",
         html: emailContent.html,
         text: emailContent.text,
-        idempotencyKey: `join-waitlist/${email}`,
+        idempotencyKey: dedupeKey,
+      });
+      await updateDeliveryState(adminClient, dedupeKey, {
+        send_state: "sent",
+        provider_message_id: sendResult.providerMessageId,
+        provider_accepted_at: new Date().toISOString(),
+        sent_at: new Date().toISOString(),
+        last_error: null,
       });
     } catch (error) {
+      const classification = classifySendError(error);
       console.error("[join-waitlist] EMAIL_SEND_ERROR", {
         email,
-        error: error instanceof Error ? error.message : String(error),
+        error: classification.message,
+        nextState: classification.nextState,
       });
+      if (email) {
+        const normalizedEmail = normalizeEmailForKey(email);
+        await updateDeliveryState(adminClient, `join-waitlist/${normalizedEmail}`, {
+          send_state: classification.nextState,
+          last_error: classification.message,
+        });
+      }
     }
 
     return jsonResponse({ message: "success" }, 200, corsHeaders);
