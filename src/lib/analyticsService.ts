@@ -1,12 +1,19 @@
 import { supabase } from './supabase/client';
 import type { Database } from './supabase/database.types';
 
+export type AnalyticsDateRange = '7d' | '30d' | 'all';
+
 type PurchaseRow = Pick<
   Database['public']['Tables']['purchases']['Row'],
   'amount' | 'created_at' | 'product_id' | 'status'
 >;
 
 type ProductRow = Pick<Database['public']['Tables']['products']['Row'], 'id' | 'title'>;
+
+export interface MetricWithGrowth {
+  value: number;
+  growth: number;
+}
 
 export interface TopProductAnalytics {
   productId: string;
@@ -15,71 +22,182 @@ export interface TopProductAnalytics {
   salesCount: number;
 }
 
+export interface AnalyticsAlert {
+  type: 'warning';
+  message: string;
+}
+
 interface AnalyticsSnapshot {
-  totalRevenue: number;
-  totalPurchases: number;
-  averageOrderValue: number;
+  totalRevenue: MetricWithGrowth;
+  totalPurchases: MetricWithGrowth;
+  averageOrderValue: MetricWithGrowth;
   revenueToday: number;
   topProducts: TopProductAnalytics[];
 }
 
-let analyticsSnapshotPromise: Promise<AnalyticsSnapshot> | null = null;
+const analyticsSnapshotPromises = new Map<AnalyticsDateRange, Promise<AnalyticsSnapshot>>();
 
 function centsToEuros(amountCents: number) {
   return Number((amountCents / 100).toFixed(2));
 }
 
-function getTodayStart() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+function roundMetric(value: number) {
+  return Number(value.toFixed(2));
 }
 
-async function fetchAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
-  const { data: purchases, error: purchasesError } = await supabase
+function getRangeDays(dateRange: AnalyticsDateRange) {
+  if (dateRange === '7d') {
+    return 7;
+  }
+
+  if (dateRange === '30d') {
+    return 30;
+  }
+
+  return null;
+}
+
+function getPeriodStart(dateRange: AnalyticsDateRange) {
+  const days = getRangeDays(dateRange);
+
+  if (!days) {
+    return null;
+  }
+
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
+function getPreviousPeriodStart(dateRange: AnalyticsDateRange) {
+  const days = getRangeDays(dateRange);
+
+  if (!days) {
+    return null;
+  }
+
+  const date = new Date();
+  date.setDate(date.getDate() - days * 2);
+  return date.toISOString();
+}
+
+function getGrowth(current: number, previous: number) {
+  if (previous === 0) {
+    return current === 0 ? 0 : 100;
+  }
+
+  return roundMetric(((current - previous) / previous) * 100);
+}
+
+function createMetric(value: number, previousValue: number): MetricWithGrowth {
+  return {
+    value: roundMetric(value),
+    growth: getGrowth(value, previousValue),
+  };
+}
+
+async function fetchPurchasesForRange(dateRange: AnalyticsDateRange): Promise<PurchaseRow[]> {
+  let query = supabase
     .from('purchases')
     .select('amount, created_at, product_id, status')
     .eq('status', 'completed')
     .order('created_at', { ascending: false });
 
-  if (purchasesError) {
-    throw purchasesError;
+  const previousPeriodStart = getPreviousPeriodStart(dateRange);
+
+  if (previousPeriodStart) {
+    query = query.gte('created_at', previousPeriodStart);
   }
 
-  const completedPurchases = (purchases ?? []) as PurchaseRow[];
-  const totalPurchases = completedPurchases.length;
-  const totalRevenueCents = completedPurchases.reduce((sum, purchase) => sum + purchase.amount, 0);
-  const todayStart = getTodayStart();
-  const revenueTodayCents = completedPurchases.reduce((sum, purchase) => {
-    const createdAt = new Date(purchase.created_at).getTime();
-    return createdAt >= todayStart ? sum + purchase.amount : sum;
-  }, 0);
+  const { data, error } = await query;
 
-  const uniqueProductIds = [...new Set(completedPurchases.map((purchase) => purchase.product_id))];
-  let productTitleMap = new Map<string, string>();
-
-  if (uniqueProductIds.length > 0) {
-    const { data: products, error: productsError } = await supabase
-      .from('products')
-      .select('id, title')
-      .in('id', uniqueProductIds);
-
-    if (productsError) {
-      throw productsError;
-    }
-
-    productTitleMap = new Map(
-      ((products ?? []) as ProductRow[]).map((product) => [product.id, product.title]),
-    );
+  if (error) {
+    throw error;
   }
 
+  return (data ?? []) as PurchaseRow[];
+}
+
+function splitPurchasesByPeriod(purchases: PurchaseRow[], dateRange: AnalyticsDateRange) {
+  if (dateRange === 'all') {
+    return {
+      currentPurchases: purchases,
+      previousPurchases: [] as PurchaseRow[],
+    };
+  }
+
+  const periodStart = getPeriodStart(dateRange);
+
+  if (!periodStart) {
+    return {
+      currentPurchases: purchases,
+      previousPurchases: [] as PurchaseRow[],
+    };
+  }
+
+  const periodStartMs = new Date(periodStart).getTime();
+
+  return purchases.reduce(
+    (accumulator, purchase) => {
+      const createdAtMs = new Date(purchase.created_at).getTime();
+
+      if (createdAtMs >= periodStartMs) {
+        accumulator.currentPurchases.push(purchase);
+      } else {
+        accumulator.previousPurchases.push(purchase);
+      }
+
+      return accumulator;
+    },
+    {
+      currentPurchases: [] as PurchaseRow[],
+      previousPurchases: [] as PurchaseRow[],
+    },
+  );
+}
+
+async function fetchProductTitleMap(productIds: string[]) {
+  if (productIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, title')
+    .in('id', productIds);
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(((data ?? []) as ProductRow[]).map((product) => [product.id, product.title]));
+}
+
+async function fetchAnalyticsSnapshot(dateRange: AnalyticsDateRange): Promise<AnalyticsSnapshot> {
+  const purchases = await fetchPurchasesForRange(dateRange);
+  const { currentPurchases, previousPurchases } = splitPurchasesByPeriod(purchases, dateRange);
+
+  const currentRevenueCents = currentPurchases.reduce((sum, purchase) => sum + purchase.amount, 0);
+  const previousRevenueCents = previousPurchases.reduce((sum, purchase) => sum + purchase.amount, 0);
+
+  const currentPurchasesCount = currentPurchases.length;
+  const previousPurchasesCount = previousPurchases.length;
+
+  const currentAverageOrderValue =
+    currentPurchasesCount > 0 ? currentRevenueCents / currentPurchasesCount / 100 : 0;
+  const previousAverageOrderValue =
+    previousPurchasesCount > 0 ? previousRevenueCents / previousPurchasesCount / 100 : 0;
+
+  const uniqueProductIds = [...new Set(currentPurchases.map((purchase) => purchase.product_id))];
+  const productTitleMap = await fetchProductTitleMap(uniqueProductIds);
   const productAggregates = new Map<string, TopProductAnalytics>();
 
-  completedPurchases.forEach((purchase) => {
+  currentPurchases.forEach((purchase) => {
     const existing = productAggregates.get(purchase.product_id);
     const revenue = centsToEuros(purchase.amount);
 
     if (existing) {
-      existing.revenue = Number((existing.revenue + revenue).toFixed(2));
+      existing.revenue = roundMetric(existing.revenue + revenue);
       existing.salesCount += 1;
       return;
     }
@@ -94,52 +212,95 @@ async function fetchAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
 
   const topProducts = [...productAggregates.values()]
     .sort((a, b) => {
-      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      if (b.revenue !== a.revenue) {
+        return b.revenue - a.revenue;
+      }
+
       return b.salesCount - a.salesCount;
     })
     .slice(0, 5);
 
+  const todayStart = new Date();
+  const todayStartMs = new Date(
+    todayStart.getFullYear(),
+    todayStart.getMonth(),
+    todayStart.getDate(),
+  ).getTime();
+
+  const revenueToday = currentPurchases.reduce((sum, purchase) => {
+    const createdAtMs = new Date(purchase.created_at).getTime();
+    return createdAtMs >= todayStartMs ? sum + purchase.amount : sum;
+  }, 0);
+
   return {
-    totalRevenue: centsToEuros(totalRevenueCents),
-    totalPurchases,
-    averageOrderValue: totalPurchases > 0 ? Number((totalRevenueCents / totalPurchases / 100).toFixed(2)) : 0,
-    revenueToday: centsToEuros(revenueTodayCents),
+    totalRevenue: createMetric(centsToEuros(currentRevenueCents), centsToEuros(previousRevenueCents)),
+    totalPurchases: createMetric(currentPurchasesCount, previousPurchasesCount),
+    averageOrderValue: createMetric(currentAverageOrderValue, previousAverageOrderValue),
+    revenueToday: centsToEuros(revenueToday),
     topProducts,
   };
 }
 
-async function getAnalyticsSnapshot() {
-  if (!analyticsSnapshotPromise) {
-    analyticsSnapshotPromise = fetchAnalyticsSnapshot().catch((error) => {
-      analyticsSnapshotPromise = null;
-      throw error;
+async function getAnalyticsSnapshot(dateRange: AnalyticsDateRange) {
+  const existingPromise = analyticsSnapshotPromises.get(dateRange);
+
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const snapshotPromise = fetchAnalyticsSnapshot(dateRange).catch((error) => {
+    analyticsSnapshotPromises.delete(dateRange);
+    throw error;
+  });
+
+  analyticsSnapshotPromises.set(dateRange, snapshotPromise);
+  return snapshotPromise;
+}
+
+export function checkAnalyticsAlerts(data: {
+  revenueGrowth: number;
+  viewToPurchaseRate: number;
+}): AnalyticsAlert[] {
+  const alerts: AnalyticsAlert[] = [];
+
+  if (data.viewToPurchaseRate < 0.02) {
+    alerts.push({
+      type: 'warning',
+      message: 'Conversion faible sur le funnel global.',
     });
   }
 
-  return analyticsSnapshotPromise;
+  if (data.revenueGrowth < -30) {
+    alerts.push({
+      type: 'warning',
+      message: 'Baisse de revenu supérieure à 30% sur la période.',
+    });
+  }
+
+  return alerts;
 }
 
-export async function getTotalRevenue() {
-  const snapshot = await getAnalyticsSnapshot();
+export async function getTotalRevenue(dateRange: AnalyticsDateRange) {
+  const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.totalRevenue;
 }
 
-export async function getTotalPurchases() {
-  const snapshot = await getAnalyticsSnapshot();
+export async function getTotalPurchases(dateRange: AnalyticsDateRange) {
+  const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.totalPurchases;
 }
 
-export async function getAverageOrderValue() {
-  const snapshot = await getAnalyticsSnapshot();
+export async function getAverageOrderValue(dateRange: AnalyticsDateRange) {
+  const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.averageOrderValue;
 }
 
-export async function getRevenueToday() {
-  const snapshot = await getAnalyticsSnapshot();
+export async function getRevenueToday(dateRange: AnalyticsDateRange) {
+  const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.revenueToday;
 }
 
-export async function getTopProducts() {
-  const snapshot = await getAnalyticsSnapshot();
+export async function getTopProducts(dateRange: AnalyticsDateRange) {
+  const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.topProducts;
 }

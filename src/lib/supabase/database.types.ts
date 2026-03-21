@@ -357,6 +357,36 @@ export type Database = {
         }
         Relationships: []
       }
+      analytics_alerts: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          metric: string
+          resolved: boolean
+          type: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          metric: string
+          resolved?: boolean
+          type: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          metric?: string
+          resolved?: boolean
+          type?: string
+          value?: number
+        }
+        Relationships: []
+      }
       audio_processing_jobs: {
         Row: {
           attempts: number

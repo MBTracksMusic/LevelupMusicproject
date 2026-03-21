@@ -5,14 +5,24 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
+import { AnalyticsAlertsPanel } from '../../components/system/AnalyticsAlertsPanel';
 import {
   getAverageOrderValue,
   getRevenueToday,
   getTopProducts,
   getTotalPurchases,
   getTotalRevenue,
+  type AnalyticsDateRange,
+  type MetricWithGrowth,
   type TopProductAnalytics,
 } from '../../lib/analyticsService';
+import {
+  evaluateAnalyticsAlerts,
+  getActiveAlerts,
+  resolveAnalyticsAlert,
+  saveAlerts,
+  type AnalyticsAlertRecord,
+} from '../../lib/analyticsAlertsService';
 import { getFunnelData } from '../../lib/funnelService';
 import { useTranslation } from '../../lib/i18n';
 import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
@@ -61,11 +71,12 @@ export function AdminDashboardPage() {
   const [launchVideoUrlInput, setLaunchVideoUrlInput] = useState(() => launchVideoUrl ?? '');
   const [isSavingLaunchDate, setIsSavingLaunchDate] = useState(false);
   const [isSavingLaunchVideoUrl, setIsSavingLaunchVideoUrl] = useState(false);
+  const [dateRange, setDateRange] = useState<AnalyticsDateRange>('7d');
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalPurchases, setTotalPurchases] = useState(0);
-  const [averageOrderValue, setAverageOrderValue] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState<MetricWithGrowth>({ value: 0, growth: 0 });
+  const [totalPurchases, setTotalPurchases] = useState<MetricWithGrowth>({ value: 0, growth: 0 });
+  const [averageOrderValue, setAverageOrderValue] = useState<MetricWithGrowth>({ value: 0, growth: 0 });
   const [revenueToday, setRevenueToday] = useState(0);
   const [topProducts, setTopProducts] = useState<TopProductAnalytics[]>([]);
   const [isFunnelLoading, setIsFunnelLoading] = useState(true);
@@ -73,6 +84,10 @@ export function AdminDashboardPage() {
   const [funnelViews, setFunnelViews] = useState(0);
   const [funnelCheckouts, setFunnelCheckouts] = useState(0);
   const [funnelPurchases, setFunnelPurchases] = useState(0);
+  const [activeAlerts, setActiveAlerts] = useState<AnalyticsAlertRecord[]>([]);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [isAlertsLoading, setIsAlertsLoading] = useState(true);
+  const [resolvingAlertId, setResolvingAlertId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isSavingLaunchDate) {
@@ -101,11 +116,11 @@ export function AdminDashboardPage() {
           nextRevenueToday,
           nextTopProducts,
         ] = await Promise.all([
-          getTotalRevenue(),
-          getTotalPurchases(),
-          getAverageOrderValue(),
-          getRevenueToday(),
-          getTopProducts(),
+          getTotalRevenue(dateRange),
+          getTotalPurchases(dateRange),
+          getAverageOrderValue(dateRange),
+          getRevenueToday(dateRange),
+          getTopProducts(dateRange),
         ]);
 
         if (isCancelled) {
@@ -135,7 +150,7 @@ export function AdminDashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [dateRange]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -145,7 +160,7 @@ export function AdminDashboardPage() {
       setFunnelError(null);
 
       try {
-        const funnel = await getFunnelData();
+        const funnel = await getFunnelData(dateRange);
 
         if (isCancelled) {
           return;
@@ -172,7 +187,63 @@ export function AdminDashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [dateRange]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncAlerts = async () => {
+      if (isAnalyticsLoading || isFunnelLoading || analyticsError || funnelError) {
+        return;
+      }
+
+      setIsAlertsLoading(true);
+      setAlertsError(null);
+
+      try {
+        const evaluatedAlerts = evaluateAnalyticsAlerts({
+          conversionRate: funnelViews > 0 ? funnelPurchases / funnelViews : 0,
+          revenueGrowth: totalRevenue.growth,
+          purchases: totalPurchases.value,
+        });
+
+        await saveAlerts(evaluatedAlerts);
+        const nextAlerts = await getActiveAlerts();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setActiveAlerts(nextAlerts);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        setAlertsError("Impossible de synchroniser les alertes analytics.");
+      } finally {
+        if (!isCancelled) {
+          setIsAlertsLoading(false);
+        }
+      }
+    };
+
+    void syncAlerts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    analyticsError,
+    dateRange,
+    funnelError,
+    funnelPurchases,
+    funnelViews,
+    isAnalyticsLoading,
+    isFunnelLoading,
+    totalPurchases.value,
+    totalRevenue.growth,
+  ]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('fr-FR', {
     style: 'currency',
@@ -181,6 +252,7 @@ export function AdminDashboardPage() {
   }).format(value);
 
   const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
+  const formatGrowth = (value: number) => `${value > 0 ? '+' : ''}${Math.round(value)}% vs période précédente`;
   const getSafeConversion = (from: number, to: number) => (from > 0 ? to / from : 0);
   const getDropOffClassName = (rate: number) => {
     if (rate >= 0.35) {
@@ -193,10 +265,16 @@ export function AdminDashboardPage() {
 
     return 'text-rose-300';
   };
+  const getGrowthClassName = (growth: number) => (growth >= 0 ? 'text-emerald-300' : 'text-rose-300');
 
   const viewToCheckoutRate = getSafeConversion(funnelViews, funnelCheckouts);
   const checkoutToPurchaseRate = getSafeConversion(funnelCheckouts, funnelPurchases);
   const viewToPurchaseRate = getSafeConversion(funnelViews, funnelPurchases);
+  const dateRangeOptions: Array<{ value: AnalyticsDateRange; label: string }> = [
+    { value: '7d', label: '7 jours' },
+    { value: '30d', label: '30 jours' },
+    { value: 'all', label: 'Tout' },
+  ];
 
   const handleMaintenanceToggle = async () => {
     setIsSavingMaintenance(true);
@@ -267,17 +345,61 @@ export function AdminDashboardPage() {
     }
   };
 
+  const handleResolveAlert = async (id: string) => {
+    setResolvingAlertId(id);
+
+    try {
+      await resolveAnalyticsAlert(id);
+      const nextAlerts = await getActiveAlerts();
+      setActiveAlerts(nextAlerts);
+    } catch {
+      toast.error("Impossible de résoudre l'alerte.");
+    } finally {
+      setResolvingAlertId(null);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <Card className="md:col-span-2 border-zinc-800">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">Période d&apos;analyse</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              Filtre les KPIs, le funnel et les comparaisons de croissance.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dateRangeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setDateRange(option.value)}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                  dateRange === option.value
+                    ? 'border-rose-500 bg-rose-500/10 text-white'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-zinc-800">
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Chiffre d&apos;affaires</p>
               <p className="mt-3 text-3xl font-semibold text-white">
-                {isAnalyticsLoading ? '...' : formatCurrency(totalRevenue)}
+                {isAnalyticsLoading ? '...' : formatCurrency(totalRevenue.value)}
               </p>
               <p className="mt-2 text-sm text-zinc-400">Revenu total confirmé</p>
+              <p className={`mt-1 text-xs font-medium ${getGrowthClassName(totalRevenue.growth)}`}>
+                {isAnalyticsLoading ? '...' : formatGrowth(totalRevenue.growth)}
+              </p>
             </div>
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-300">
               <Euro className="h-5 w-5" />
@@ -292,9 +414,12 @@ export function AdminDashboardPage() {
             <div>
               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Achats</p>
               <p className="mt-3 text-3xl font-semibold text-white">
-                {isAnalyticsLoading ? '...' : totalPurchases}
+                {isAnalyticsLoading ? '...' : totalPurchases.value}
               </p>
               <p className="mt-2 text-sm text-zinc-400">Nombre total de commandes</p>
+              <p className={`mt-1 text-xs font-medium ${getGrowthClassName(totalPurchases.growth)}`}>
+                {isAnalyticsLoading ? '...' : formatGrowth(totalPurchases.growth)}
+              </p>
             </div>
             <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3 text-rose-300">
               <Receipt className="h-5 w-5" />
@@ -309,9 +434,12 @@ export function AdminDashboardPage() {
             <div>
               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Panier moyen</p>
               <p className="mt-3 text-3xl font-semibold text-white">
-                {isAnalyticsLoading ? '...' : formatCurrency(averageOrderValue)}
+                {isAnalyticsLoading ? '...' : formatCurrency(averageOrderValue.value)}
               </p>
               <p className="mt-2 text-sm text-zinc-400">Valeur moyenne par achat</p>
+              <p className={`mt-1 text-xs font-medium ${getGrowthClassName(averageOrderValue.growth)}`}>
+                {isAnalyticsLoading ? '...' : formatGrowth(averageOrderValue.growth)}
+              </p>
             </div>
             <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 p-3 text-orange-300">
               <CreditCard className="h-5 w-5" />
@@ -336,6 +464,14 @@ export function AdminDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AnalyticsAlertsPanel
+        alerts={activeAlerts}
+        isLoading={isAlertsLoading}
+        error={alertsError}
+        onResolve={handleResolveAlert}
+        resolvingId={resolvingAlertId}
+      />
 
       <Card className="md:col-span-2 border-zinc-800">
         <CardHeader>
@@ -460,7 +596,7 @@ export function AdminDashboardPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-rose-400" />
+                <Settings2 className="h-5 w-5 text-rose-400" />
                 Maintenance globale
               </CardTitle>
               <CardDescription className="mt-2">
@@ -604,76 +740,76 @@ export function AdminDashboardPage() {
       </Card>
 
       <Link to="/admin/news" className="group">
-        <Card className="h-full border-zinc-800 hover:border-rose-500/60 transition-colors">
+        <Card className="h-full border-zinc-800 transition-colors hover:border-rose-500/60">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Newspaper className="w-5 h-5 text-rose-400" />
+                  <Newspaper className="h-5 w-5 text-rose-400" />
                   {t('admin.dashboard.newsTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
                   {t('admin.dashboard.newsDescription')}
                 </CardDescription>
               </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-white" />
             </div>
           </CardContent>
         </Card>
       </Link>
 
       <Link to="/admin/battles" className="group">
-        <Card className="h-full border-zinc-800 hover:border-rose-500/60 transition-colors">
+        <Card className="h-full border-zinc-800 transition-colors hover:border-rose-500/60">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Swords className="w-5 h-5 text-rose-400" />
+                  <Swords className="h-5 w-5 text-rose-400" />
                   {t('admin.dashboard.battlesTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
                   {t('admin.dashboard.battlesDescription')}
                 </CardDescription>
               </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-white" />
             </div>
           </CardContent>
         </Card>
       </Link>
 
       <Link to="/admin/messages" className="group">
-        <Card className="h-full border-zinc-800 hover:border-rose-500/60 transition-colors">
+        <Card className="h-full border-zinc-800 transition-colors hover:border-rose-500/60">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Inbox className="w-5 h-5 text-rose-400" />
+                  <Inbox className="h-5 w-5 text-rose-400" />
                   {t('admin.dashboard.messagesTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
                   {t('admin.dashboard.messagesDescription')}
                 </CardDescription>
               </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-white" />
             </div>
           </CardContent>
         </Card>
       </Link>
 
       <Link to="/admin/beat-analytics" className="group">
-        <Card className="h-full border-zinc-800 hover:border-rose-500/60 transition-colors">
+        <Card className="h-full border-zinc-800 transition-colors hover:border-rose-500/60">
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-rose-400" />
+                  <BarChart3 className="h-5 w-5 text-rose-400" />
                   {t('admin.dashboard.beatAnalyticsTitle')}
                 </CardTitle>
                 <CardDescription className="mt-2">
                   {t('admin.dashboard.beatAnalyticsDescription')}
                 </CardDescription>
               </div>
-              <ArrowRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-colors" />
+              <ArrowRight className="h-4 w-4 text-zinc-500 transition-colors group-hover:text-white" />
             </div>
           </CardContent>
         </Card>

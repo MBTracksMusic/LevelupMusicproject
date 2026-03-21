@@ -1,4 +1,5 @@
 import { supabase } from './supabase/client';
+import type { AnalyticsDateRange } from './analyticsService';
 
 export interface FunnelData {
   views: number;
@@ -6,13 +7,31 @@ export interface FunnelData {
   purchases: number;
 }
 
-let funnelDataPromise: Promise<FunnelData> | null = null;
+const funnelDataPromises = new Map<AnalyticsDateRange, Promise<FunnelData>>();
 
-async function fetchFunnelData(): Promise<FunnelData> {
-  const { count: purchases, error } = await supabase
+function getPeriodStart(dateRange: AnalyticsDateRange) {
+  if (dateRange === 'all') {
+    return null;
+  }
+
+  const date = new Date();
+  date.setDate(date.getDate() - (dateRange === '7d' ? 7 : 30));
+  return date.toISOString();
+}
+
+async function fetchFunnelData(dateRange: AnalyticsDateRange): Promise<FunnelData> {
+  let query = supabase
     .from('purchases')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'completed');
+
+  const periodStart = getPeriodStart(dateRange);
+
+  if (periodStart) {
+    query = query.gte('created_at', periodStart);
+  }
+
+  const { count: purchases, error } = await query;
 
   if (error) {
     throw error;
@@ -31,13 +50,18 @@ async function fetchFunnelData(): Promise<FunnelData> {
   };
 }
 
-export async function getFunnelData() {
-  if (!funnelDataPromise) {
-    funnelDataPromise = fetchFunnelData().catch((error) => {
-      funnelDataPromise = null;
-      throw error;
-    });
+export async function getFunnelData(dateRange: AnalyticsDateRange) {
+  const existingPromise = funnelDataPromises.get(dateRange);
+
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  return funnelDataPromise;
+  const funnelPromise = fetchFunnelData(dateRange).catch((error) => {
+    funnelDataPromises.delete(dateRange);
+    throw error;
+  });
+
+  funnelDataPromises.set(dateRange, funnelPromise);
+  return funnelPromise;
 }
