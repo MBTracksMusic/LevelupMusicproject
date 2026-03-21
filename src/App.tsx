@@ -58,6 +58,14 @@ import { LogoLoader } from './components/ui/LogoLoader';
 import { MaintenanceModeProvider } from './lib/supabase/MaintenanceModeContext';
 import { useMaintenanceMode } from './lib/supabase/useMaintenanceMode';
 
+const MAINTENANCE_BYPASS_PATHS = new Set([
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/email-confirmation',
+]);
+
 function AppContent() {
   const { user, isInitialized } = useAuth();
   const fetchCart = useCartStore((state) => state.fetchCart);
@@ -250,18 +258,19 @@ function MaintenanceScreen() {
   );
 }
 
-function App() {
-  useEffect(() => {
-    const unsubscribe = initializeAuth();
-    return unsubscribe;
-  }, []);
-
+function AppShell({
+  maintenance,
+  isMaintenanceLoading,
+}: {
+  maintenance: boolean;
+  isMaintenanceLoading: boolean;
+}) {
   const { profile, isInitialized } = useAuth();
-  const maintenanceMode = useMaintenanceMode();
-  const { maintenance, isLoading: isMaintenanceLoading } = maintenanceMode;
+  const location = useLocation();
   const isAdmin = profile?.role === 'admin';
+  const canBypassMaintenance = MAINTENANCE_BYPASS_PATHS.has(location.pathname);
 
-  if (isMaintenanceLoading || (maintenance && !isInitialized)) {
+  if (isMaintenanceLoading || (maintenance && !isAdmin && !canBypassMaintenance && !isInitialized)) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <LogoLoader label="Initializing Beatelion..." iconClassName="h-14 w-14" />
@@ -269,16 +278,28 @@ function App() {
     );
   }
 
-  if (maintenance && !isAdmin) {
+  if (maintenance && !isAdmin && !canBypassMaintenance) {
     return (
       <MaintenanceScreen />
     );
   }
 
+  return <AppContent />;
+}
+
+function App() {
+  useEffect(() => {
+    const unsubscribe = initializeAuth();
+    return unsubscribe;
+  }, []);
+
+  const maintenanceMode = useMaintenanceMode();
+  const { maintenance, isLoading: isMaintenanceLoading } = maintenanceMode;
+
   return (
     <MaintenanceModeProvider value={maintenanceMode}>
       <BrowserRouter>
-        <AppContent />
+        <AppShell maintenance={maintenance} isMaintenanceLoading={isMaintenanceLoading} />
         <Toaster
           position="bottom-right"
           toastOptions={{
