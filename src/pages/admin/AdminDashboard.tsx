@@ -8,12 +8,14 @@ import { Input } from '../../components/ui/Input';
 import { AnalyticsAlertsPanel } from '../../components/system/AnalyticsAlertsPanel';
 import {
   getAverageOrderValue,
+  getProductPerformance,
   getRevenueToday,
   getTopProducts,
   getTotalPurchases,
   getTotalRevenue,
   type AnalyticsDateRange,
   type MetricWithGrowth,
+  type ProductPerformanceRow,
   type TopProductAnalytics,
 } from '../../lib/analyticsService';
 import {
@@ -79,6 +81,7 @@ export function AdminDashboardPage() {
   const [averageOrderValue, setAverageOrderValue] = useState<MetricWithGrowth>({ value: 0, growth: 0 });
   const [revenueToday, setRevenueToday] = useState(0);
   const [topProducts, setTopProducts] = useState<TopProductAnalytics[]>([]);
+  const [productPerformance, setProductPerformance] = useState<ProductPerformanceRow[]>([]);
   const [isFunnelLoading, setIsFunnelLoading] = useState(true);
   const [funnelError, setFunnelError] = useState<string | null>(null);
   const [funnelViews, setFunnelViews] = useState(0);
@@ -115,12 +118,14 @@ export function AdminDashboardPage() {
           nextAverageOrderValue,
           nextRevenueToday,
           nextTopProducts,
+          nextProductPerformance,
         ] = await Promise.all([
           getTotalRevenue(dateRange),
           getTotalPurchases(dateRange),
           getAverageOrderValue(dateRange),
           getRevenueToday(dateRange),
           getTopProducts(dateRange),
+          getProductPerformance(dateRange),
         ]);
 
         if (isCancelled) {
@@ -132,6 +137,7 @@ export function AdminDashboardPage() {
         setAverageOrderValue(nextAverageOrderValue);
         setRevenueToday(nextRevenueToday);
         setTopProducts(nextTopProducts);
+        setProductPerformance(nextProductPerformance);
       } catch {
         if (isCancelled) {
           return;
@@ -275,6 +281,17 @@ export function AdminDashboardPage() {
     { value: '30d', label: '30 jours' },
     { value: 'all', label: 'Tout' },
   ];
+  const bestPerformers = productPerformance.slice(0, 5);
+  const worstPerformers = [...productPerformance]
+    .filter((product) => product.views > 0)
+    .sort((a, b) => {
+      if (a.conversionRate !== b.conversionRate) {
+        return a.conversionRate - b.conversionRate;
+      }
+
+      return b.views - a.views;
+    })
+    .slice(0, 5);
 
   const handleMaintenanceToggle = async () => {
     setIsSavingMaintenance(true);
@@ -506,6 +523,85 @@ export function AdminDashboardPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2 border-zinc-800">
+        <CardHeader>
+          <CardTitle>Performance produits</CardTitle>
+          <CardDescription>
+            Vues, achats et conversion par produit pour identifier les meilleurs et les plus faibles.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Best performers</p>
+            {isAnalyticsLoading ? (
+              <p className="text-sm text-zinc-400">Chargement des performances produits...</p>
+            ) : bestPerformers.length === 0 ? (
+              <p className="text-sm text-zinc-400">Aucune donnée produit disponible.</p>
+            ) : (
+              bestPerformers.map((product) => (
+                <div
+                  key={`best-${product.productId}`}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">{product.productName}</p>
+                      <p className="mt-1 text-xs text-zinc-500">/{product.slug}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-emerald-300">
+                      {formatPercent(product.conversionRate)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400">
+                    <span>{product.views} vues</span>
+                    <span>{product.purchases} achats</span>
+                    <span>{formatCurrency(product.price)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Worst performers</p>
+            {isAnalyticsLoading ? (
+              <p className="text-sm text-zinc-400">Chargement des performances produits...</p>
+            ) : worstPerformers.length === 0 ? (
+              <p className="text-sm text-zinc-400">Aucune donnée produit disponible.</p>
+            ) : (
+              worstPerformers.map((product) => (
+                <div
+                  key={`worst-${product.productId}`}
+                  className={`rounded-xl border px-4 py-4 ${
+                    product.lowConversion
+                      ? 'border-rose-500/30 bg-rose-500/5'
+                      : 'border-zinc-800 bg-zinc-950/60'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">{product.productName}</p>
+                      <p className="mt-1 text-xs text-zinc-500">/{product.slug}</p>
+                    </div>
+                    <span className={product.lowConversion ? 'text-sm font-semibold text-rose-300' : 'text-sm font-semibold text-amber-300'}>
+                      {formatPercent(product.conversionRate)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-400">
+                    <span>{product.views} vues</span>
+                    <span>{product.purchases} achats</span>
+                    <span>{formatCurrency(product.price)}</span>
+                  </div>
+                  {product.lowConversion ? (
+                    <p className="mt-2 text-xs font-medium text-rose-300">Low conversion: plus de 100 vues sans achat.</p>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
 

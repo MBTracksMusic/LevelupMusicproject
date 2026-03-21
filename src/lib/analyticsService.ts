@@ -9,6 +9,14 @@ type PurchaseRow = Pick<
 >;
 
 type ProductRow = Pick<Database['public']['Tables']['products']['Row'], 'id' | 'title'>;
+type PlayEventRow = Pick<
+  Database['public']['Tables']['play_events']['Row'],
+  'product_id' | 'played_at'
+>;
+type ProductCatalogRow = Pick<
+  Database['public']['Views']['public_catalog_products']['Row'],
+  'id' | 'title' | 'slug' | 'price'
+>;
 
 export interface MetricWithGrowth {
   value: number;
@@ -33,6 +41,17 @@ interface AnalyticsSnapshot {
   averageOrderValue: MetricWithGrowth;
   revenueToday: number;
   topProducts: TopProductAnalytics[];
+}
+
+export interface ProductPerformanceRow {
+  productId: string;
+  productName: string;
+  slug: string;
+  price: number;
+  views: number;
+  purchases: number;
+  conversionRate: number;
+  lowConversion: boolean;
 }
 
 const analyticsSnapshotPromises = new Map<AnalyticsDateRange, Promise<AnalyticsSnapshot>>();
@@ -303,4 +322,87 @@ export async function getRevenueToday(dateRange: AnalyticsDateRange) {
 export async function getTopProducts(dateRange: AnalyticsDateRange) {
   const snapshot = await getAnalyticsSnapshot(dateRange);
   return snapshot.topProducts;
+}
+
+export async function getProductPerformance(dateRange: AnalyticsDateRange) {
+  const periodStart = getPeriodStart(dateRange);
+
+  let playEventsQuery = supabase
+    .from('play_events')
+    .select('product_id, played_at')
+    .order('played_at', { ascending: false });
+
+  let purchasesQuery = supabase
+    .from('purchases')
+    .select('product_id, created_at, status')
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false });
+
+  if (periodStart) {
+    playEventsQuery = playEventsQuery.gte('played_at', periodStart);
+    purchasesQuery = purchasesQuery.gte('created_at', periodStart);
+  }
+
+  const [
+    { data: playEvents, error: playEventsError },
+    { data: purchases, error: purchasesError },
+    { data: catalogProducts, error: catalogProductsError },
+  ] = await Promise.all([
+    playEventsQuery,
+    purchasesQuery,
+    supabase
+      .from('public_catalog_products')
+      .select('id, title, slug, price')
+      .is('deleted_at', null)
+      .eq('is_published', true),
+  ]);
+
+  if (playEventsError) {
+    throw playEventsError;
+  }
+
+  if (purchasesError) {
+    throw purchasesError;
+  }
+
+  if (catalogProductsError) {
+    throw catalogProductsError;
+  }
+
+  const viewsByProduct = new Map<string, number>();
+  const purchasesByProduct = new Map<string, number>();
+
+  ((playEvents ?? []) as PlayEventRow[]).forEach((event) => {
+    viewsByProduct.set(event.product_id, (viewsByProduct.get(event.product_id) ?? 0) + 1);
+  });
+
+  ((purchases ?? []) as Array<Pick<PurchaseRow, 'product_id'>>).forEach((purchase) => {
+    purchasesByProduct.set(purchase.product_id, (purchasesByProduct.get(purchase.product_id) ?? 0) + 1);
+  });
+
+  return ((catalogProducts ?? []) as ProductCatalogRow[])
+    .filter((product) => typeof product.id === 'string' && product.id.length > 0)
+    .map((product) => {
+      const views = viewsByProduct.get(product.id as string) ?? 0;
+      const purchaseCount = purchasesByProduct.get(product.id as string) ?? 0;
+      const conversionRate = views > 0 ? purchaseCount / views : 0;
+
+      return {
+        productId: product.id as string,
+        productName: product.title ?? 'Produit inconnu',
+        slug: product.slug ?? '',
+        price: product.price ?? 0,
+        views,
+        purchases: purchaseCount,
+        conversionRate: roundMetric(conversionRate),
+        lowConversion: views > 100 && purchaseCount === 0,
+      } satisfies ProductPerformanceRow;
+    })
+    .sort((a, b) => {
+      if (b.conversionRate !== a.conversionRate) {
+        return b.conversionRate - a.conversionRate;
+      }
+
+      return b.views - a.views;
+    });
 }

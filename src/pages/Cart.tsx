@@ -7,6 +7,7 @@ import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { supabase } from '../lib/supabase/client';
+import { trackBeginCheckout } from '../lib/analytics';
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -60,6 +61,12 @@ export function CartPage() {
 
     if (!firstItem) return;
     const selectedLicenseType = firstItem.license_type ?? 'standard';
+
+    trackBeginCheckout({
+      productId: firstItem.product_id,
+      price: firstItem.product?.price ?? 0,
+      productName: firstItem.product?.title ?? null,
+    });
 
     setCheckoutError(null);
     setIsCheckoutLoading(true);
@@ -211,7 +218,9 @@ export function CartPage() {
                         variant="ghost"
                         size="sm"
                         className="mt-2 text-rose-400 hover:text-rose-300"
-                        onClick={() => handleRemove(item.product_id)}
+                        onClick={() => {
+                          void handleRemove(item.product_id);
+                        }}
                         isLoading={removingId === item.product_id}
                         leftIcon={<Trash2 className="w-4 h-4" />}
                       >

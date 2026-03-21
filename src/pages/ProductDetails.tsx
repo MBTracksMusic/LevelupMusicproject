@@ -13,6 +13,8 @@ import { useCartStore } from '../lib/stores/cart';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '@/lib/supabase/client';
 import { useCreditBalance } from '../lib/credits/useCreditBalance';
+import { trackClickBuy, trackViewProduct } from '../lib/analytics';
+import { getExperimentVariant } from '../lib/experiments';
 
 interface CreditPurchaseResult {
   balance_after: number;
@@ -64,6 +66,10 @@ export function ProductDetailsPage() {
     useCreditBalance(user?.id);
 
   const routePrefix = useMemo(() => location.pathname.split('/')[1] || 'beats', [location.pathname]);
+  const ctaVariant = useMemo(
+    () => getExperimentVariant(user?.id ?? 'guest', 'product-buy-cta'),
+    [user?.id],
+  );
 
   useEffect(() => {
     let isCancelled = false;
@@ -161,6 +167,49 @@ export function ProductDetailsPage() {
     };
   }, [product?.id, user?.id]);
 
+  useEffect(() => {
+    if (!product) {
+      return;
+    }
+
+    const previousTitle = document.title;
+    const previousMetaDescription =
+      document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '';
+    const nextTitle = `${product.title} | Beatelion`;
+    const producerName = product.producer?.username?.trim();
+    const descriptionParts = [
+      producerName ? `Beat de ${producerName}` : null,
+      product.genre?.name ? product.genre.name : null,
+      typeof product.bpm === 'number' ? `${product.bpm} BPM` : null,
+      `Disponible sur Beatelion`,
+    ].filter(Boolean);
+    const nextDescription = descriptionParts.join(' • ').slice(0, 155);
+    let meta = document.querySelector('meta[name="description"]');
+
+    document.title = nextTitle;
+
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'description');
+      document.head.appendChild(meta);
+    }
+
+    meta.setAttribute('content', nextDescription);
+
+    trackViewProduct({
+      productId: product.id,
+      price: product.price,
+      productName: product.title,
+    });
+
+    return () => {
+      document.title = previousTitle;
+      if (meta) {
+        meta.setAttribute('content', previousMetaDescription);
+      }
+    };
+  }, [product]);
+
   const isCurrentTrack = currentTrack?.id === product?.id;
   const hasPreview = Boolean(product?.preview_url?.trim());
   const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
@@ -196,6 +245,13 @@ export function ProductDetailsPage() {
 
   const handleAddToCart = async () => {
     if (!product || product.is_sold) return;
+
+    trackClickBuy({
+      productId: product.id,
+      price: product.price,
+      productName: product.title,
+    });
+
     if (!isAuthenticated) {
       navigate('/login', { state: { from: { pathname: location.pathname } } });
       return;
@@ -397,7 +453,7 @@ export function ProductDetailsPage() {
                   onClick={handleAddToCart}
                   isLoading={isAddingToCart}
                   leftIcon={<ShoppingCart className="w-4 h-4" />}
-                  variant={isAuthenticated ? 'primary' : 'outline'}
+                  variant={isAuthenticated ? (ctaVariant === 'A' ? 'primary' : 'secondary') : 'outline'}
                 >
                   {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
                 </Button>

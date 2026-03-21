@@ -155,6 +155,42 @@ export function trackEvent(name: string, params: GtagParams = {}) {
   });
 }
 
+interface ProductEventPayload {
+  productId: string;
+  price: number;
+  productName?: string | null;
+  currency?: string;
+  transactionId?: string;
+}
+
+function toProductEventParams(payload: ProductEventPayload): GtagParams {
+  return {
+    product_id: payload.productId,
+    value: payload.price,
+    price: payload.price,
+    currency: payload.currency ?? 'EUR',
+    item_id: payload.productId,
+    item_name: payload.productName ?? undefined,
+    transaction_id: payload.transactionId ?? undefined,
+  };
+}
+
+export function trackViewProduct(payload: ProductEventPayload) {
+  trackEvent('view_product', toProductEventParams(payload));
+}
+
+export function trackClickBuy(payload: ProductEventPayload) {
+  trackEvent('click_buy', toProductEventParams(payload));
+}
+
+export function trackBeginCheckout(payload: ProductEventPayload) {
+  trackEvent('begin_checkout', toProductEventParams(payload));
+}
+
+export function trackPurchase(payload: ProductEventPayload) {
+  trackEvent('purchase', toProductEventParams(payload));
+}
+
 export async function grantAnalyticsConsent() {
   if (typeof window === 'undefined') {
     return;
@@ -191,7 +227,11 @@ export function useAnalytics() {
     initAnalytics,
     grantAnalyticsConsent,
     revokeAnalyticsConsent,
+    trackBeginCheckout,
+    trackClickBuy,
     trackEvent,
     trackPage,
+    trackPurchase,
+    trackViewProduct,
   };
 }
