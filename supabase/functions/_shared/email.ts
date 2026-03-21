@@ -15,6 +15,7 @@ const DEFAULT_APP_URL = "https://beatelion.com";
 const DEFAULT_UNSUBSCRIBE_URL = `${DEFAULT_APP_URL}/unsubscribe`;
 const DEFAULT_PREFERENCES_URL = `${DEFAULT_APP_URL}/settings/notifications`;
 const DEFAULT_SUPPORT_EMAIL = "support@beatelion.com";
+const DEFAULT_WARMUP_DAY_FIVE_LIMIT = 250;
 
 const asNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
@@ -100,6 +101,26 @@ export const getEmailConfig = () => {
     asNonEmptyString(Deno.env.get("EMAIL_MAX_BATCH_SIZE")),
     50,
   );
+  const warmupDay = parsePositiveIntEnv(
+    asNonEmptyString(Deno.env.get("EMAIL_WARMUP_DAY")),
+    1,
+  );
+  const debugMode = parseBooleanEnv(
+    asNonEmptyString(Deno.env.get("EMAIL_DEBUG_MODE")),
+    false,
+  );
+  const forceSafeMode = parseBooleanEnv(
+    asNonEmptyString(Deno.env.get("EMAIL_FORCE_SAFE_MODE")),
+    false,
+  );
+  const allowLargeMarketingOverride = parseBooleanEnv(
+    asNonEmptyString(Deno.env.get("EMAIL_ALLOW_LARGE_MARKETING_OVERRIDE")),
+    false,
+  );
+  const domainUnder30Days = parseBooleanEnv(
+    asNonEmptyString(Deno.env.get("EMAIL_DOMAIN_UNDER_30_DAYS")),
+    false,
+  );
 
   const missing: string[] = [];
   if (!resendApiKey) missing.push("RESEND_API_KEY");
@@ -124,6 +145,11 @@ export const getEmailConfig = () => {
     marketingSendsEnabled,
     warmupMode,
     maxBatchSize,
+    warmupDay,
+    debugMode,
+    forceSafeMode,
+    allowLargeMarketingOverride,
+    domainUnder30Days,
   };
 };
 
@@ -275,6 +301,20 @@ export const appendFooterTextByCategory = (params: {
 
 export const resolveMarketingSendWindow = (requestedCount: number, functionName: string) => {
   const config = getEmailConfig();
+  const dayBasedLimit = (() => {
+    if (config.warmupDay <= 1) return 20;
+    if (config.warmupDay === 2) return 40;
+    if (config.warmupDay === 3) return 80;
+    if (config.warmupDay === 4) return 150;
+    return parsePositiveIntEnv(asNonEmptyString(Deno.env.get("EMAIL_WARMUP_DAY_FIVE_LIMIT")), DEFAULT_WARMUP_DAY_FIVE_LIMIT);
+  })();
+
+  if (config.forceSafeMode) {
+    const message = "Marketing email sending is blocked by EMAIL_FORCE_SAFE_MODE=true";
+    console.error(`[${functionName}] marketing_guardrail_block`, { requestedCount, message });
+    throw new Error(message);
+  }
+
   if (!config.marketingSendsEnabled) {
     const message = "Marketing email sending is disabled by EMAIL_MARKETING_SENDS_ENABLED=false";
     console.error(`[${functionName}] marketing_guardrail_block`, { requestedCount, message });
@@ -282,13 +322,22 @@ export const resolveMarketingSendWindow = (requestedCount: number, functionName:
   }
 
   if (!config.warmupMode) {
+    if (config.domainUnder30Days) {
+      console.warn(`[${functionName}] young_domain_warning`, {
+        requestedCount,
+        domainUnder30Days: true,
+      });
+    }
     return {
       allowedCount: requestedCount,
       warmupLimited: false,
     };
   }
 
-  const allowedCount = Math.min(requestedCount, config.maxBatchSize);
+  const effectiveCap = Math.min(config.maxBatchSize, dayBasedLimit);
+  const allowedCount = config.allowLargeMarketingOverride
+    ? requestedCount
+    : Math.min(requestedCount, effectiveCap);
   const warmupLimited = allowedCount < requestedCount;
 
   console.log(`[${functionName}] marketing_guardrail_check`, {
@@ -296,13 +345,35 @@ export const resolveMarketingSendWindow = (requestedCount: number, functionName:
     allowedCount,
     warmupMode: config.warmupMode,
     maxBatchSize: config.maxBatchSize,
+    warmupDay: config.warmupDay,
+    dayBasedLimit,
     warmupLimited,
+    allowLargeMarketingOverride: config.allowLargeMarketingOverride,
   });
 
   return {
     allowedCount,
     warmupLimited,
   };
+};
+
+export const logDeliverabilityTest = (params: {
+  providerMessageId: string | null;
+  recipient: string;
+  subject: string;
+  timestamp: string;
+}) => {
+  console.log("[email-deliverability-test]", {
+    providerMessageId: params.providerMessageId,
+    recipient: params.recipient,
+    subject: params.subject,
+    timestamp: params.timestamp,
+    manualChecks: [
+      "Open Gmail or Outlook received message",
+      "Use Gmail Show original or Outlook message headers",
+      "Confirm SPF=PASS, DKIM=PASS, DMARC=PASS",
+    ],
+  });
 };
 
 export const classifySendError = (error: unknown): {
@@ -351,6 +422,15 @@ export const sendEmailWithResend = async (params: {
   const recipient = config.recipientOverride ?? normalizedRecipient;
   const timestamp = new Date().toISOString();
 
+  if (config.domainUnder30Days && params.category === "marketing") {
+    console.warn(`[${params.functionName}] young_domain_warning`, {
+      recipient,
+      subject: params.subject,
+      timestamp,
+      category: params.category,
+    });
+  }
+
   console.log(`[${params.functionName}] email_send_attempt`, {
     recipient,
     normalizedRecipient,
@@ -382,6 +462,26 @@ export const sendEmailWithResend = async (params: {
       category: params.category,
       providerMessageId: response.data?.id ?? null,
     });
+
+    if (config.debugMode) {
+      console.log(`[${params.functionName}] email_debug_payload`, {
+        sender: config.resendFromEmail,
+        recipient,
+        normalizedRecipient,
+        subject: params.subject,
+        category: params.category,
+        idempotencyKey: params.idempotencyKey ?? null,
+        providerMessageId: response.data?.id ?? null,
+        htmlPreview: params.html.slice(0, 500),
+        textPreview: params.text.slice(0, 500),
+      });
+      logDeliverabilityTest({
+        providerMessageId: response.data?.id ?? null,
+        recipient,
+        subject: params.subject,
+        timestamp,
+      });
+    }
 
     return {
       ok: true as const,

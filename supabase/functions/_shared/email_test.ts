@@ -72,12 +72,14 @@ Deno.test("warmup mode caps marketing sends only", () => {
   const previousWarmup = Deno.env.get("EMAIL_DOMAIN_WARMUP_MODE");
   const previousLimit = Deno.env.get("EMAIL_MAX_BATCH_SIZE");
   const previousEnabled = Deno.env.get("EMAIL_MARKETING_SENDS_ENABLED");
+  const previousWarmupDay = Deno.env.get("EMAIL_WARMUP_DAY");
   const previousApiKey = Deno.env.get("RESEND_API_KEY");
   const previousFrom = Deno.env.get("RESEND_FROM_EMAIL");
 
   Deno.env.set("EMAIL_DOMAIN_WARMUP_MODE", "true");
   Deno.env.set("EMAIL_MAX_BATCH_SIZE", "25");
   Deno.env.set("EMAIL_MARKETING_SENDS_ENABLED", "true");
+  Deno.env.set("EMAIL_WARMUP_DAY", "3");
   Deno.env.set("RESEND_API_KEY", previousApiKey ?? "test_key");
   Deno.env.set("RESEND_FROM_EMAIL", previousFrom ?? "Beatelion <contact@beatelion.com>");
 
@@ -93,6 +95,8 @@ Deno.test("warmup mode caps marketing sends only", () => {
     else Deno.env.delete("EMAIL_MAX_BATCH_SIZE");
     if (previousEnabled) Deno.env.set("EMAIL_MARKETING_SENDS_ENABLED", previousEnabled);
     else Deno.env.delete("EMAIL_MARKETING_SENDS_ENABLED");
+    if (previousWarmupDay) Deno.env.set("EMAIL_WARMUP_DAY", previousWarmupDay);
+    else Deno.env.delete("EMAIL_WARMUP_DAY");
     if (previousApiKey) Deno.env.set("RESEND_API_KEY", previousApiKey);
     else Deno.env.delete("RESEND_API_KEY");
     if (previousFrom) Deno.env.set("RESEND_FROM_EMAIL", previousFrom);

@@ -21,6 +21,22 @@ Vous pouvez personnaliser les emails de confirmation :
 3. Personnalisez le template selon vos besoins
 4. Assurez-vous que le lien de confirmation pointe vers : `{{ .ConfirmationURL }}`
 
+## Configuration recommandee: Send Email Hook
+
+Pour reprendre le controle complet des emails Auth avec Resend:
+
+1. Deployez la fonction Edge:
+   `supabase functions deploy auth-send-email --no-verify-jwt`
+2. Ouvrez **Auth > Hooks > Send Email**
+3. Creez un hook HTTPS pointant vers l'URL de `auth-send-email`
+4. Generez le secret du hook
+5. Ajoutez les secrets Supabase:
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL="Beatelion <contact@beatelion.com>"`
+   - `SEND_EMAIL_HOOK_SECRET="v1,whsec_..."`
+
+Ce hook envoie les emails Auth via le meme systeme Resend/logging que les autres emails applicatifs.
+
 ## Flux d'inscription avec confirmation
 
 Une fois configuré, le flux d'inscription fonctionne ainsi :
