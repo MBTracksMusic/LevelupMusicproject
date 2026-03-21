@@ -40,12 +40,21 @@ function formatCountdownUnit(value: number) {
 }
 
 function getEmbedUrl(url: string): string {
-  if (url.includes('youtube.com/watch')) {
-    const id = new URL(url).searchParams.get('v');
-    return id ? `https://www.youtube.com/embed/${id}` : url;
-  }
+  try {
+    if (url.includes('youtube.com/watch')) {
+      const id = new URL(url).searchParams.get('v');
+      return id ? `https://www.youtube.com/embed/${id}` : url;
+    }
 
-  return url;
+    if (url.includes('youtu.be/')) {
+      const id = url.split('youtu.be/')[1];
+      return id ? `https://www.youtube.com/embed/${id}` : url;
+    }
+
+    return url;
+  } catch {
+    return url;
+  }
 }
 
 export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScreenProps) {
@@ -89,7 +98,7 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
 
   const isCountdownMode = formattedLaunchDate !== null;
   const trimmedLaunchVideoUrl = launchVideoUrl?.trim() ?? '';
-  const hasVideo = trimmedLaunchVideoUrl !== '';
+  const hasVideo = !!trimmedLaunchVideoUrl;
 
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-12 text-white">

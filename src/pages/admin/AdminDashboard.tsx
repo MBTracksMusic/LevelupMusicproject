@@ -41,6 +41,7 @@ export function AdminDashboardPage() {
   const {
     maintenance,
     launchDate,
+    launchVideoUrl,
     updatedAt,
     isLoading,
     updateMaintenanceMode,
@@ -48,13 +49,21 @@ export function AdminDashboardPage() {
   } = useMaintenanceModeContext();
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
   const [launchDateInput, setLaunchDateInput] = useState(() => toDatetimeLocalValue(launchDate));
+  const [launchVideoUrlInput, setLaunchVideoUrlInput] = useState(() => launchVideoUrl ?? '');
   const [isSavingLaunchDate, setIsSavingLaunchDate] = useState(false);
+  const [isSavingLaunchVideoUrl, setIsSavingLaunchVideoUrl] = useState(false);
 
   useEffect(() => {
     if (!isSavingLaunchDate) {
       setLaunchDateInput(toDatetimeLocalValue(launchDate));
     }
   }, [isSavingLaunchDate, launchDate]);
+
+  useEffect(() => {
+    if (!isSavingLaunchVideoUrl) {
+      setLaunchVideoUrlInput(launchVideoUrl ?? '');
+    }
+  }, [isSavingLaunchVideoUrl, launchVideoUrl]);
 
   const handleMaintenanceToggle = async () => {
     setIsSavingMaintenance(true);
@@ -94,6 +103,34 @@ export function AdminDashboardPage() {
       toast.error("Impossible de supprimer la date de lancement.");
     } finally {
       setIsSavingLaunchDate(false);
+    }
+  };
+
+  const handleLaunchVideoUrlSave = async () => {
+    setIsSavingLaunchVideoUrl(true);
+
+    try {
+      const trimmedLaunchVideoUrl = launchVideoUrlInput.trim();
+      await updateSettings({ launch_video_url: trimmedLaunchVideoUrl || null });
+      toast.success(trimmedLaunchVideoUrl ? 'URL vidéo enregistrée.' : 'URL vidéo supprimée.');
+    } catch {
+      toast.error("Impossible d'enregistrer l'URL vidéo.");
+    } finally {
+      setIsSavingLaunchVideoUrl(false);
+    }
+  };
+
+  const handleLaunchVideoUrlClear = async () => {
+    setIsSavingLaunchVideoUrl(true);
+
+    try {
+      setLaunchVideoUrlInput('');
+      await updateSettings({ launch_video_url: null });
+      toast.success('URL vidéo supprimée.');
+    } catch {
+      toast.error("Impossible de supprimer l'URL vidéo.");
+    } finally {
+      setIsSavingLaunchVideoUrl(false);
     }
   };
 
@@ -199,6 +236,47 @@ export function AdminDashboardPage() {
                   {launchDate
                     ? `Date active : ${new Date(launchDate).toLocaleString()}`
                     : 'Aucune date active'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Vidéo de lancement</p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  URL facultative. Si elle est vide, aucune vidéo ne sera affichée sur l'écran de maintenance.
+                </p>
+              </div>
+
+              <Input
+                type="url"
+                label="URL vidéo"
+                value={launchVideoUrlInput}
+                onChange={(event) => setLaunchVideoUrlInput(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                disabled={isLoading || isSavingLaunchVideoUrl}
+              />
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="primary"
+                  onClick={handleLaunchVideoUrlSave}
+                  isLoading={isSavingLaunchVideoUrl}
+                  disabled={isLoading}
+                >
+                  Enregistrer l'URL
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleLaunchVideoUrlClear}
+                  disabled={isLoading || isSavingLaunchVideoUrl || !launchVideoUrl}
+                >
+                  Vider l'URL
+                </Button>
+                <span className="text-sm text-zinc-500">
+                  {launchVideoUrl ? 'Une vidéo est actuellement configurée' : 'Aucune vidéo active'}
                 </span>
               </div>
             </div>

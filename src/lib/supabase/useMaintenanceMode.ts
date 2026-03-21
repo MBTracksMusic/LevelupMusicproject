@@ -5,9 +5,12 @@ import type { Database } from './database.types';
 
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
 type SettingsUpdate = Database['public']['Tables']['settings']['Update'];
-type SettingsRowShape = Pick<SettingsRow, 'id' | 'launch_date' | 'maintenance_mode' | 'updated_at'>;
+type SettingsRowShape = Pick<
+  SettingsRow,
+  'id' | 'launch_date' | 'launch_video_url' | 'maintenance_mode' | 'updated_at'
+>;
 
-const SETTINGS_SELECT = 'id, launch_date, maintenance_mode, updated_at';
+const SETTINGS_SELECT = 'id, launch_date, launch_video_url, maintenance_mode, updated_at';
 const SETTINGS_CHANNEL = 'public:settings:maintenance-mode';
 
 function isSettingsRow(value: unknown): value is SettingsRowShape {
@@ -17,6 +20,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
   return (
     typeof candidate.id === 'string'
     && (typeof candidate.launch_date === 'string' || candidate.launch_date === null)
+    && (typeof candidate.launch_video_url === 'string' || candidate.launch_video_url === null)
     && typeof candidate.maintenance_mode === 'boolean'
     && typeof candidate.updated_at === 'string'
   );
@@ -25,6 +29,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
 export function useMaintenanceMode() {
   const [maintenance, setMaintenance] = useState(false);
   const [launchDate, setLaunchDate] = useState<string | null>(null);
+  const [launchVideoUrl, setLaunchVideoUrl] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +39,7 @@ export function useMaintenanceMode() {
     if (!row) {
       setMaintenance(false);
       setLaunchDate(null);
+      setLaunchVideoUrl(null);
       setSettingsId(null);
       setUpdatedAt(null);
       return;
@@ -41,6 +47,7 @@ export function useMaintenanceMode() {
 
     setMaintenance(row.maintenance_mode);
     setLaunchDate(row.launch_date);
+    setLaunchVideoUrl(row.launch_video_url ?? null);
     setSettingsId(row.id);
     setUpdatedAt(row.updated_at);
   }, []);
@@ -120,6 +127,7 @@ export function useMaintenanceMode() {
   return {
     maintenance,
     launchDate,
+    launchVideoUrl,
     settingsId,
     updatedAt,
     isLoading,

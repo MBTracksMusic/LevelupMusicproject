@@ -243,10 +243,12 @@ function NotFound() {
 function AppShell({
   maintenance,
   launchDate,
+  launchVideoUrl,
   isMaintenanceLoading,
 }: {
   maintenance: boolean;
   launchDate: string | null;
+  launchVideoUrl: string | null;
   isMaintenanceLoading: boolean;
 }) {
   const { profile, isInitialized } = useAuth();
@@ -264,7 +266,7 @@ function AppShell({
 
   if (maintenance && !isAdmin && !canBypassMaintenance) {
     return (
-      <MaintenanceScreen launchDate={launchDate} />
+      <MaintenanceScreen launchDate={launchDate} launchVideoUrl={launchVideoUrl} />
     );
   }
 
@@ -278,7 +280,12 @@ function App() {
   }, []);
 
   const maintenanceMode = useMaintenanceMode();
-  const { maintenance, launchDate, isLoading: isMaintenanceLoading } = maintenanceMode;
+  const {
+    maintenance,
+    launchDate,
+    launchVideoUrl,
+    isLoading: isMaintenanceLoading,
+  } = maintenanceMode;
 
   return (
     <MaintenanceModeProvider value={maintenanceMode}>
@@ -286,6 +293,7 @@ function App() {
         <AppShell
           maintenance={maintenance}
           launchDate={launchDate}
+          launchVideoUrl={launchVideoUrl}
           isMaintenanceLoading={isMaintenanceLoading}
         />
         <Toaster
