@@ -37,6 +37,18 @@ Pour reprendre le controle complet des emails Auth avec Resend:
 
 Ce hook envoie les emails Auth via le meme systeme Resend/logging que les autres emails applicatifs.
 
+## Validation manuelle avant lancement
+
+Verifier au minimum:
+
+1. l'email de confirmation d'inscription arrive
+2. l'email de reinitialisation arrive
+3. le lien ouvre correctement l'application
+4. le token fonctionne
+5. aucun doublon n'est envoye pour la meme action
+6. `provider_message_id` est present dans les logs
+7. l'email n'affiche pas de lien de desinscription
+
 ## Flux d'inscription avec confirmation
 
 Une fois configuré, le flux d'inscription fonctionne ainsi :

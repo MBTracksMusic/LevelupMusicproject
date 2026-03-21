@@ -4,6 +4,7 @@ import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import {
   buildStandardEmailShell,
   classifySendError,
+  escapeHtml,
   getEmailConfig,
   normalizeEmailForKey,
   sendEmailWithResend,
@@ -247,8 +248,8 @@ const sendAuthEmail = async (params: {
       ...params.bodyLines.map((line) =>
         `<p style="margin:0 0 14px;line-height:1.55;color:#111827;">${line}</p>`
       ),
-      `<p style="margin:0 0 18px;"><a href="${actionUrl}" style="display:inline-block;background:#ef4444;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">Continuer</a></p>`,
-      `<p style="margin:0 0 14px;font-size:13px;line-height:1.5;color:#4b5563;">Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur: ${actionUrl}</p>`,
+      `<p style="margin:0 0 18px;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#ef4444;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">Continuer</a></p>`,
+      `<p style="margin:0 0 14px;font-size:13px;line-height:1.5;color:#4b5563;">Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur: ${escapeHtml(actionUrl)}</p>`,
     ].join(""),
     bodyText: [
       ...params.bodyLines,
@@ -258,6 +259,12 @@ const sendAuthEmail = async (params: {
   });
 
   try {
+    console.log("[auth-send-email] auth template resolved", {
+      recipient: normalizedRecipient,
+      templateKey: params.templateKey,
+      actionType: params.actionType,
+      dedupeKey,
+    });
     const sendResult = await sendEmailWithResend({
       functionName: "auth-send-email",
       category: "transactional",
@@ -277,6 +284,13 @@ const sendAuthEmail = async (params: {
     });
   } catch (error) {
     const classification = classifySendError(error);
+    console.error("[auth-send-email] provider send failed", {
+      recipient: normalizedRecipient,
+      templateKey: params.templateKey,
+      actionType: params.actionType,
+      nextState: classification.nextState,
+      error: classification.message,
+    });
     await updateDeliveryState(params.supabaseAdmin, dedupeKey, {
       send_state: classification.nextState,
       last_error: classification.message,
@@ -355,7 +369,7 @@ Deno.serve(async (req: Request) => {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("[auth-send-email] request failed", {
+    console.error("[auth-send-email] hook verification or request handling failed", {
       error: error instanceof Error ? error.message : String(error),
     });
     return new Response(JSON.stringify({

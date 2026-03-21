@@ -340,6 +340,19 @@ export const resolveMarketingSendWindow = (requestedCount: number, functionName:
     : Math.min(requestedCount, effectiveCap);
   const warmupLimited = allowedCount < requestedCount;
 
+  if (config.domainUnder30Days && requestedCount > effectiveCap) {
+    console.warn(`[${functionName}] young_domain_marketing_risk`, {
+      requestedCount,
+      allowedCount,
+      warmupMode: config.warmupMode,
+      warmupDay: config.warmupDay,
+      effectiveCap,
+      allowLargeMarketingOverride: config.allowLargeMarketingOverride,
+      message:
+        "Young domain risk: requested marketing volume is above the current warm-up threshold.",
+    });
+  }
+
   console.log(`[${functionName}] marketing_guardrail_check`, {
     requestedCount,
     allowedCount,
@@ -351,6 +364,17 @@ export const resolveMarketingSendWindow = (requestedCount: number, functionName:
     allowLargeMarketingOverride: config.allowLargeMarketingOverride,
   });
 
+  if (warmupLimited) {
+    console.warn(`[${functionName}] marketing_guardrail_capped`, {
+      requestedCount,
+      allowedCount,
+      warmupMode: config.warmupMode,
+      warmupDay: config.warmupDay,
+      allowLargeMarketingOverride: config.allowLargeMarketingOverride,
+      message: "Marketing send volume exceeded the current warm-up threshold and was capped.",
+    });
+  }
+
   return {
     allowedCount,
     warmupLimited,
@@ -358,12 +382,16 @@ export const resolveMarketingSendWindow = (requestedCount: number, functionName:
 };
 
 export const logDeliverabilityTest = (params: {
+  functionName: string;
+  category: EmailCategory;
   providerMessageId: string | null;
   recipient: string;
   subject: string;
   timestamp: string;
 }) => {
   console.log("[email-deliverability-test]", {
+    functionName: params.functionName,
+    category: params.category,
     providerMessageId: params.providerMessageId,
     recipient: params.recipient,
     subject: params.subject,
@@ -476,6 +504,8 @@ export const sendEmailWithResend = async (params: {
         textPreview: params.text.slice(0, 500),
       });
       logDeliverabilityTest({
+        functionName: params.functionName,
+        category: params.category,
         providerMessageId: response.data?.id ?? null,
         recipient,
         subject: params.subject,

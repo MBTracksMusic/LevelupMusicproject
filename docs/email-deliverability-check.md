@@ -30,6 +30,8 @@ Recommended for a young domain:
 - keep `EMAIL_DOMAIN_WARMUP_MODE=true`
 - start with a low `EMAIL_MAX_BATCH_SIZE`
 - only disable warmup mode once inbox placement is stable
+- keep `EMAIL_ALLOW_LARGE_MARKETING_OVERRIDE=false`
+- keep `EMAIL_FORCE_SAFE_MODE=true` until operators are ready to allow marketing sends
 
 ## 1) Send a test email
 
@@ -37,8 +39,13 @@ Trigger a real email from the system, for example:
 
 - Signup confirmation email
 - Password reset email
+- Waitlist launch test to a controlled inbox only if warm-up policy allows it
 
-Use a Gmail inbox as the recipient.
+Use at least:
+
+- one Gmail inbox
+- one Outlook inbox
+- one Yahoo inbox
 
 ## 2) Open the email in Gmail
 
@@ -147,6 +154,23 @@ Ask the tester to:
 3. Reply once to the email.
 
 During early domain warm-up, positive user actions such as opening, replying, or marking a message as "Not spam" help mailbox providers build sender reputation.
+
+## 9) Minimal cross-provider validation
+
+Before launch:
+
+1. Send one transactional email to Gmail
+2. Send one transactional email to Outlook
+3. Send one transactional email to Yahoo
+4. Record inbox vs spam placement for all three
+5. Repeat for one marketing email only if warm-up allows it
+6. Record `provider_message_id` and timestamp from logs
+
+Stop sending if:
+
+- Gmail, Outlook, and Yahoo all show spam placement for the same flow
+- Gmail original does not show SPF/DKIM/DMARC PASS
+- auth email links are broken
 
 ## 8) Gmail clipping prevention
 

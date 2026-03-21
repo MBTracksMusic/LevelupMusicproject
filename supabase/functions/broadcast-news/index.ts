@@ -490,6 +490,9 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
         failed: failedRecipients.length,
         overflow: hasOverflow,
         warmup_limited: marketingWindow.warmupLimited,
+        operational_message: marketingWindow.warmupLimited
+          ? `Warm-up cap applied: requested ${recipients.length}, allowed ${cappedRecipients.length}.`
+          : undefined,
       }), {
         status: 200,
         headers: corsHeaders,

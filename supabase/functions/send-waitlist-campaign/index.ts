@@ -12,7 +12,7 @@ import {
 } from "../_shared/email.ts";
 
 type CampaignResponse =
-  | { success: true; sent?: number; warmupLimited?: boolean; attempted?: number }
+  | { success: true; sent?: number; warmupLimited?: boolean; attempted?: number; operationalMessage?: string }
   | {
       success: false;
       error: "not_admin" | "missing_resend_key" | "db_error" | "unexpected_error" | "marketing_disabled";
@@ -231,6 +231,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       sent,
       attempted: recipients.length,
       warmupLimited: marketingWindow.warmupLimited,
+      operationalMessage: marketingWindow.warmupLimited
+        ? `Warm-up cap applied: requested ${users.length}, allowed ${recipients.length}.`
+        : undefined,
     }, 200, corsHeaders);
   } catch (err) {
     console.error("ERROR:", err);
