@@ -1,6 +1,6 @@
-# BeatElion Email Deliverability Check (Gmail)
+# Beatelion Email Deliverability Check (Gmail)
 
-This guide verifies that emails sent as `BeatElion <noreply@beatelion.com>` pass:
+This guide verifies that emails sent as `Beatelion <contact@beatelion.com>` pass:
 
 - SPF
 - DKIM
@@ -46,7 +46,7 @@ Expected pattern:
 ```txt
 Authentication-Results: mx.google.com;
   dkim=pass header.i=@beatelion.com;
-  spf=pass smtp.mailfrom=noreply@beatelion.com;
+  spf=pass smtp.mailfrom=contact@beatelion.com;
   dmarc=pass header.from=beatelion.com;
 ```
 
@@ -123,7 +123,7 @@ Example:
 Ask the tester to:
 
 1. Click **"Not spam"** in Gmail.
-2. Add the sender (`noreply@beatelion.com`) to contacts.
+2. Add the sender (`contact@beatelion.com`) to contacts.
 3. Reply once to the email.
 
 During early domain warm-up, positive user actions such as opening, replying, or marking a message as "Not spam" help mailbox providers build sender reputation.
@@ -140,6 +140,6 @@ Impact:
 - CTA buttons placed near the bottom can become less visible
 - tracking or diagnostics pixels near the end can be skipped
 
-BeatElion guardrail:
+Beatelion guardrail:
 
 - `process-email-queue` now logs a warning when generated email HTML approaches the limit (above ~90 KB), to keep a safety margin before Gmail clipping.

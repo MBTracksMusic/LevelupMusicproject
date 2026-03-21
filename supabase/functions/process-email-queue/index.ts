@@ -9,6 +9,14 @@ import {
   isEmailTemplate,
   type EmailTemplate,
 } from "../_shared/emailTemplates.ts";
+import {
+  appendStandardFooterHtml,
+  appendStandardFooterText,
+  escapeHtml,
+  getResendFromEmail,
+  isValidHttpUrl,
+  sendEmailWithResend,
+} from "../_shared/email.ts";
 import { safeInsertPipelineMetrics } from "../_shared/pipelineMetrics.ts";
 import {
   safeEmitPipelineRunAlerts,
@@ -38,6 +46,7 @@ type EmailQueueRow = {
   processed_at: string | null;
   locked_at: string | null;
   last_error: string | null;
+  provider_message_id?: string | null;
 };
 
 const UUID_RE =
@@ -56,14 +65,6 @@ const asJsonObject = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
 const normalizeEmail = (value: unknown) => {
   const email = asNonEmptyString(value);
   if (!email) return null;
@@ -74,16 +75,6 @@ const asUuid = (value: unknown) => {
   const text = asNonEmptyString(value);
   if (!text || !UUID_RE.test(text)) return null;
   return text;
-};
-
-const isValidHttpUrl = (value: string | null) => {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
 };
 
 const resolvePublicAppUrl = (...candidates: Array<string | null | undefined>) => {
@@ -115,7 +106,7 @@ const buildBrandedEmailContent = (params: {
   const safeAppUrl = params.appUrl.replace(/\/$/, "");
   const homeUrl = `${safeAppUrl}/`;
   const logoUrl = `${safeAppUrl}/beatelion-logo.png`;
-  const safePreheader = escapeHtml(params.preheader ?? params.bodyLines[0] ?? "BeatElion");
+  const safePreheader = escapeHtml(params.preheader ?? params.bodyLines[0] ?? "Beatelion");
   const safeCtaUrl = params.ctaUrl && isValidHttpUrl(params.ctaUrl) ? params.ctaUrl : null;
 
   const bodyHtml = params.bodyLines
@@ -146,7 +137,7 @@ const buildBrandedEmailContent = (params: {
           <a href="${escapeHtml(homeUrl)}" style="display:inline-block;text-decoration:none;">
             <img
               src="${escapeHtml(logoUrl)}"
-              alt="BeatElion logo"
+              alt="Beatelion logo"
               width="164"
               style="display:block;border:0;outline:none;text-decoration:none;width:164px;max-width:100%;height:auto;margin:0 auto;"
             />
@@ -158,15 +149,15 @@ const buildBrandedEmailContent = (params: {
           ${ctaHtml}
           ${metaHtml}
         </div>
-        <div style="padding:14px 24px;border-top:1px solid #e4e4e7;color:#6b7280;font-size:12px;line-height:1.5;">
-          BeatElion • ${escapeHtml(homeUrl)}
-        </div>
+        ${appendStandardFooterHtml(
+          `<div style="padding:0 24px 14px;color:#6b7280;font-size:12px;line-height:1.5;">Beatelion • ${escapeHtml(homeUrl)}</div>`,
+        )}
       </div>
     </div>
   `;
 
   const textLines: string[] = [
-    "BeatElion",
+    "Beatelion",
     "",
     params.title,
     "",
@@ -179,11 +170,11 @@ const buildBrandedEmailContent = (params: {
   if (safeCtaUrl && params.ctaLabel) {
     textLines.push("", `${params.ctaLabel}: ${safeCtaUrl}`);
   }
-  textLines.push("", `BeatElion • ${homeUrl}`);
+  textLines.push("", `Beatelion • ${homeUrl}`);
 
   return {
     html,
-    text: textLines.join("\n"),
+    text: appendStandardFooterText(textLines.join("\n")),
   };
 };
 
@@ -202,11 +193,11 @@ const getTemplateContent = (params: {
     const confirmationUrl = isValidHttpUrl(payloadUrl) ? payloadUrl : fallbackUrl;
 
     return {
-      subject: "Confirme ton compte BeatElion",
+      subject: "Confirme ton compte Beatelion",
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
-        title: "Confirme ton compte BeatElion",
-        preheader: "Finalise ton inscription BeatElion",
+        title: "Confirme ton compte Beatelion",
+        preheader: "Finalise ton inscription Beatelion",
         bodyLines: [
           "Merci pour ton inscription.",
           "Clique sur le bouton ci-dessous pour finaliser l'activation de ton compte.",
@@ -222,16 +213,16 @@ const getTemplateContent = (params: {
 
   if (template === "welcome_user") {
     return {
-      subject: "Bienvenue sur BeatElion",
+      subject: "Bienvenue sur Beatelion",
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
-        title: "Bienvenue sur BeatElion",
+        title: "Bienvenue sur Beatelion",
         preheader: "Ton compte est actif",
         bodyLines: [
           "Ton compte est maintenant actif.",
           "Tu peux explorer les beats, suivre les battles et personnaliser ton profil.",
         ],
-        ctaLabel: "Ouvrir BeatElion",
+        ctaLabel: "Ouvrir Beatelion",
         ctaUrl: safeAppUrl,
       }),
     };
@@ -240,11 +231,11 @@ const getTemplateContent = (params: {
   if (template === "purchase_receipt") {
     const purchaseId = asNonEmptyString(payload?.purchase_id) ?? "N/A";
     return {
-      subject: "Ton achat BeatElion est confirme",
+      subject: "Ton achat Beatelion est confirme",
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
         title: "Achat confirme",
-        preheader: "Ton achat BeatElion est confirme",
+        preheader: "Ton achat Beatelion est confirme",
         bodyLines: [
           "Merci pour ton achat.",
           "Ta commande a ete enregistree avec succes.",
@@ -259,11 +250,11 @@ const getTemplateContent = (params: {
   if (template === "license_ready") {
     const purchaseId = asNonEmptyString(payload?.purchase_id) ?? "N/A";
     return {
-      subject: "Ta licence BeatElion est prete",
+      subject: "Ta licence Beatelion est prete",
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
         title: "Licence prete",
-        preheader: "Ta licence BeatElion est prete",
+        preheader: "Ta licence Beatelion est prete",
         bodyLines: [
           "Ton contrat de licence est genere.",
           "Tu peux maintenant le recuperer depuis ton dashboard.",
@@ -282,9 +273,9 @@ const getTemplateContent = (params: {
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
         title: "Victoire en battle",
-        preheader: "Bravo pour ta victoire BeatElion",
+        preheader: "Bravo pour ta victoire Beatelion",
         bodyLines: [
-          "Felicitations, tu viens de remporter une battle sur BeatElion.",
+          "Felicitations, tu viens de remporter une battle sur Beatelion.",
         ],
         ctaLabel: "Voir mes battles",
         ctaUrl: `${safeAppUrl}/producer/battles`,
@@ -303,7 +294,7 @@ const getTemplateContent = (params: {
         title: "Nouveau commentaire",
         preheader: "Tu as recu un nouveau commentaire",
         bodyLines: [
-          "Tu as recu un nouveau commentaire sur BeatElion.",
+          "Tu as recu un nouveau commentaire sur Beatelion.",
         ],
         ctaLabel: "Ouvrir les battles",
         ctaUrl: `${safeAppUrl}/battles`,
@@ -327,7 +318,7 @@ const getTemplateContent = (params: {
       subject: "Reponse a votre message de contact",
       ...buildBrandedEmailContent({
         appUrl: safeAppUrl,
-        title: "Reponse de l'equipe BeatElion",
+        title: "Reponse de l'equipe Beatelion",
         preheader: "Nous avons repondu a votre message",
         bodyLines: [
           greetingName,
@@ -338,6 +329,37 @@ const getTemplateContent = (params: {
         ctaLabel: "Nous contacter",
         ctaUrl: `${safeAppUrl}/contact`,
         metaLines,
+      }),
+    };
+  }
+
+  if (template === "contact_admin_notification") {
+    const submittedAt = asNonEmptyString(payload?.submitted_at) ?? "N/A";
+    const name = asNonEmptyString(payload?.name) ?? "N/A";
+    const email = asNonEmptyString(payload?.email) ?? "N/A";
+    const subject = asNonEmptyString(payload?.subject) ?? "N/A";
+    const category = asNonEmptyString(payload?.category) ?? "N/A";
+    const userAgent = asNonEmptyString(payload?.user_agent) ?? "-";
+    const ipHash = asNonEmptyString(payload?.ip_hash) ?? "-";
+    const message = asNonEmptyString(payload?.message) ?? "";
+
+    return {
+      subject: "[Contact] Nouveau message",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Nouveau message de contact",
+        preheader: "Un nouveau message a ete recu",
+        bodyLines: [
+          `Soumis le: ${submittedAt}`,
+          `Nom: ${name}`,
+          `Email: ${email}`,
+          `Sujet: ${subject}`,
+          `Categorie: ${category}`,
+          `IP hash: ${ipHash}`,
+          `User-Agent: ${userAgent}`,
+          "",
+          message,
+        ],
       }),
     };
   }
@@ -415,7 +437,6 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
     asNonEmptyString(Deno.env.get("SERVICE_ROLE_KEY"));
   const internalPipelineSecret = asNonEmptyString(Deno.env.get("INTERNAL_PIPELINE_SECRET"));
   const resendApiKey = asNonEmptyString(Deno.env.get("RESEND_API_KEY"));
-  const emailFrom = asNonEmptyString(Deno.env.get("RESEND_FROM_EMAIL")) ?? "BeatElion <noreply@beatelion.com>";
   const replyTo = asNonEmptyString(Deno.env.get("SUPPORT_EMAIL")) ?? "support@beatelion.com";
   const appUrl = resolvePublicAppUrl(
     asNonEmptyString(Deno.env.get("APP_URL")),
@@ -429,6 +450,11 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
   if (!serviceRoleKey) missingConfig.push("SUPABASE_SERVICE_ROLE_KEY or SERVICE_ROLE_KEY");
   if (!internalPipelineSecret) missingConfig.push("INTERNAL_PIPELINE_SECRET");
   if (!resendApiKey) missingConfig.push("RESEND_API_KEY");
+  try {
+    getResendFromEmail();
+  } catch (error) {
+    missingConfig.push(error instanceof Error ? error.message : "Missing RESEND_FROM_EMAIL");
+  }
 
   if (missingConfig.length > 0) {
     console.error("[process-email-queue] missing configuration", { missingConfig });
@@ -684,19 +710,16 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
     }
 
     try {
-      await resend.emails.send(
-        {
-          from: emailFrom,
-          replyTo,
-          to: email,
-          subject,
-          text,
-          html,
-        },
-        {
-          idempotencyKey: `email_queue/${row.id}`,
-        },
-      );
+      const sendResult = await sendEmailWithResend({
+        functionName: "process-email-queue",
+        resend,
+        to: email,
+        subject,
+        text,
+        html,
+        replyTo,
+        idempotencyKey: `email_queue/${row.id}`,
+      });
 
       const nowIso = new Date().toISOString();
       const { error: updateError } = await supabaseAdmin
@@ -706,6 +729,7 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
           processed_at: nowIso,
           locked_at: null,
           last_error: null,
+          provider_message_id: sendResult.providerMessageId,
         })
         .eq("id", row.id)
         .eq("status", "processing");
@@ -722,6 +746,7 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
             processed_at: nowIso,
             locked_at: null,
             last_error: null,
+            provider_message_id: sendResult.providerMessageId,
           })
           .eq("id", row.id)
           .eq("status", "processing");

@@ -1,6 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { Resend } from "npm:resend";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
 const BASE_CORS_HEADERS = {
@@ -75,11 +74,8 @@ const buildCorsHeaders = (origin: string | null) => ({
 // - SUPABASE_URL
 // - SUPABASE_SERVICE_ROLE_KEY
 // - HCAPTCHA_SECRET_KEY (preferred) or HCAPTCHA_SECRET (legacy fallback)
-// Optional email notification env vars (must be configured together):
-// - RESEND_API_KEY
+// Optional email notification env vars:
 // - CONTACT_TO_EMAIL
-// - RESEND_FROM_EMAIL
-const DEFAULT_EMAIL_FROM = "BeatElion <noreply@beatelion.com>";
 const DEFAULT_SUBJECT = "Contact request";
 const HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify";
 const CONTACT_SUBMIT_LOG_TABLE = "contact_submit_log";
@@ -505,56 +501,6 @@ const hasRecentDuplicateSubmission = async (
   return Array.isArray(data) && data.length > 0;
 };
 
-const sendAdminEmail = async (params: {
-  resendApiKey: string;
-  from: string;
-  to: string;
-  record: {
-    submitted_at: string;
-    name: string;
-    email: string;
-    subject: string;
-    category: string;
-    message: string;
-    ip_hash: string | null;
-    user_agent: string | null;
-  };
-}) => {
-  const resend = new Resend(params.resendApiKey);
-  const item = params.record;
-
-  return await resend.emails.send({
-    from: params.from,
-    to: params.to,
-    replyTo: item.email,
-    subject: "[Contact] Nouveau message",
-    text: [
-      `Submitted at: ${item.submitted_at}`,
-      `Name: ${item.name}`,
-      `Email: ${item.email}`,
-      `Subject: ${item.subject}`,
-      `Category: ${item.category}`,
-      `IP hash: ${item.ip_hash ?? "-"}`,
-      `User-Agent: ${item.user_agent ?? "-"}`,
-      "",
-      item.message,
-    ].join("\n"),
-    html: `
-      <div lang="fr" style="font-family:Arial,sans-serif;max-width:680px;margin:auto;padding:24px;color:#111">
-        <h1 style="margin:0 0 14px;font-size:22px;">Nouveau message de contact</h1>
-        <p style="margin:0 0 6px;"><strong>Soumis le:</strong> ${escapeHtml(item.submitted_at)}</p>
-        <p style="margin:0 0 6px;"><strong>Nom:</strong> ${escapeHtml(item.name)}</p>
-        <p style="margin:0 0 6px;"><strong>Email:</strong> ${escapeHtml(item.email)}</p>
-        <p style="margin:0 0 6px;"><strong>Sujet:</strong> ${escapeHtml(item.subject)}</p>
-        <p style="margin:0 0 6px;"><strong>Categorie:</strong> ${escapeHtml(item.category)}</p>
-        <p style="margin:0 0 6px;"><strong>IP hash:</strong> ${escapeHtml(item.ip_hash ?? "-")}</p>
-        <p style="margin:0 0 14px;"><strong>User-Agent:</strong> ${escapeHtml(item.user_agent ?? "-")}</p>
-        <div style="white-space:pre-wrap;line-height:1.55;background:#f4f4f5;padding:14px;border-radius:8px;">${escapeHtml(item.message)}</div>
-      </div>
-    `,
-  });
-};
-
 serveWithErrorHandling("contact-submit", async (req: Request) => {
   const requestOriginHeader = req.headers.get("origin");
   const requestOrigin = resolveRequestOrigin(req);
@@ -930,39 +876,33 @@ serveWithErrorHandling("contact-submit", async (req: Request) => {
       });
     }
 
-    const resendApiKey = asNonEmptyString(Deno.env.get("RESEND_API_KEY"));
     const contactToEmail = asNonEmptyString(Deno.env.get("CONTACT_TO_EMAIL"));
-    const emailFrom = asNonEmptyString(Deno.env.get("RESEND_FROM_EMAIL")) || DEFAULT_EMAIL_FROM;
-
-    const hasEmailConfigMismatch = (resendApiKey && !contactToEmail) || (!resendApiKey && contactToEmail);
-
-    if (hasEmailConfigMismatch) {
-      console.error("[contact-submit] EMAIL_CONFIG_ERROR", {
-        hasResendApiKey: Boolean(resendApiKey),
-        hasContactToEmail: Boolean(contactToEmail),
-      });
-    }
-
-    if (!hasEmailConfigMismatch && resendApiKey && contactToEmail) {
-      void sendAdminEmail({
-        resendApiKey,
-        from: emailFrom,
-        to: contactToEmail,
-        record: {
-          submitted_at: new Date().toISOString(),
-          name,
-          email,
-          subject,
-          category,
-          message,
-          ip_hash: ipHash,
-          user_agent: userAgent,
-        },
-      }).catch((error) => {
-        console.error("[contact-submit] EMAIL_SEND_ERROR", {
-          error: error instanceof Error ? error.message : String(error),
+    if (contactToEmail) {
+      const { error: enqueueEmailError } = await supabase
+        .from("email_queue")
+        .insert({
+          user_id: null,
+          email: contactToEmail,
+          template: "contact_admin_notification",
+          payload: {
+            submitted_at: new Date().toISOString(),
+            name,
+            email,
+            subject,
+            category,
+            message,
+            ip_hash: ipHash,
+            user_agent: userAgent,
+            source: "contact-submit",
+          },
+          status: "pending",
         });
-      });
+
+      if (enqueueEmailError) {
+        console.error("[contact-submit] EMAIL_QUEUE_ENQUEUE_ERROR", {
+          error: enqueueEmailError.message,
+        });
+      }
     }
 
     return new Response(JSON.stringify({ ok: true }), {

@@ -1,6 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { resolveCorsHeaders } from "../_shared/cors.ts";
 import { requireAdminUser } from "../_shared/auth.ts";
+import {
+  buildStandardEmailShell,
+  getResendApiKey,
+  getResendFromEmail,
+  sendEmailWithResend,
+} from "../_shared/email.ts";
 
 type CampaignResponse =
   | { success: true; sent?: number }
@@ -13,11 +19,8 @@ type WaitlistRow = {
   email: string;
 };
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
-const DEFAULT_FROM_EMAIL = "Beatelion <noreply@beatelion.com>";
+const CAMPAIGN_ID = "waitlist_launch";
 const CAMPAIGN_SUBJECT = "🚀 Beatelion est en ligne !";
-const CAMPAIGN_HTML =
-  "<h1>🔥 Beatelion est ouvert</h1><p>La plateforme est maintenant disponible</p><a href=\"https://beatelion.com\">Accéder au site</a>";
 const MAX_EMAILS = 200;
 
 const jsonResponse = (
@@ -44,27 +47,8 @@ const delay = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
-const sendCampaignEmail = async (email: string, apiKey: string): Promise<boolean> => {
-  const from = asNonEmptyString(Deno.env.get("RESEND_FROM_EMAIL")) || DEFAULT_FROM_EMAIL;
-  const response = await fetch(RESEND_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      from,
-      to: email,
-      subject: CAMPAIGN_SUBJECT,
-      html: CAMPAIGN_HTML,
-    }),
-  });
-
-  return response.ok;
-};
-
 Deno.serve(async (req: Request): Promise<Response> => {
-  const corsHeaders = resolveCorsHeaders(req.headers.get("origin"));
+  const corsHeaders = resolveCorsHeaders(req.headers.get("origin")) as Record<string, string>;
 
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -101,8 +85,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ success: false, error: "db_error" }, 200, corsHeaders);
     }
 
-    const resendApiKey = asNonEmptyString(Deno.env.get("RESEND_API_KEY"));
-    if (!resendApiKey) {
+    try {
+      getResendApiKey();
+      getResendFromEmail();
+    } catch {
       return jsonResponse({ success: false, error: "missing_resend_key" }, 200, corsHeaders);
     }
 
@@ -119,11 +105,68 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (!email) {
         continue;
       }
-      console.log("SEND:", email);
+      const dedupeKey = `${CAMPAIGN_ID}:${email}`;
+      const { data: claimData, error: claimError } = await (supabaseAdmin as any).rpc("claim_notification_email_send", {
+        p_category: "waitlist_campaign",
+        p_recipient_email: email,
+        p_dedupe_key: dedupeKey,
+        p_rate_limit_seconds: 365 * 24 * 60 * 60,
+        p_metadata: {
+          campaign_id: CAMPAIGN_ID,
+          recipient_email: email,
+        },
+      });
 
-      const emailSent = await sendCampaignEmail(email, resendApiKey);
-      if (!emailSent) {
-        console.error("FAILED:", email);
+      if (claimError) {
+        console.error("[send-waitlist-campaign] claim_notification_email_send failed", {
+          email,
+          error: claimError.message,
+        });
+        continue;
+      }
+
+      const claim = claimData as { allowed?: unknown; reason?: unknown } | null;
+      if (claim?.allowed !== true) {
+        console.log("[send-waitlist-campaign] skipped already-sent recipient", {
+          email,
+          reason: claim?.reason ?? "unknown",
+        });
+        continue;
+      }
+
+      const emailContent = buildStandardEmailShell({
+        title: "Beatelion est ouvert",
+        preheader: "La plateforme est maintenant disponible",
+        appUrl: "https://beatelion.com",
+        bodyHtml: [
+          "<p style=\"margin:0 0 14px;line-height:1.55;color:#111827;\">La plateforme est maintenant disponible.</p>",
+          "<p style=\"margin:0 0 18px;\"><a href=\"https://beatelion.com\" style=\"display:inline-block;background:#ef4444;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;\">Acceder au site</a></p>",
+        ].join(""),
+        bodyText: [
+          "La plateforme est maintenant disponible.",
+          "",
+          "Acceder au site: https://beatelion.com",
+        ].join("\n"),
+      });
+
+      try {
+        await sendEmailWithResend({
+          functionName: "send-waitlist-campaign",
+          to: email,
+          subject: CAMPAIGN_SUBJECT,
+          html: emailContent.html,
+          text: emailContent.text,
+          idempotencyKey: `waitlist_campaign/${CAMPAIGN_ID}/${email}`,
+        });
+      } catch (error) {
+        console.error("[send-waitlist-campaign] send failure", {
+          email,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await supabaseAdmin
+          .from("notification_email_log")
+          .delete()
+          .eq("dedupe_key", dedupeKey);
         // TODO: add monitoring for per-recipient campaign delivery failures.
         continue;
       }

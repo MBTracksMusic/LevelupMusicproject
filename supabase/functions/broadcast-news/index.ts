@@ -2,6 +2,14 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { requireAdminUser } from "../_shared/auth.ts";
 import { Resend } from "npm:resend";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
+import {
+  appendStandardFooterHtml,
+  appendStandardFooterText,
+  escapeHtml,
+  getResendFromEmail,
+  isValidHttpUrl,
+  sendEmailWithResend,
+} from "../_shared/email.ts";
 
 const DEFAULT_ALLOWED_CORS_ORIGINS = [
   "https://beatelion.com",
@@ -46,35 +54,26 @@ const resolveRequestCorsOrigin = (req: Request): string | null => {
 
 const MAX_RECIPIENTS_PER_RUN = 500;
 const DEFAULT_RATE_LIMIT_SECONDS = 15 * 60;
-const DEFAULT_EMAIL_FROM = "BeatElion <noreply@beatelion.com>";
 const DEFAULT_SOCIAL_REPLY_TO = "social@beatelion.com";
 const BROADCAST_CATEGORY = "news_broadcast";
 const BROADCAST_RECIPIENT_SCOPE = "ALL_SUBSCRIBERS";
 
 type JsonRecord = Record<string, unknown>;
+type NewsVideoRow = {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string;
+  thumbnail_url: string | null;
+  is_published: boolean | null;
+  broadcast_email: boolean | null;
+  broadcast_sent_at: string | null;
+};
 
 const asNonEmptyString = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-};
-
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
-const isValidHttpUrl = (value: string | null) => {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
 };
 
 const toLowercaseEmail = (value: unknown) => {
@@ -199,9 +198,9 @@ async function getSubscriberEmails(supabase: any) {
 async function sendBroadcastEmail(
   resend: Resend,
   params: {
-    from: string;
     replyTo: string;
     recipient: string;
+    idempotencyKey: string;
     news: {
       title: string;
       description: string | null;
@@ -211,7 +210,7 @@ async function sendBroadcastEmail(
     appUrl: string;
   },
 ) {
-  const { from, replyTo, recipient, news, appUrl } = params;
+  const { replyTo, recipient, news, appUrl } = params;
   const safeTitle = news.title;
   const safeDescription = news.description ?? "Nouvelle annonce vidéo disponible.";
   const safeAppUrl = appUrl.replace(/\/$/, "");
@@ -222,13 +221,9 @@ async function sendBroadcastEmail(
   const safeTitleHtml = escapeHtml(safeTitle);
   const safeDescriptionHtml = escapeHtml(safeDescription);
 
-  return await resend.emails.send({
-    from,
-    replyTo,
-    to: recipient,
-    subject: `Nouvelle annonce vidéo: ${safeTitle}`,
-    text: [
-      "BeatElion",
+  const subject = `Nouvelle annonce vidéo: ${safeTitle}`;
+  const text = appendStandardFooterText([
+      "Beatelion",
       "",
       safeTitle,
       "",
@@ -236,15 +231,15 @@ async function sendBroadcastEmail(
       "",
       `Voir la vidéo: ${safeVideoUrl}`,
       `Accueil: ${homeUrl}`,
-    ].join("\n"),
-    html: `
+    ].join("\n"));
+  const html = `
       <div lang="fr" style="margin:0;padding:20px 12px;background:#f4f4f5;">
         <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
           <div style="padding:20px 24px 8px;background:#111827;text-align:center;">
             <a href="${escapeHtml(homeUrl)}" style="display:inline-block;text-decoration:none;">
               <img
                 src="${escapeHtml(logoUrl)}"
-                alt="BeatElion logo"
+                alt="Beatelion logo"
                 width="164"
                 style="display:block;border:0;outline:none;text-decoration:none;width:164px;max-width:100%;height:auto;margin:0 auto;"
               />
@@ -255,14 +250,24 @@ async function sendBroadcastEmail(
             <p style="margin:0 0 14px;line-height:1.55;color:#111827;">${safeDescriptionHtml}</p>
             ${safeThumbnailUrl ? `<img src="${escapeHtml(safeThumbnailUrl)}" alt="${safeTitleHtml}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px;margin:0 0 14px;" />` : ""}
             <p style="margin:0 0 10px;"><a href="${escapeHtml(safeVideoUrl)}" target="_blank" rel="noopener noreferrer">Voir la vidéo</a></p>
-            <p style="margin:0;"><a href="${escapeHtml(homeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil BeatElion</a></p>
+            <p style="margin:0;"><a href="${escapeHtml(homeUrl)}" target="_blank" rel="noopener noreferrer">Ouvrir l'accueil Beatelion</a></p>
           </div>
-          <div style="padding:14px 24px;border-top:1px solid #e4e4e7;color:#6b7280;font-size:12px;line-height:1.5;">
-            BeatElion • ${escapeHtml(homeUrl)}
-          </div>
+          ${appendStandardFooterHtml(
+            `<div style="padding:0 24px 14px;color:#6b7280;font-size:12px;line-height:1.5;">Beatelion • ${escapeHtml(homeUrl)}</div>`,
+          )}
         </div>
       </div>
-    `,
+    `;
+
+  return await sendEmailWithResend({
+    functionName: "broadcast-news",
+    resend,
+    to: recipient,
+    subject,
+    text,
+    html,
+    replyTo,
+    idempotencyKey: params.idempotencyKey,
   });
 }
 
@@ -288,6 +293,7 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
       headers: corsHeaders,
     });
   }
+  getResendFromEmail();
 
   const authResult = await requireAdminUser(req, corsHeaders);
   if ("error" in authResult) return authResult.error;
@@ -302,11 +308,12 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
     });
   }
 
-  const { data: newsData, error: newsError } = await supabase
+  const { data, error: newsError } = await supabase
     .from("news_videos")
     .select("id, title, description, video_url, thumbnail_url, is_published, broadcast_email, broadcast_sent_at")
     .eq("id", newsId)
     .maybeSingle();
+  const newsData = data as NewsVideoRow | null;
 
   if (newsError) {
     console.error("[broadcast-news] NEWS_FETCH_ERROR", { newsId, newsError });
@@ -378,7 +385,6 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
     const cappedRecipients = recipients.slice(0, MAX_RECIPIENTS_PER_RUN);
     const hasOverflow = recipients.length > MAX_RECIPIENTS_PER_RUN;
     const resend = new Resend(resendApiKey);
-    const from = asNonEmptyString(Deno.env.get("RESEND_FROM_EMAIL")) || DEFAULT_EMAIL_FROM;
     const replyTo = asNonEmptyString(Deno.env.get("SOCIAL_EMAIL")) || DEFAULT_SOCIAL_REPLY_TO;
     const appUrl = asNonEmptyString(Deno.env.get("APP_BASE_URL"))
       || req.headers.get("origin")
@@ -388,11 +394,32 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
     const failedRecipients: string[] = [];
 
     for (const recipient of cappedRecipients) {
+      let recipientClaim:
+        | {
+            dedupeKey: string;
+            allowed: boolean;
+            reason: string;
+          }
+        | null = null;
       try {
+        recipientClaim = await claimBroadcast(supabase, {
+          newsId: `${newsId}:${recipient}`,
+          actorId: actor.id,
+          rateLimitSeconds: 365 * 24 * 60 * 60,
+        });
+        if (!recipientClaim.allowed) {
+          console.log("[broadcast-news] EMAIL_RECIPIENT_SKIPPED", {
+            newsId,
+            recipient,
+            reason: recipientClaim.reason,
+          });
+          continue;
+        }
+
         await sendBroadcastEmail(resend, {
-          from,
           replyTo,
           recipient,
+          idempotencyKey: `broadcast-news/${newsId}/${recipient}`,
           appUrl,
           news: {
             title: newsData.title,
@@ -403,6 +430,9 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
         });
         sentCount += 1;
       } catch (error) {
+        if (recipientClaim?.dedupeKey) {
+          await releaseClaim(supabase, recipientClaim.dedupeKey);
+        }
         failedRecipients.push(recipient);
         console.error("[broadcast-news] EMAIL_SEND_ERROR", {
           newsId,
@@ -440,7 +470,7 @@ serveWithErrorHandling("broadcast-news", async (req: Request) => {
     }
 
     const nowIso = new Date().toISOString();
-    const { error: updateError } = await supabase
+    const { error: updateError } = await (supabase as any)
       .from("news_videos")
       .update({ broadcast_sent_at: nowIso })
       .eq("id", newsId)

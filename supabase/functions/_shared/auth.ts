@@ -115,6 +115,7 @@ export async function requireAdminUser(
     .select("id, role")
     .eq("id", user.id)
     .maybeSingle();
+  const typedProfile = profile as { id: string; role: string } | null;
 
   if (profileError) {
     console.error("[auth] requireAdminUser: failed to load profile", {
@@ -126,7 +127,7 @@ export async function requireAdminUser(
     };
   }
 
-  if (!profile || profile.role !== "admin") {
+  if (!typedProfile || typedProfile.role !== "admin") {
     return { error: makeErrorResponse(corsHeaders, { error: "Forbidden" }, 403) };
   }
 
