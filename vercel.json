@@ -2,12 +2,16 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
-{
+  ],
   "redirects": [
     {
-      "source": "https://beatelion.com/(.*)",
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "beatelion.com"
+        }
+      ],
       "destination": "https://www.beatelion.com/$1",
       "permanent": true
     }
