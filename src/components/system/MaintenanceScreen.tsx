@@ -39,21 +39,24 @@ function formatCountdownUnit(value: number) {
   return value.toString().padStart(2, '0');
 }
 
-function getEmbedUrl(url: string): string {
+function getEmbedUrl(url: string): string | null {
   try {
-    if (url.includes('youtube.com/watch')) {
-      const id = new URL(url).searchParams.get('v');
-      return id ? `https://www.youtube.com/embed/${id}` : url;
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, '');
+
+    if (host === 'youtube.com' && parsed.pathname === '/watch') {
+      const id = parsed.searchParams.get('v');
+      return id ? `https://www.youtube.com/embed/${id}` : null;
     }
 
-    if (url.includes('youtu.be/')) {
-      const id = url.split('youtu.be/')[1];
-      return id ? `https://www.youtube.com/embed/${id}` : url;
+    if (host === 'youtu.be') {
+      const id = parsed.pathname.replace(/^\/+/, '').split('/')[0];
+      return id ? `https://www.youtube.com/embed/${id}` : null;
     }
 
-    return url;
+    return null;
   } catch {
-    return url;
+    return null;
   }
 }
 
@@ -98,7 +101,7 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
 
   const isCountdownMode = formattedLaunchDate !== null;
   const trimmedLaunchVideoUrl = launchVideoUrl?.trim() ?? '';
-  const hasVideo = !!trimmedLaunchVideoUrl;
+  const embedUrl = trimmedLaunchVideoUrl ? getEmbedUrl(trimmedLaunchVideoUrl) : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-12 text-white">
@@ -139,15 +142,17 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
             </div>
           ) : null}
 
-          {hasVideo ? (
+          {embedUrl ? (
             <div className="mt-8 w-full max-w-2xl">
               <iframe
-                className="w-full aspect-video rounded-lg"
-                src={getEmbedUrl(trimmedLaunchVideoUrl)}
-                title="Beatelion Launch Video"
-                frameBorder="0"
+                src={embedUrl}
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+                referrerPolicy="strict-origin-when-cross-origin"
                 allow="autoplay; encrypted-media"
                 allowFullScreen
+                className="w-full aspect-video rounded-lg"
+                title="Beatelion Launch Video"
+                frameBorder="0"
               />
             </div>
           ) : null}
