@@ -4,3 +4,12 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
+{
+  "redirects": [
+    {
+      "source": "https://beatelion.com/(.*)",
+      "destination": "https://www.beatelion.com/$1",
+      "permanent": true
+    }
+  ]
+}
