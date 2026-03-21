@@ -9,7 +9,7 @@ type JoinWaitlistBody = {
 type JoinWaitlistResponse =
   | { message: "success" }
   | { message: "already_registered" }
-  | { error: "server_error" };
+  | { error: "invalid_email" | "method_not_allowed" | "server_error" };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -85,7 +85,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ error: "server_error" }, 405, corsHeaders);
+    return jsonResponse({ error: "method_not_allowed" }, 405, corsHeaders);
   }
 
   try {
@@ -98,7 +98,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const email = asNonEmptyString(body?.email)?.toLowerCase() ?? null;
 
     if (!email || !email.includes("@") || !EMAIL_REGEX.test(email)) {
-      return jsonResponse({ error: "server_error" }, 400, corsHeaders);
+      return jsonResponse({ error: "invalid_email" }, 400, corsHeaders);
     }
 
     // TODO: integrate shared rate limiting / CAPTCHA before public launch.
@@ -115,9 +115,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ error: "server_error" }, 500, corsHeaders);
     }
 
-    const emailSent = await sendResendEmail(email);
-    if (!emailSent) {
-      return jsonResponse({ error: "server_error" }, 500, corsHeaders);
+    try {
+      const emailSent = await sendResendEmail(email);
+      if (!emailSent) {
+        // TODO: report waitlist confirmation email failures to monitoring.
+      }
+    } catch {
+      // TODO: report waitlist confirmation email failures to monitoring.
     }
 
     return jsonResponse({ message: "success" }, 200, corsHeaders);

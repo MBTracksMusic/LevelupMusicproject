@@ -27,6 +27,7 @@ import {
 } from '../../lib/analyticsAlertsService';
 import { getFunnelData } from '../../lib/funnelService';
 import { useTranslation } from '../../lib/i18n';
+import { supabase } from '../../lib/supabase/client';
 import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 
 function toDatetimeLocalValue(value: string | null) {
@@ -91,6 +92,7 @@ export function AdminDashboardPage() {
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [isAlertsLoading, setIsAlertsLoading] = useState(true);
   const [resolvingAlertId, setResolvingAlertId] = useState<string | null>(null);
+  const [isSendingWaitlistCampaign, setIsSendingWaitlistCampaign] = useState(false);
 
   useEffect(() => {
     if (!isSavingLaunchDate) {
@@ -345,6 +347,31 @@ export function AdminDashboardPage() {
       toast.error("Impossible d'enregistrer l'URL vidéo.");
     } finally {
       setIsSavingLaunchVideoUrl(false);
+    }
+  };
+
+  const handleSendWaitlistCampaign = async () => {
+    if (isSendingWaitlistCampaign) {
+      return;
+    }
+
+    setIsSendingWaitlistCampaign(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke<{ success?: boolean; error?: boolean }>(
+        'send-waitlist-campaign',
+      );
+
+      if (error || !data?.success) {
+        alert("Erreur lors de l'envoi");
+        return;
+      }
+
+      alert('Campagne envoyée 🚀');
+    } catch {
+      alert("Erreur lors de l'envoi");
+    } finally {
+      setIsSendingWaitlistCampaign(false);
     }
   };
 
@@ -740,14 +767,24 @@ export function AdminDashboardPage() {
             <span>
               Dernière mise à jour : {updatedAt ? new Date(updatedAt).toLocaleString() : 'inconnue'}
             </span>
-            <Button
-              variant={maintenance ? 'secondary' : 'primary'}
-              onClick={handleMaintenanceToggle}
-              isLoading={isSavingMaintenance}
-              disabled={isLoading}
-            >
-              {maintenance ? 'Désactiver la maintenance' : 'Activer la maintenance'}
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={handleSendWaitlistCampaign}
+                isLoading={isSendingWaitlistCampaign}
+                disabled={isLoading}
+              >
+                🚀 Envoyer la campagne
+              </Button>
+              <Button
+                variant={maintenance ? 'secondary' : 'primary'}
+                onClick={handleMaintenanceToggle}
+                isLoading={isSavingMaintenance}
+                disabled={isLoading}
+              >
+                {maintenance ? 'Désactiver la maintenance' : 'Activer la maintenance'}
+              </Button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">

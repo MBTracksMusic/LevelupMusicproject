@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabase/client';
 
 interface MaintenanceScreenProps {
   launchDate: string | null;
@@ -131,19 +132,22 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
     setWaitlistFeedback(null);
 
     try {
-      const response = await fetch('/functions/v1/join-waitlist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: normalizedEmail }),
+      const { data, error } = await supabase.functions.invoke<WaitlistSubmitResponse>('join-waitlist', {
+        body: { email: normalizedEmail },
       });
-      const data = await response.json().catch(() => null) as WaitlistSubmitResponse | null;
 
-      if (!response.ok) {
+      if (error) {
         setWaitlistFeedback({
           tone: 'error',
           message: 'Erreur, réessaie plus tard',
+        });
+        return;
+      }
+
+      if (data?.error === 'invalid_email') {
+        setWaitlistFeedback({
+          tone: 'error',
+          message: 'Adresse email invalide',
         });
         return;
       }
