@@ -2312,16 +2312,17 @@ async function upsertProducerSubscription(
     userId: profile.id,
   });
   const nextTier = tierResolution.tier;
+  const shouldExposeProducerAccess = isActive && profileRole !== "admin";
 
   const profileUpdates: Record<string, unknown> = {
     stripe_subscription_id: subscriptionId,
     producer_tier: nextTier,
-    is_producer_active: isActive,
+    is_producer_active: shouldExposeProducerAccess,
   };
   if (!profile.stripe_customer_id) {
     profileUpdates.stripe_customer_id = customerId;
   }
-  if (isActive && profileRole !== "producer" && profileRole !== "admin") {
+  if (shouldExposeProducerAccess && profileRole !== "producer") {
     profileUpdates.role = "producer";
   }
 

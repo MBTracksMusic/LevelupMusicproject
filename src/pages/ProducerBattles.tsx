@@ -60,14 +60,18 @@ interface BattleQuotaStatus {
 interface MatchmakingOpponent {
   user_id: string;
   username: string | null;
+  role?: 'visitor' | 'user' | 'confirmed_user' | 'producer' | 'admin';
   elo_rating: number;
   battle_wins: number;
   battle_losses: number;
   battle_draws: number;
   elo_diff: number;
+  ai_score?: number | null;
+  elo_score?: number | null;
+  final_score?: number | null;
   score?: number | null;
   reason?: string | null;
-  source?: 'ai' | 'fallback_sql';
+  source?: 'ai' | 'hybrid' | 'sql';
 }
 
 interface OfficialBattleCampaign {
@@ -366,7 +370,10 @@ export function ProducerBattlesPage() {
     );
 
     if (!suggestionError && Array.isArray((suggestionData as { suggestions?: unknown[] } | null)?.suggestions)) {
-      setMatchmakingOpponents((((suggestionData as { suggestions?: MatchmakingOpponent[] }).suggestions) ?? []));
+      setMatchmakingOpponents(
+        ((((suggestionData as { suggestions?: MatchmakingOpponent[] }).suggestions) ?? []))
+          .filter((user) => user.role !== 'admin')
+      );
       setIsMatchmakingLoading(false);
       return;
     }
@@ -386,10 +393,10 @@ export function ProducerBattlesPage() {
     setMatchmakingOpponents(
       (((data as MatchmakingOpponent[] | null) ?? [])).map((row) => ({
         ...row,
-        source: 'fallback_sql',
+        source: 'sql',
         score: null,
         reason: null,
-      }))
+      })).filter((user) => user.role !== 'admin')
     );
     setIsMatchmakingLoading(false);
   }, [profile?.id]);

@@ -11,6 +11,8 @@ const DEFAULT_ALLOWED_CORS_ORIGINS = [
 const DEFAULT_MODEL = "gpt-5-mini";
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 8;
+const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+const OPENAI_MAX_RETRY_ATTEMPTS = 2;
 
 const normalizeOrigin = (value: string): string | null => {
   try {
@@ -95,14 +97,25 @@ interface CandidateSuggestion {
   username: string | null;
   avatar_url: string | null;
   producer_tier: string | null;
+  role: "producer" | "admin" | "confirmed_user" | "user" | "visitor";
   elo_rating: number;
   battle_wins: number;
   battle_losses: number;
   battle_draws: number;
   elo_diff: number;
+  ai_score: number | null;
+  elo_score: number | null;
+  final_score: number | null;
   score: number | null;
   reason: string | null;
-  source: "ai" | "fallback_sql";
+  source: "ai" | "hybrid" | "sql";
+}
+
+type SuggestionMode = "ai_only" | "hybrid" | "sql_only";
+
+interface BattleSuggestionSettings {
+  enabled: boolean;
+  mode: SuggestionMode;
 }
 
 function extractResponseText(payload: Record<string, unknown> | null) {
@@ -157,18 +170,102 @@ function summarizeProducts(products: ProductSnapshot[]) {
   }));
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readHeader(headers: Headers, key: string) {
+  const value = headers.get(key);
+  return value && value.trim().length > 0 ? value.trim() : null;
+}
+
+function extractRateLimitMetadata(headers: Headers) {
+  return {
+    request_id: readHeader(headers, "x-request-id"),
+    retry_after: readHeader(headers, "retry-after"),
+    ratelimit_limit_requests: readHeader(headers, "x-ratelimit-limit-requests"),
+    ratelimit_limit_tokens: readHeader(headers, "x-ratelimit-limit-tokens"),
+    ratelimit_remaining_requests: readHeader(headers, "x-ratelimit-remaining-requests"),
+    ratelimit_remaining_tokens: readHeader(headers, "x-ratelimit-remaining-tokens"),
+    ratelimit_reset_requests: readHeader(headers, "x-ratelimit-reset-requests"),
+    ratelimit_reset_tokens: readHeader(headers, "x-ratelimit-reset-tokens"),
+  };
+}
+
+function parseRetryAfterMs(value: string | null) {
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000);
+  }
+
+  const absoluteTs = Date.parse(value);
+  if (Number.isFinite(absoluteTs)) {
+    return Math.max(0, absoluteTs - Date.now());
+  }
+
+  return null;
+}
+
 function buildFallbackSuggestions(
-  candidates: Array<Omit<CandidateSuggestion, "score" | "reason" | "source">>,
+  candidates: Array<Omit<CandidateSuggestion, "ai_score" | "elo_score" | "final_score" | "score" | "reason" | "source">>,
   limit: number,
 ): CandidateSuggestion[] {
   return candidates
     .slice(0, limit)
-    .map((candidate, index) => ({
-      ...candidate,
-      score: Math.max(0, 100 - candidate.elo_diff - (index * 2)),
-      reason: "Fallback SQL matchmaking based on ELO proximity and active producer filters.",
-      source: "fallback_sql",
-    }));
+    .map((candidate, index) => {
+      const eloScore = Math.max(0, Math.min(1, (100 - candidate.elo_diff - (index * 2)) / 100));
+      const finalScore = eloScore;
+
+      return {
+        ...candidate,
+        ai_score: null,
+        elo_score: eloScore,
+        final_score: finalScore,
+        score: Math.round(finalScore * 100),
+        reason: "SQL matchmaking based on ELO proximity and active producer filters.",
+        source: "sql",
+      };
+    });
+}
+
+function parseSuggestionSettings(value: unknown): BattleSuggestionSettings {
+  const defaults: BattleSuggestionSettings = {
+    enabled: true,
+    mode: "hybrid",
+  };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaults;
+  }
+
+  const record = value as Record<string, unknown>;
+  const enabled = typeof record.enabled === "boolean" ? record.enabled : defaults.enabled;
+  const mode = asNonEmptyString(record.mode);
+
+  if (mode === "ai_only" || mode === "hybrid" || mode === "sql_only") {
+    return { enabled, mode };
+  }
+
+  return { enabled, mode: defaults.mode };
+}
+
+async function loadSuggestionSettings(
+  supabase: ReturnType<typeof createClient<any>>,
+): Promise<BattleSuggestionSettings> {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "ai_battle_suggestions")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[generate-battle-suggestions] failed to load ai_battle_suggestions settings", error);
+    return { enabled: true, mode: "hybrid" };
+  }
+
+  return parseSuggestionSettings(data?.value);
 }
 
 async function persistSuggestions(
@@ -185,11 +282,14 @@ async function persistSuggestions(
     requester_id: requesterId,
     candidate_user_id: suggestion.user_id,
     suggestion_source: suggestion.source,
-    model_name: suggestion.source === "ai"
+    model_name: suggestion.source === "ai" || suggestion.source === "hybrid"
       ? (asNonEmptyString(payload.model) ?? DEFAULT_MODEL)
       : "fallback-sql-matchmaking-v1",
     rank_position: index + 1,
     score: suggestion.score,
+    ai_score: suggestion.ai_score,
+    elo_score: suggestion.elo_score,
+    final_score: suggestion.final_score,
     reason: suggestion.reason,
     request_payload: payload,
   }));
@@ -226,7 +326,7 @@ function normalizeProductRows(rows: Array<Record<string, unknown>> | null | unde
 async function callOpenAiSuggestions(params: {
   actor: ProfileSnapshot;
   actorProducts: ProductSnapshot[];
-  candidates: Array<Omit<CandidateSuggestion, "score" | "reason" | "source">>;
+  candidates: Array<Omit<CandidateSuggestion, "ai_score" | "elo_score" | "final_score" | "score" | "reason" | "source">>;
   candidateProductsByProducerId: Map<string, ProductSnapshot[]>;
   limit: number;
 }) {
@@ -295,64 +395,124 @@ async function callOpenAiSuggestions(params: {
     },
   });
 
-  try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+  const requestBody = {
+    model,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: systemPrompt }],
       },
-      body: JSON.stringify({
-        model,
-        input: [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: systemPrompt }],
-          },
-          {
-            role: "user",
-            content: [{ type: "input_text", text: userPrompt }],
-          },
-        ],
-        text: {
-          format: {
-            type: "json_object",
-          },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: userPrompt }],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_object",
+      },
+    },
+    max_output_tokens: 900,
+  };
+
+  const requestBodyJson = JSON.stringify(requestBody);
+  const promptMetrics = {
+    endpoint: OPENAI_RESPONSES_ENDPOINT,
+    model,
+    max_output_tokens: 900,
+    payload_bytes: new TextEncoder().encode(requestBodyJson).length,
+    candidate_count: params.candidates.length,
+    actor_product_count: params.actorProducts.length,
+  };
+
+  try {
+    for (let attempt = 1; attempt <= OPENAI_MAX_RETRY_ATTEMPTS; attempt += 1) {
+      const response = await fetch(OPENAI_RESPONSES_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
-        max_output_tokens: 900,
-      }),
-    });
+        body: requestBodyJson,
+      });
 
-    if (!response.ok) {
-      const body = await response.text();
-      console.error("[generate-battle-suggestions] OpenAI response API failed", response.status, body);
-      return {
-        ok: false as const,
-        stage: "http_error",
-        message: `OpenAI API returned ${response.status}`,
-        status: response.status,
-        body,
-      };
-    }
+      const rateLimit = extractRateLimitMetadata(response.headers);
 
-    const payload = await response.json() as Record<string, unknown>;
-    const outputText = extractResponseText(payload);
-    const parsed = parseJsonObject(outputText);
-    if (!parsed) {
-      console.error("[generate-battle-suggestions] OpenAI payload was not valid JSON");
+      if (!response.ok) {
+        const body = await response.text();
+        const retryAfterMs = parseRetryAfterMs(rateLimit.retry_after);
+        const bodyPreview = body.slice(0, 1000);
+        const shouldRetry = (
+          attempt < OPENAI_MAX_RETRY_ATTEMPTS &&
+          response.status === 429 &&
+          retryAfterMs !== null &&
+          retryAfterMs > 0 &&
+          retryAfterMs <= 3000 &&
+          !bodyPreview.toLowerCase().includes("insufficient_quota")
+        );
+
+        console.error("[generate-battle-suggestions] OpenAI response API failed", {
+          status: response.status,
+          attempt,
+          ...promptMetrics,
+          ...rateLimit,
+          body: bodyPreview,
+          will_retry: shouldRetry,
+        });
+
+        if (shouldRetry) {
+          await sleep(retryAfterMs);
+          continue;
+        }
+
+        return {
+          ok: false as const,
+          stage: "http_error",
+          message: `OpenAI API returned ${response.status}`,
+          status: response.status,
+          body: bodyPreview,
+          attempt,
+          ...promptMetrics,
+          rate_limit: rateLimit,
+        };
+      }
+
+      const payload = await response.json() as Record<string, unknown>;
+      const outputText = extractResponseText(payload);
+      const parsed = parseJsonObject(outputText);
+      if (!parsed) {
+        console.error("[generate-battle-suggestions] OpenAI payload was not valid JSON", {
+          attempt,
+          ...promptMetrics,
+          ...rateLimit,
+          output_preview: outputText?.slice(0, 1000) ?? null,
+        });
+        return {
+          ok: false as const,
+          stage: "parse_error",
+          message: "OpenAI payload was not valid JSON",
+          outputText,
+          attempt,
+          ...promptMetrics,
+          rate_limit: rateLimit,
+        };
+      }
+
       return {
-        ok: false as const,
-        stage: "parse_error",
-        message: "OpenAI payload was not valid JSON",
-        outputText,
+        ok: true as const,
+        payload,
+        parsed,
+        attempt,
+        ...promptMetrics,
+        rate_limit: rateLimit,
       };
     }
 
     return {
-      ok: true as const,
-      model,
-      payload,
-      parsed,
+      ok: false as const,
+      stage: "http_error",
+      message: "OpenAI retry budget exhausted",
+      ...promptMetrics,
     };
   } catch (error) {
     console.error("[generate-battle-suggestions] OpenAI request failed", error);
@@ -360,8 +520,81 @@ async function callOpenAiSuggestions(params: {
       ok: false as const,
       stage: "request_failed",
       message: error instanceof Error ? error.message : String(error),
+      ...promptMetrics,
     };
   }
+}
+
+function clampNormalizedScore(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeAiScore(value: unknown) {
+  const numericValue = asFiniteNumber(value);
+  if (numericValue === null) {
+    return null;
+  }
+
+  return clampNormalizedScore(numericValue > 1 ? numericValue / 100 : numericValue);
+}
+
+function normalizeEloScore(candidate: { elo_diff: number }, index: number) {
+  const raw = (100 - candidate.elo_diff - (index * 2)) / 100;
+  return Math.max(0, Math.min(1, raw));
+}
+
+function buildHybridSuggestions(
+  candidates: Array<Omit<CandidateSuggestion, "ai_score" | "elo_score" | "final_score" | "score" | "reason" | "source">>,
+  aiItems: Array<Record<string, unknown>>,
+  limit: number,
+) {
+  const aiMap = new Map<string, { ai_score: number; reason: string | null }>();
+
+  for (const item of aiItems) {
+    const opponentId = asNonEmptyString(item.opponent_id);
+    const aiScore = normalizeAiScore(item.score);
+    if (!opponentId || aiScore === null || aiMap.has(opponentId)) {
+      continue;
+    }
+
+    aiMap.set(opponentId, {
+      ai_score: aiScore,
+      reason: asNonEmptyString(item.reason),
+    });
+  }
+
+  const ranked = candidates.map((candidate, index) => {
+    const aiResult = aiMap.get(candidate.user_id) ?? null;
+    const eloScore = normalizeEloScore(candidate, index);
+    const aiScore = aiResult?.ai_score ?? 0;
+    const finalScore = (0.7 * aiScore) + (0.3 * eloScore);
+
+    return {
+      ...candidate,
+      ai_score: aiResult?.ai_score ?? null,
+      elo_score: eloScore,
+      final_score: finalScore,
+      score: Math.round(finalScore * 100),
+      reason: aiResult?.reason ?? "Hybrid ranking combined AI taste matching with ELO fairness.",
+      source: "hybrid" as const,
+    };
+  });
+
+  return ranked
+    .sort((left, right) => {
+      const rightScore = right.final_score ?? 0;
+      const leftScore = left.final_score ?? 0;
+      if (rightScore !== leftScore) {
+        return rightScore - leftScore;
+      }
+
+      return left.elo_diff - right.elo_diff;
+    })
+    .slice(0, limit);
 }
 
 serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
@@ -484,23 +717,28 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
     throw new ApiError(500, "candidate_load_failed", candidateError.message);
   }
 
+  const suggestionSettings = await loadSuggestionSettings(supabaseAdmin);
+
   const candidates = ((candidateRows as Array<Record<string, unknown>> | null) ?? []).map((row) => ({
     user_id: String(row.user_id),
     username: asNonEmptyString(row.username),
     avatar_url: asNonEmptyString(row.avatar_url),
     producer_tier: asNonEmptyString(row.producer_tier),
+    role: (asNonEmptyString(row.role) ?? "visitor") as CandidateSuggestion["role"],
     elo_rating: asFiniteNumber(row.elo_rating) ?? 1200,
     battle_wins: asFiniteNumber(row.battle_wins) ?? 0,
     battle_losses: asFiniteNumber(row.battle_losses) ?? 0,
     battle_draws: asFiniteNumber(row.battle_draws) ?? 0,
     elo_diff: asFiniteNumber(row.elo_diff) ?? 0,
-  }));
+  })).filter((candidate) => candidate.role === "producer");
 
   if (candidates.length === 0) {
     return jsonResponse({
       ok: true,
       request_id: requestId,
-      source: "fallback_sql",
+      enabled: suggestionSettings.enabled,
+      mode: suggestionSettings.mode,
+      source: "sql",
       suggestions: [],
     });
   }
@@ -541,56 +779,116 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
   }
 
   const fallbackSuggestions = buildFallbackSuggestions(candidates, limit);
-  const aiResult = await callOpenAiSuggestions({
-    actor: actorProfile as ProfileSnapshot,
-    actorProducts,
-    candidates,
-    candidateProductsByProducerId,
-    limit,
-  });
+  const shouldSkipAi = !suggestionSettings.enabled || suggestionSettings.mode === "sql_only";
+  const aiResult = shouldSkipAi
+    ? {
+      ok: false as const,
+      stage: "skipped_by_setting",
+      message: !suggestionSettings.enabled
+        ? "AI battle suggestions are disabled by admin setting"
+        : "AI battle suggestions are set to sql_only mode",
+      endpoint: OPENAI_RESPONSES_ENDPOINT,
+      model: asNonEmptyString(Deno.env.get("BATTLE_SUGGESTIONS_MODEL")) ?? DEFAULT_MODEL,
+      payload_bytes: 0,
+      candidate_count: candidates.length,
+      attempt: 0,
+      rate_limit: null,
+    }
+    : await callOpenAiSuggestions({
+      actor: actorProfile as ProfileSnapshot,
+      actorProducts,
+      candidates,
+      candidateProductsByProducerId,
+      limit,
+    });
 
   let suggestions = fallbackSuggestions;
-  let source: "ai" | "fallback_sql" = "fallback_sql";
+  let source: "ai" | "hybrid" | "sql" = "sql";
   let model = "fallback-sql-matchmaking-v1";
 
   const aiStatus = aiResult.ok
-    ? { attempted: true, used: false, stage: "success", message: null }
-    : { attempted: true, used: false, stage: aiResult.stage, message: aiResult.message };
+    ? {
+      attempted: !shouldSkipAi,
+      used: false,
+      stage: "success",
+      message: null,
+      model: aiResult.model,
+      endpoint: aiResult.endpoint,
+      payload_bytes: aiResult.payload_bytes,
+      candidate_count: aiResult.candidate_count,
+      attempt: aiResult.attempt,
+      rate_limit: aiResult.rate_limit,
+    }
+    : {
+      attempted: !shouldSkipAi,
+      used: false,
+      stage: aiResult.stage,
+      message: aiResult.message,
+      endpoint: "endpoint" in aiResult ? aiResult.endpoint : OPENAI_RESPONSES_ENDPOINT,
+      model: "model" in aiResult ? aiResult.model : model,
+      status: "status" in aiResult ? aiResult.status : null,
+      payload_bytes: "payload_bytes" in aiResult ? aiResult.payload_bytes : null,
+      candidate_count: "candidate_count" in aiResult ? aiResult.candidate_count : candidates.length,
+      attempt: "attempt" in aiResult ? aiResult.attempt : null,
+      rate_limit: "rate_limit" in aiResult ? aiResult.rate_limit : null,
+    };
 
   if (aiResult.ok) {
     const rawSuggestions = Array.isArray(aiResult.parsed.suggestions)
       ? aiResult.parsed.suggestions as Array<Record<string, unknown>>
       : [];
-    const candidateMap = new Map(candidates.map((candidate) => [candidate.user_id, candidate]));
-    const seen = new Set<string>();
-    const parsedSuggestions: CandidateSuggestion[] = [];
-
-    for (const item of rawSuggestions) {
-      const opponentId = asNonEmptyString(item.opponent_id);
-      if (!opponentId || seen.has(opponentId) || !candidateMap.has(opponentId)) continue;
-      seen.add(opponentId);
-
-      const candidate = candidateMap.get(opponentId)!;
-      parsedSuggestions.push({
-        ...candidate,
-        score: Math.max(0, Math.min(100, asFiniteNumber(item.score) ?? 0)),
-        reason: asNonEmptyString(item.reason),
-        source: "ai",
-      });
-    }
-
-    if (parsedSuggestions.length > 0) {
-      suggestions = parsedSuggestions.slice(0, limit);
-      source = "ai";
-      model = aiResult.model;
-      aiStatus.used = true;
+    if (suggestionSettings.mode === "hybrid") {
+      const hybridSuggestions = buildHybridSuggestions(candidates, rawSuggestions, limit);
+      if (hybridSuggestions.length > 0 && hybridSuggestions.some((item) => item.ai_score !== null)) {
+        suggestions = hybridSuggestions;
+        source = "hybrid";
+        model = aiResult.model;
+        aiStatus.used = true;
+      } else {
+        aiStatus.stage = "empty_parsed_suggestions";
+        aiStatus.message = "OpenAI returned no usable opponent ids for hybrid ranking";
+      }
     } else {
-      aiStatus.stage = "empty_parsed_suggestions";
-      aiStatus.message = "OpenAI returned no usable opponent ids";
+      const candidateMap = new Map(candidates.map((candidate, index) => [candidate.user_id, { candidate, index }]));
+      const seen = new Set<string>();
+      const parsedSuggestions: CandidateSuggestion[] = [];
+
+      for (const item of rawSuggestions) {
+        const opponentId = asNonEmptyString(item.opponent_id);
+        if (!opponentId || seen.has(opponentId) || !candidateMap.has(opponentId)) continue;
+        seen.add(opponentId);
+
+        const { candidate, index } = candidateMap.get(opponentId)!;
+        const aiScore = normalizeAiScore(item.score);
+        const eloScore = normalizeEloScore(candidate, index);
+        const finalScore = aiScore ?? eloScore;
+
+        parsedSuggestions.push({
+          ...candidate,
+          ai_score: aiScore,
+          elo_score: eloScore,
+          final_score: finalScore,
+          score: Math.round(finalScore * 100),
+          reason: asNonEmptyString(item.reason),
+          source: "ai",
+        });
+      }
+
+      if (parsedSuggestions.length > 0) {
+        suggestions = parsedSuggestions.slice(0, limit);
+        source = "ai";
+        model = aiResult.model;
+        aiStatus.used = true;
+      } else {
+        aiStatus.stage = "empty_parsed_suggestions";
+        aiStatus.message = "OpenAI returned no usable opponent ids";
+      }
     }
   }
 
   const payload = {
+    enabled: suggestionSettings.enabled,
+    mode: suggestionSettings.mode,
     source,
     model,
     actor_id: user.id,
@@ -603,6 +901,8 @@ serveWithErrorHandling("generate-battle-suggestions", async (req: Request) => {
   return jsonResponse({
     ok: true,
     request_id: requestId,
+    enabled: suggestionSettings.enabled,
+    mode: suggestionSettings.mode,
     source,
     model,
     ai_status: aiStatus,

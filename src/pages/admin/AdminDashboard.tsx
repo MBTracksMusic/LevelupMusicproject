@@ -30,6 +30,37 @@ import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
 import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 
+type AiBattleSuggestionMode = 'ai_only' | 'hybrid' | 'sql_only';
+
+interface AiBattleSuggestionSettings {
+  enabled: boolean;
+  mode: AiBattleSuggestionMode;
+}
+
+const AI_BATTLE_SUGGESTIONS_KEY = 'ai_battle_suggestions';
+const DEFAULT_AI_BATTLE_SETTINGS: AiBattleSuggestionSettings = {
+  enabled: true,
+  mode: 'hybrid',
+};
+
+const adminDb = supabase as any;
+
+function parseAiBattleSettings(value: unknown): AiBattleSuggestionSettings {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return DEFAULT_AI_BATTLE_SETTINGS;
+  }
+
+  const record = value as Record<string, unknown>;
+  const enabled = typeof record.enabled === 'boolean' ? record.enabled : DEFAULT_AI_BATTLE_SETTINGS.enabled;
+  const mode = typeof record.mode === 'string' ? record.mode.trim().toLowerCase() : '';
+
+  if (mode === 'ai_only' || mode === 'hybrid' || mode === 'sql_only') {
+    return { enabled, mode };
+  }
+
+  return { enabled, mode: DEFAULT_AI_BATTLE_SETTINGS.mode };
+}
+
 function toDatetimeLocalValue(value: string | null) {
   if (!value) {
     return '';
@@ -93,6 +124,9 @@ export function AdminDashboardPage() {
   const [isAlertsLoading, setIsAlertsLoading] = useState(true);
   const [resolvingAlertId, setResolvingAlertId] = useState<string | null>(null);
   const [isSendingWaitlistCampaign, setIsSendingWaitlistCampaign] = useState(false);
+  const [aiBattleSettings, setAiBattleSettings] = useState<AiBattleSuggestionSettings>(DEFAULT_AI_BATTLE_SETTINGS);
+  const [isAiBattleSettingsLoading, setIsAiBattleSettingsLoading] = useState(true);
+  const [isAiBattleSettingsSaving, setIsAiBattleSettingsSaving] = useState(false);
 
   useEffect(() => {
     if (!isSavingLaunchDate) {
@@ -252,6 +286,41 @@ export function AdminDashboardPage() {
     totalPurchases.value,
     totalRevenue.growth,
   ]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAiBattleSettings = async () => {
+      setIsAiBattleSettingsLoading(true);
+
+      const { data, error } = await adminDb
+        .from('system_settings')
+        .select('value')
+        .eq('key', AI_BATTLE_SUGGESTIONS_KEY)
+        .maybeSingle();
+
+      if (error) {
+        console.error('admin ai battle settings load error', error);
+        toast.error("Impossible de charger les réglages d'IA battles.");
+        if (!isCancelled) {
+          setAiBattleSettings(DEFAULT_AI_BATTLE_SETTINGS);
+          setIsAiBattleSettingsLoading(false);
+        }
+        return;
+      }
+
+      if (!isCancelled) {
+        setAiBattleSettings(parseAiBattleSettings(data?.value));
+        setIsAiBattleSettingsLoading(false);
+      }
+    };
+
+    void loadAiBattleSettings();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('fr-FR', {
     style: 'currency',
@@ -413,6 +482,37 @@ export function AdminDashboardPage() {
       toast.error("Impossible de résoudre l'alerte.");
     } finally {
       setResolvingAlertId(null);
+    }
+  };
+
+  const handleAiBattleSettingsSave = async () => {
+    setIsAiBattleSettingsSaving(true);
+
+    try {
+      const payload = {
+        enabled: aiBattleSettings.enabled,
+        mode: aiBattleSettings.mode,
+      };
+
+      const { error } = await adminDb
+        .from('system_settings')
+        .upsert({
+          key: AI_BATTLE_SUGGESTIONS_KEY,
+          value: payload,
+        }, {
+          onConflict: 'key',
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Réglages d'IA battles enregistrés.");
+    } catch (error) {
+      console.error('admin ai battle settings save error', error);
+      toast.error("Impossible d'enregistrer les réglages d'IA battles.");
+    } finally {
+      setIsAiBattleSettingsSaving(false);
     }
   };
 
@@ -878,6 +978,99 @@ export function AdminDashboardPage() {
                 </Button>
                 <span className="text-sm text-zinc-500">
                   {launchVideoUrl ? 'Une vidéo est actuellement configurée' : 'Aucune vidéo active'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2 border-zinc-800">
+        <CardHeader className="mb-0">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Swords className="h-5 w-5 text-rose-400" />
+                AI Settings
+              </CardTitle>
+              <CardDescription className="mt-2">
+                Contrôle global des suggestions de battles. Le mode hybride combine IA et score ELO, le mode SQL saute OpenAI.
+              </CardDescription>
+            </div>
+            <div className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-300">
+              {isAiBattleSettingsLoading ? 'Chargement...' : aiBattleSettings.enabled ? 'AI ON' : 'AI OFF'}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4 pt-4">
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white">Enable AI suggestions</p>
+              <p className="text-sm text-zinc-400">
+                Désactive complètement l’appel OpenAI si nécessaire. Le fallback SQL reste disponible côté fonction.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={aiBattleSettings.enabled}
+              aria-label="Basculer les suggestions IA"
+              onClick={() => setAiBattleSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+              disabled={isAiBattleSettingsLoading || isAiBattleSettingsSaving}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full border transition-colors ${
+                aiBattleSettings.enabled
+                  ? 'border-rose-500 bg-rose-500/90'
+                  : 'border-zinc-700 bg-zinc-800'
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                  aiBattleSettings.enabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Mode</p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  `AI only` tente uniquement l’IA puis bascule sur SQL en cas d’échec dur. `Hybrid` mélange score IA et ELO. `SQL only` coupe OpenAI.
+                </p>
+              </div>
+
+              <label className="flex flex-col gap-2 text-sm text-zinc-300">
+                <span>Mode de ranking</span>
+                <select
+                  value={aiBattleSettings.mode}
+                  onChange={(event) =>
+                    setAiBattleSettings((prev) => ({
+                      ...prev,
+                      mode: event.target.value as AiBattleSuggestionMode,
+                    }))
+                  }
+                  disabled={isAiBattleSettingsLoading || isAiBattleSettingsSaving}
+                  className="h-11 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-white outline-none transition-colors focus:border-rose-500"
+                >
+                  <option value="ai_only">AI only</option>
+                  <option value="hybrid">Hybrid (AI + ELO)</option>
+                  <option value="sql_only">SQL only</option>
+                </select>
+              </label>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="primary"
+                  onClick={handleAiBattleSettingsSave}
+                  isLoading={isAiBattleSettingsSaving}
+                  disabled={isAiBattleSettingsLoading}
+                >
+                  Enregistrer les réglages IA
+                </Button>
+                <span className="text-sm text-zinc-500">
+                  Réglage actif : {aiBattleSettings.enabled ? 'activé' : 'désactivé'} / {aiBattleSettings.mode}
                 </span>
               </div>
             </div>
