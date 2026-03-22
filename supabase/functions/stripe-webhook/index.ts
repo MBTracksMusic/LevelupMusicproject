@@ -359,6 +359,115 @@ const resolveInvoiceBillingPeriod = (invoice: Stripe.Invoice) => {
   };
 };
 
+async function resolveProfileForStripeCustomer<TProfile extends { id: string; stripe_customer_id: string | null }>(
+  supabase: ReturnType<typeof createClient>,
+  stripe: Stripe,
+  params: {
+    customerId: string;
+    subscriptionId: string;
+    userId?: string;
+    selectClause: string;
+    logContext: string;
+  },
+): Promise<TProfile | null> {
+  const { customerId, subscriptionId, userId, selectClause, logContext } = params;
+
+  let { data: profile, error: profileError } = await supabase
+    .from("user_profiles")
+    .select(selectClause)
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(`[${logContext}] Failed to lookup user by stripe_customer_id: ${profileError.message}`);
+  }
+
+  if (profile) {
+    return profile as TProfile;
+  }
+
+  if (userId) {
+    const { data: profileById, error: profileByIdError } = await supabase
+      .from("user_profiles")
+      .select(selectClause)
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileByIdError) {
+      throw new Error(`[${logContext}] Failed to lookup user by id: ${profileByIdError.message}`);
+    }
+
+    if (profileById) {
+      if (!profileById.stripe_customer_id) {
+        const { error: linkErr } = await supabase
+          .from("user_profiles")
+          .update({ stripe_customer_id: customerId })
+          .eq("id", profileById.id);
+
+        if (linkErr) {
+          console.error(`[${logContext}] Failed to link stripe_customer_id`, linkErr);
+        } else {
+          profileById.stripe_customer_id = customerId;
+        }
+      }
+
+      return profileById as TProfile;
+    }
+  }
+
+  console.error("Stripe customer not linked", customerId);
+  console.log("customerId:", customerId);
+
+  try {
+    const customer = await stripe.customers.retrieve(customerId);
+    console.log("stripe customer:", customer);
+    if ("deleted" in customer && customer.deleted) {
+      return null;
+    }
+
+    const customerEmail = asNonEmptyString(customer.email);
+    if (!customerEmail) {
+      return null;
+    }
+
+    const { data: profileByEmail, error: profileByEmailError } = await supabase
+      .from("user_profiles")
+      .select(selectClause)
+      .ilike("email", customerEmail)
+      .maybeSingle();
+
+    if (profileByEmailError) {
+      throw new Error(`[${logContext}] Failed to lookup user by email: ${profileByEmailError.message}`);
+    }
+
+    if (!profileByEmail) {
+      return null;
+    }
+
+    if (!profileByEmail.stripe_customer_id) {
+      const { error: linkErr } = await supabase
+        .from("user_profiles")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", profileByEmail.id);
+
+      if (linkErr) {
+        console.error(`[${logContext}] Failed to link stripe_customer_id after email fallback`, linkErr);
+      } else {
+        profileByEmail.stripe_customer_id = customerId;
+      }
+    }
+
+    return profileByEmail as TProfile;
+  } catch (error) {
+    console.error(`[${logContext}] Stripe customer fallback lookup failed`, {
+      customerId,
+      subscriptionId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 const getConfiguredUserSubscriptionPriceIds = () => {
   const ids = new Set<string>();
 
@@ -1156,14 +1265,14 @@ serveWithErrorHandling("stripe-webhook", async (req: Request, context: RequestCo
           if (!isSubscription(event.data.object)) {
             throw new WebhookError(`Invalid payload for ${event.type}`, 400, true);
           }
-          await handleSubscriptionUpdate(supabase, event.data.object);
+          await handleSubscriptionUpdate(supabase, stripe, event.data.object);
           break;
         }
         case "customer.subscription.deleted": {
           if (!isSubscription(event.data.object)) {
             throw new WebhookError("Invalid payload for customer.subscription.deleted", 400, true);
           }
-          await handleSubscriptionDeleted(supabase, event.data.object);
+          await handleSubscriptionDeleted(supabase, stripe, event.data.object);
           break;
         }
         case "invoice.payment_succeeded":
@@ -1479,6 +1588,7 @@ async function handleCheckoutCompleted(
 
 async function handleSubscriptionUpdate(
   supabase: ReturnType<typeof createClient>,
+  stripe: Stripe,
   subscription: Stripe.Subscription,
 ) {
   const customerId = asNonEmptyString(
@@ -1492,6 +1602,9 @@ async function handleSubscriptionUpdate(
     throw new WebhookError("Invalid subscription update payload", 400, true);
   }
 
+  console.log("customerId:", customerId);
+  console.log("metadata:", subscription.metadata);
+
   const priceIds = extractSubscriptionPriceIds(subscription);
   const subscriptionKind = await resolveSubscriptionKind(supabase, {
     subscriptionId,
@@ -1502,6 +1615,7 @@ async function handleSubscriptionUpdate(
 
   if (subscriptionKind === "user") {
     await upsertUserSubscription(supabase, {
+      stripe,
       customerId,
       subscriptionId,
       status: subscription.status,
@@ -1515,6 +1629,7 @@ async function handleSubscriptionUpdate(
     });
   } else {
     await upsertProducerSubscription(supabase, {
+      stripe,
       customerId,
       subscriptionId,
       status: subscription.status,
@@ -1528,6 +1643,7 @@ async function handleSubscriptionUpdate(
 
 async function handleSubscriptionDeleted(
   supabase: ReturnType<typeof createClient>,
+  stripe: Stripe,
   subscription: Stripe.Subscription,
 ) {
   const customerId = asNonEmptyString(
@@ -1541,6 +1657,9 @@ async function handleSubscriptionDeleted(
     throw new WebhookError("Invalid subscription deleted payload", 400, true);
   }
 
+  console.log("customerId:", customerId);
+  console.log("metadata:", subscription.metadata);
+
   const priceIds = extractSubscriptionPriceIds(subscription);
   const subscriptionKind = await resolveSubscriptionKind(supabase, {
     subscriptionId,
@@ -1551,6 +1670,7 @@ async function handleSubscriptionDeleted(
 
   if (subscriptionKind === "user") {
     await upsertUserSubscription(supabase, {
+      stripe,
       customerId,
       subscriptionId,
       status: "canceled",
@@ -1564,6 +1684,7 @@ async function handleSubscriptionDeleted(
     });
   } else {
     await upsertProducerSubscription(supabase, {
+      stripe,
       customerId,
       subscriptionId,
       status: "canceled",
@@ -1940,6 +2061,7 @@ async function upsertProducerSubscriptionFromStripe(
   }
 
   await upsertProducerSubscription(supabase, {
+    stripe,
     customerId,
     subscriptionId,
     status: sub.status,
@@ -1969,6 +2091,7 @@ async function upsertUserSubscriptionFromStripe(
   }
 
   await upsertUserSubscription(supabase, {
+    stripe,
     customerId,
     subscriptionId,
     status: sub.status,
@@ -1985,6 +2108,7 @@ async function upsertUserSubscriptionFromStripe(
 async function upsertUserSubscription(
   supabase: ReturnType<typeof createClient>,
   params: {
+    stripe: Stripe;
     customerId: string;
     subscriptionId: string;
     status: string;
@@ -1998,6 +2122,7 @@ async function upsertUserSubscription(
   },
 ) {
   const {
+    stripe,
     customerId,
     subscriptionId,
     status,
@@ -2010,34 +2135,16 @@ async function upsertUserSubscription(
     priceIds = [],
   } = params;
 
-  let { data: profile } = await supabase
-    .from("user_profiles")
-    .select("id, stripe_customer_id")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-
-  if (!profile && userId) {
-    const { data: profileById } = await supabase
-      .from("user_profiles")
-      .select("id, stripe_customer_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (profileById) {
-      profile = profileById;
-
-      if (!profileById.stripe_customer_id) {
-        const { error: linkErr } = await supabase
-          .from("user_profiles")
-          .update({ stripe_customer_id: customerId })
-          .eq("id", profileById.id);
-
-        if (linkErr) {
-          console.error("[upsertUserSubscription] Failed to link stripe_customer_id", linkErr);
-        }
-      }
-    }
-  }
+  let profile = await resolveProfileForStripeCustomer<{
+    id: string;
+    stripe_customer_id: string | null;
+  }>(supabase, stripe, {
+    customerId,
+    subscriptionId,
+    userId,
+    selectClause: "id, stripe_customer_id",
+    logContext: "upsertUserSubscription",
+  });
 
   if (!profile) {
     const { data: existingSub } = await supabase
@@ -2133,11 +2240,30 @@ async function upsertUserSubscription(
   if (error) {
     throw new Error(`Failed to upsert user_subscriptions: ${error.message}`);
   }
+
+  const profileUpdates: Record<string, unknown> = {
+    stripe_subscription_id: subscriptionId,
+    subscription_status: status,
+  };
+
+  if (!profile.stripe_customer_id) {
+    profileUpdates.stripe_customer_id = customerId;
+  }
+
+  const { error: profileUpdateError } = await supabase
+    .from("user_profiles")
+    .update(profileUpdates)
+    .eq("id", profile.id);
+
+  if (profileUpdateError) {
+    throw new Error(`Failed to update user profile with user subscription identifiers: ${profileUpdateError.message}`);
+  }
 }
 
 async function upsertProducerSubscription(
   supabase: ReturnType<typeof createClient>,
   params: {
+    stripe: Stripe;
     customerId: string;
     subscriptionId: string;
     status: string;
@@ -2147,36 +2273,21 @@ async function upsertProducerSubscription(
     priceIds?: string[];
   },
 ) {
-  const { customerId, subscriptionId, status, currentPeriodEnd, cancelAtPeriodEnd, userId, priceIds = [] } = params;
+  const { stripe, customerId, subscriptionId, status, currentPeriodEnd, cancelAtPeriodEnd, userId, priceIds = [] } = params;
 
-  let { data: profile } = await supabase
-    .from("user_profiles")
-    .select("id, stripe_customer_id, stripe_subscription_id, producer_tier, role")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-
-  if (!profile && userId) {
-    const { data: profileById } = await supabase
-      .from("user_profiles")
-      .select("id, stripe_customer_id, stripe_subscription_id, producer_tier, role")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (profileById) {
-      profile = profileById;
-
-      if (!profileById.stripe_customer_id) {
-        const { error: linkErr } = await supabase
-          .from("user_profiles")
-          .update({ stripe_customer_id: customerId })
-          .eq("id", profileById.id);
-
-        if (linkErr) {
-          console.error("[upsertProducerSubscription] Failed to link stripe_customer_id", linkErr);
-        }
-      }
-    }
-  }
+  let profile = await resolveProfileForStripeCustomer<{
+    id: string;
+    stripe_customer_id: string | null;
+    stripe_subscription_id: string | null;
+    producer_tier: ProducerTier | null;
+    role: string | null;
+  }>(supabase, stripe, {
+    customerId,
+    subscriptionId,
+    userId,
+    selectClause: "id, stripe_customer_id, stripe_subscription_id, producer_tier, role",
+    logContext: "upsertProducerSubscription",
+  });
 
   if (!profile) {
     const { data: existingSub } = await supabase
