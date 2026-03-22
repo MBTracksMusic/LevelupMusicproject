@@ -5878,7 +5878,7 @@ export type Database = {
           balance_before: number
           credits_spent: number
           entitlement_id: string
-          license_id: string
+          license_id: string | null
           product_id: string
           purchase_id: string
           status: string
