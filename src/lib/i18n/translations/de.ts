@@ -621,7 +621,7 @@ export const de: TranslationSchema = {
     userPremiumSubtitle: 'Der einfachste Weg, Beats mit Credits zu kaufen.',
     userPremiumAudience: 'Fur Nutzer, die schneller kaufen und neue Releases fruher sehen wollen.',
     userPremiumPopular: 'Am beliebtesten',
-    userPremiumItemCreditsPerMonth: '3 Credits pro Monat',
+    userPremiumItemCreditsPerMonth: '1 Credit pro Monat',
     userPremiumItemPremiumBeats: 'Zugang zu Premium-Beats',
     userPremiumItemInstantPurchase: 'Sofortkauf ohne Karte',
     userPremiumItemCreditsCap: 'Bis zu 6 Credits ansammeln',

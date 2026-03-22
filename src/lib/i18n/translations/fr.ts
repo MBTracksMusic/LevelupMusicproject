@@ -620,7 +620,7 @@ export const fr = {
     userPremiumSubtitle: 'Le moyen le plus simple d’acheter des beats avec tes credits.',
     userPremiumAudience: 'Pense pour les utilisateurs qui veulent acheter vite et suivre les sorties en priorite.',
     userPremiumPopular: 'Le plus populaire',
-    userPremiumItemCreditsPerMonth: '3 credits par mois',
+    userPremiumItemCreditsPerMonth: '1 crédit par mois',
     userPremiumItemPremiumBeats: 'Acces aux beats premium',
     userPremiumItemInstantPurchase: 'Achat instantane sans CB',
     userPremiumItemCreditsCap: 'Cumule jusqu’a 6 credits',
