@@ -176,7 +176,7 @@ export function HomeFeaturedBeats() {
       trackAddToCart({
         productId: beat.id,
         productName: beat.title,
-        price: beat.price / 100,
+        price: beat.price,
       });
       void trackInteraction({
         beatId: beat.id,

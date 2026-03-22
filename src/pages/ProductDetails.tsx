@@ -39,16 +39,15 @@ const DEFAULT_OG_IMAGE = 'https://beatelion.com/og-default.jpg';
 
 const mapCreditPurchaseError = (message: string, t: TranslateFn) => {
   if (message.includes('insufficient_credits')) return t('productDetails.creditPurchaseInsufficient');
+  if (message.includes('Not enough credits')) return t('productDetails.creditPurchaseInsufficient');
   if (message.includes('purchase_already_exists')) return t('productDetails.creditPurchaseAlreadyOwned');
   if (message.includes('exclusive_not_allowed_with_credits')) return t('productDetails.creditPurchaseUnavailable');
-  if (message.includes('license_selection_required')) return t('productDetails.creditPurchaseSelectLicense');
   if (message.includes('duplicate_request')) return t('productDetails.creditPurchaseDuplicate');
   if (message.includes('product_not_available')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_not_published')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_deleted')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_not_active')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_not_credit_eligible')) return t('productDetails.creditPurchaseUnavailable');
-  if (message.includes('license_not_credit_eligible')) return t('productDetails.creditPurchaseSelectLicense');
   if (message.includes('concurrent_purchase_conflict')) return t('productDetails.creditPurchaseInProgress');
   return t('productDetails.creditPurchaseGenericError');
 };
@@ -187,6 +186,10 @@ export function ProductDetailsPage() {
 
     return Math.ceil(product.price / CREDIT_VALUE_CENTS);
   }, [product]);
+  const missingCredits =
+    typeof creditBalance === 'number'
+      ? Math.max(requiredCredits - creditBalance, 0)
+      : requiredCredits;
 
   useEffect(() => {
     if (!product) {
@@ -328,7 +331,7 @@ export function ProductDetailsPage() {
       trackAddToCart({
         productId: product.id,
         productName: product.title,
-        price: product.price / 100,
+        price: product.price,
       });
       if (product.product_type === 'beat') {
         void trackInteraction({
@@ -424,6 +427,10 @@ export function ProductDetailsPage() {
     );
   }
 
+  if (!product.price || product.price <= 0) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-5xl mx-auto px-4">
@@ -474,6 +481,9 @@ export function ProductDetailsPage() {
 
               <div>
                 <span className="text-2xl font-bold text-white">{formatPrice(displayPrice)}</span>
+                <div className="mt-1 text-sm text-zinc-400">
+                  {formatPrice(displayPrice)} → {requiredCredits} {t('productDetails.creditsLabel')}
+                </div>
               </div>
             </div>
 
@@ -552,7 +562,9 @@ export function ProductDetailsPage() {
               <p className="mt-3 text-xs text-zinc-500">{t('productDetails.creditPurchaseUnavailable')}</p>
             )}
             {!product.is_exclusive && !product.is_sold && isAuthenticated && !isCreditBalanceLoading && typeof creditBalance === 'number' && creditBalance < requiredCredits && (
-              <p className="mt-3 text-xs text-zinc-500">{t('productDetails.creditPurchaseInsufficient')}</p>
+              <p className="mt-3 text-xs text-zinc-500">
+                {t('productDetails.creditPurchaseMissingCredits', { count: missingCredits })}
+              </p>
             )}
 
           </div>

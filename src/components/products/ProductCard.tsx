@@ -76,7 +76,7 @@ export function ProductCard({
       trackAddToCart({
         productId: product.id,
         productName: product.title,
-        price: product.price / 100,
+        price: product.price,
       });
       if (product.product_type === 'beat') {
         void trackInteraction({

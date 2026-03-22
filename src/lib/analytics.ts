@@ -122,14 +122,16 @@ export function trackAddToCart(params: {
   productName?: string;
   price: number;
 }) {
+  const value = params.price / 100;
+
   trackEvent('add_to_cart', {
     currency: 'EUR',
-    value: params.price,
+    value,
     items: [
       {
         item_id: params.productId,
         item_name: params.productName ?? undefined,
-        price: params.price,
+        price: value,
         quantity: 1,
       },
     ],
