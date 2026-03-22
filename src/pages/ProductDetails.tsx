@@ -6,9 +6,6 @@ import { Button } from '../components/ui/Button';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { getLocalizedName } from '../lib/i18n/localized';
-import {
-  getDefaultProductLicense,
-} from '../lib/pricing';
 import { fetchCatalogProductBySlug } from '../lib/supabase/catalog';
 import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatPrice } from '../lib/utils/format';
@@ -31,7 +28,6 @@ interface CreditPurchaseResult {
   balance_before: number;
   credits_spent: number;
   entitlement_id: string;
-  license_id: string;
   product_id: string;
   purchase_id: string;
   status: string;
@@ -178,7 +174,6 @@ export function ProductDetailsPage() {
     };
   }, [product?.id, user?.id]);
 
-  const defaultLicense = useMemo(() => getDefaultProductLicense(product), [product]);
   const displayPrice = product?.price ?? 0;
 
   useEffect(() => {
@@ -351,7 +346,6 @@ export function ProductDetailsPage() {
         'purchase_beat_with_credits',
         {
           p_product_id: product.id,
-          p_license_id: defaultLicense?.license_id ?? null,
         },
       );
 
