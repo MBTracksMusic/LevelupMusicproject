@@ -418,7 +418,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     const {
       beatId,
       productId,
-      licenseType: rawLicenseType,
       successUrl: rawSuccessUrl,
       cancelUrl: rawCancelUrl,
     } = body;
@@ -428,8 +427,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     const requestedPriceId = asNonEmptyString(body.price_id) || asNonEmptyString(body.priceId);
     const subscriptionKind = asNonEmptyString(body.subscription_kind);
     const resolvedBeatId = asNonEmptyString(beatId) || asNonEmptyString(productId);
-    const requestedLicenseId = asNonEmptyString(body.licenseId) || asNonEmptyString(body.license_id);
-    const licenseType = asNonEmptyString(rawLicenseType) || "standard";
 
     if (subscriptionKind === "user") {
       if (!successUrl || !cancelUrl) {
@@ -686,7 +683,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     if (productError || !product) {
       console.warn("[create-checkout] Product lookup failed", {
         beatId: resolvedBeatId,
-        licenseType,
         message: productError?.message ?? "product_not_found",
       });
       return new Response(JSON.stringify({ error: "Beat introuvable ou indisponible." }), {
@@ -783,53 +779,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         code: "checkout_in_progress",
       }), {
         status: 409,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const productLicenses = await fetchProductLicenses(
-      supabaseAdmin as ReturnType<typeof createClient>,
-      resolvedBeatId,
-    );
-
-    let selectedProductLicense: ProductLicenseRow | null = null;
-
-    if (productLicenses.length > 0) {
-      selectedProductLicense =
-        productLicenses.find((productLicense) => productLicense.license_id === requestedLicenseId) ??
-        productLicenses.find((productLicense) => {
-          return (
-            normalizeLicenseLookup(productLicense.license_type) === normalizeLicenseLookup(licenseType) ||
-            normalizeLicenseLookup(productLicense.license?.name ?? null) === normalizeLicenseLookup(licenseType)
-          );
-        }) ??
-        (productRow.is_exclusive
-          ? productLicenses.find((productLicense) => productLicense.license?.exclusive_allowed === true) ?? null
-          : productLicenses[0] ?? null);
-    }
-
-    // Resolve license server-side so Stripe metadata cannot be forged by the client.
-    const selectedLicense = selectedProductLicense?.license ?? await resolveCheckoutLicense(
-      supabaseAdmin as ReturnType<typeof createClient>,
-      {
-        licenseId: requestedLicenseId,
-        licenseType,
-        isExclusiveProduct: Boolean(productRow.is_exclusive),
-      },
-    );
-
-    if (!selectedLicense) {
-      return new Response(JSON.stringify({ error: "Licence introuvable pour ce beat." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (productRow.is_exclusive && !selectedLicense.exclusive_allowed) {
-      return new Response(JSON.stringify({
-        error: "Selected license is not valid for this exclusive product",
-      }), {
-        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -953,7 +902,6 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       if (!customerResponse.ok || !customer?.id) {
         console.error("[create-checkout] Failed to create Stripe customer", {
           beatId: resolvedBeatId,
-          licenseType,
           status: customerResponse.status,
           error: customer?.error?.message ?? "unknown_customer_creation_error",
         });
@@ -971,14 +919,13 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     }
 
     const lineItems = new URLSearchParams();
-    const checkoutAmount = selectedProductLicense?.price ?? productRow.price;
-    const checkoutStripePriceId = selectedProductLicense?.stripe_price_id ?? null;
-    const resolvedLicenseType = selectedProductLicense?.license_type ?? selectedLicense.name;
+    const checkoutAmount = productRow.price;
+    const resolvedLicenseType = productRow.is_exclusive ? "exclusive" : "standard";
+    const resolvedLicenseName = productRow.is_exclusive ? "Exclusive" : "Standard";
 
     if (!checkoutAmount || checkoutAmount <= 0) {
       console.error("[create-checkout] Invalid product price", {
         beatId: productRow.id,
-        licenseId: requestedLicenseId,
         price: checkoutAmount,
       });
 
@@ -990,16 +937,15 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       });
     }
 
-    if (checkoutStripePriceId) {
-      lineItems.append("line_items[0][price]", checkoutStripePriceId);
-    } else {
-      lineItems.append("line_items[0][price_data][currency]", "eur");
-      lineItems.append("line_items[0][price_data][unit_amount]", checkoutAmount.toString());
-      lineItems.append("line_items[0][price_data][product_data][name]", productRow.title);
-      lineItems.append("line_items[0][price_data][product_data][description]", `Licence: ${selectedLicense.name}`);
-      if (productRow.cover_image_url) {
-        lineItems.append("line_items[0][price_data][product_data][images][0]", productRow.cover_image_url);
-      }
+    lineItems.append("line_items[0][price_data][currency]", "eur");
+    lineItems.append("line_items[0][price_data][unit_amount]", checkoutAmount.toString());
+    lineItems.append("line_items[0][price_data][product_data][name]", productRow.title);
+    lineItems.append(
+      "line_items[0][price_data][product_data][description]",
+      productRow.is_exclusive ? "Exclusive purchase" : "Beat purchase",
+    );
+    if (productRow.cover_image_url) {
+      lineItems.append("line_items[0][price_data][product_data][images][0]", productRow.cover_image_url);
     }
     lineItems.append("line_items[0][quantity]", "1");
 
@@ -1016,24 +962,19 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       "metadata[product_slug]": productRow.slug,
       "metadata[product_type]": productRow.product_type,
       "metadata[is_exclusive]": productRow.is_exclusive.toString(),
-      "metadata[license_id]": selectedLicense.id,
-      "metadata[license_name]": selectedLicense.name,
+      "metadata[license_name]": resolvedLicenseName,
       "metadata[license_type]": resolvedLicenseType,
       // Immutable checkout snapshot: used by webhook/RPC to avoid product price drift.
       "metadata[db_price_snapshot]": checkoutAmount.toString(),
       // Backward compatibility for in-flight sessions created before snapshot key rollout.
       "metadata[db_price]": checkoutAmount.toString(),
-      "metadata[price_source]": selectedProductLicense ? "product_licenses.price" : "products.price",
+      "metadata[price_source]": "products.price",
     };
 
     if (customerId) {
       sessionParamsData.customer = customerId;
     } else {
       sessionParamsData.customer_creation = "always";
-    }
-
-    if (selectedProductLicense?.id) {
-      sessionParamsData["metadata[product_license_id]"] = selectedProductLicense.id;
     }
 
     const sessionParams = new URLSearchParams(sessionParamsData);

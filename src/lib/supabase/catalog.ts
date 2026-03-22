@@ -333,7 +333,7 @@ const fetchLegacyCatalogProducts = async ({
 
   const rows = (data as unknown as ProductWithRelations[] | null) ?? [];
   const visibleProducts = await applyProducerVisibility(rows, restrictToActiveProducers ?? false);
-  return attachProductLicenses(visibleProducts);
+  return visibleProducts;
 };
 
 const fetchLegacyCatalogProductBySlug = async ({
@@ -449,7 +449,7 @@ export async function fetchCatalogProducts({
   const rows = (data as unknown as CatalogProductRow[] | null) ?? [];
   const products = rows.map(toProduct);
   const visibleProducts = await applyProducerVisibility(products, restrictToActiveProducers);
-  return attachProductLicenses(visibleProducts);
+  return visibleProducts;
 }
 
 export async function fetchCatalogProductBySlug({

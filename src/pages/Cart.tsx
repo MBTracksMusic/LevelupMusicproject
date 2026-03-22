@@ -3,12 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Music, ShoppingCart, Trash2, AlertCircle } from 'lucide-react';
 import { useCartStore } from '../lib/stores/cart';
 import { useTranslation } from '../lib/i18n';
-import { getLicenseDisplayName } from '../lib/pricing';
 import { formatPrice } from '../lib/utils/format';
 import { Button } from '../components/ui/Button';
 import { LogoLoader } from '../components/ui/LogoLoader';
 import { supabase } from '../lib/supabase/client';
-import { trackBeginCheckout, trackPurchase, trackPurchaseByLicense } from '../lib/analytics';
+import { trackBeginCheckout, trackPurchase } from '../lib/analytics';
 
 export function CartPage() {
   const navigate = useNavigate();
@@ -63,15 +62,6 @@ export function CartPage() {
               itemId: purchase.product_id,
               itemName: purchase.beat_title_snapshot ?? 'unknown',
             });
-            trackPurchaseByLicense({
-              transactionId: purchase.stripe_checkout_session_id || purchase.id,
-              productId: purchase.product_id,
-              value: (purchase.price_snapshot ?? purchase.amount) / 100,
-              currency: purchase.currency || 'EUR',
-              itemName: purchase.beat_title_snapshot ?? 'unknown',
-              licenseId: purchase.license_id,
-              licenseType: purchase.license_name_snapshot ?? purchase.license_type_snapshot,
-            });
           }
         }
 
@@ -110,11 +100,7 @@ export function CartPage() {
     }
 
     if (!firstItem) return;
-    const selectedLicenseType =
-      firstItem.selected_license?.license_type ?? firstItem.license_type ?? 'standard';
-    const selectedLicenseId =
-      firstItem.selected_license?.license_id ?? firstItem.license_id ?? null;
-    const selectedPrice = firstItem.selected_license?.price ?? firstItem.product?.price ?? 0;
+    const selectedPrice = firstItem.product?.price ?? 0;
 
     trackBeginCheckout({
       productId: firstItem.product_id,
@@ -139,8 +125,6 @@ export function CartPage() {
       const { data, error } = await supabase.functions.invoke<{ url?: string }>('create-checkout', {
         body: {
           beatId: firstItem.product_id,
-          licenseId: selectedLicenseId,
-          licenseType: selectedLicenseType,
           successUrl: `${window.location.origin}/cart?status=success`,
           cancelUrl: `${window.location.origin}/cart`,
         },
@@ -260,17 +244,11 @@ export function CartPage() {
                         {item.product?.product_type === 'kit' ? t('checkout.itemKit') : t('checkout.itemBeat')}
                         {item.product?.bpm && <span>{item.product.bpm} {t('products.bpm')}</span>}
                         {item.product?.key_signature && <span>{item.product.key_signature}</span>}
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-rose-300">
-                          {getLicenseDisplayName(item.selected_license ?? {
-                            license_type: item.license_type ?? t('products.license'),
-                            license: null,
-                          })}
-                        </span>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-semibold text-white">
-                        {formatPrice(item.selected_license?.price ?? item.product?.price ?? 0)}
+                        {formatPrice(item.product?.price ?? 0)}
                       </p>
                       <Button
                         variant="ghost"

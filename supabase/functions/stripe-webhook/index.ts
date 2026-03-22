@@ -1413,6 +1413,7 @@ async function handleCheckoutCompleted(
   const metadataLicenseId = asNonEmptyString(metadata.license_id);
   const metadataLicenseName = asNonEmptyString(metadata.license_name);
   const licenseType = asNonEmptyString(metadata.license_type) || metadataLicenseName || "standard";
+  const priceSource = asNonEmptyString(metadata.price_source);
   // Source of truth for checkout pricing:
   // Stripe paid amount must match immutable snapshot captured at checkout creation.
   const metadataDbPriceSnapshotRaw =
@@ -1451,12 +1452,14 @@ async function handleCheckoutCompleted(
 
   // Primary licensing flow:
   // Resolve a trusted license id and use the unified complete_license_purchase RPC.
-  const resolvedLicenseId = await resolveLicenseIdForCheckout(supabase, {
-    metadataLicenseId,
-    metadataLicenseName,
-    legacyLicenseType: licenseType,
-    isExclusive,
-  });
+  const resolvedLicenseId = priceSource === "products.price"
+    ? null
+    : await resolveLicenseIdForCheckout(supabase, {
+      metadataLicenseId,
+      metadataLicenseName,
+      legacyLicenseType: licenseType,
+      isExclusive,
+    });
 
   let purchaseId: string | null = null;
 

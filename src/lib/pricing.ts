@@ -57,11 +57,11 @@ export function getDefaultProductLicense(product: { licenses?: ProductLicense[] 
 }
 
 export function getDisplayPrice(product: { price?: number | null; licenses?: ProductLicense[] | null } | null | undefined) {
-  return getDefaultProductLicense(product)?.price ?? product?.price ?? 0;
+  return product?.price ?? 0;
 }
 
-export function hasMultipleLicenses(product: { licenses?: ProductLicense[] | null } | null | undefined) {
-  return getProductActiveLicenses(product).length > 1;
+export function hasMultipleLicenses(_product: { licenses?: ProductLicense[] | null } | null | undefined) {
+  return false;
 }
 
 export function getLicenseDisplayName(
@@ -173,12 +173,10 @@ export function attachLicensesToProducts<T extends { id: string; price: number; 
 ) {
   return products.map((product) => {
     const licenses = licensesMap.get(product.id) ?? [];
-    const defaultLicense = licenses[0] ?? null;
 
     return {
       ...product,
       licenses,
-      price: defaultLicense?.price ?? product.price,
     };
   });
 }
