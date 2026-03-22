@@ -158,7 +158,6 @@ BEGIN
       p.bpm,
       p.key_signature,
       p.price,
-      p.early_access_until,
       %s,
       p.watermarked_bucket,
       p.preview_url,
@@ -193,7 +192,8 @@ BEGIN
       COALESCE(pbr.recency_bonus, 0) AS recency_bonus,
       COALESCE(pbr.performance_score, 0) AS performance_score,
       pbr.producer_rank,
-      COALESCE(pbr.top_10_flag, false) AS top_10_flag
+      COALESCE(pbr.top_10_flag, false) AS top_10_flag,
+      p.early_access_until
     FROM public.products p
     LEFT JOIN public.public_producer_profiles pp
       ON pp.user_id = p.producer_id
