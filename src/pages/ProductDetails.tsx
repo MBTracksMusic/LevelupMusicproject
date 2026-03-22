@@ -13,6 +13,8 @@ import { useCartStore } from '../lib/stores/cart';
 import { useAuth } from '../lib/auth/hooks';
 import { supabase } from '@/lib/supabase/client';
 import { useCreditBalance } from '../lib/credits/useCreditBalance';
+import { isEarlyAccessActive, isEarlyAccessLocked } from '../lib/products/earlyAccess';
+import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 import {
   trackAddToCart,
   trackClickBuy,
@@ -48,6 +50,7 @@ const mapCreditPurchaseError = (message: string, t: TranslateFn) => {
   if (message.includes('product_deleted')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_not_active')) return t('productDetails.creditPurchaseUnavailable');
   if (message.includes('product_not_credit_eligible')) return t('productDetails.creditPurchaseUnavailable');
+  if (message.includes('early_access_premium_only')) return t('products.availableSoon');
   if (message.includes('concurrent_purchase_conflict')) return t('productDetails.creditPurchaseInProgress');
   return t('productDetails.creditPurchaseGenericError');
 };
@@ -55,6 +58,7 @@ const mapCreditPurchaseError = (message: string, t: TranslateFn) => {
 export function ProductDetailsPage() {
   const { t, language } = useTranslation();
   const { user, isAuthenticated } = useAuth();
+  const { isActive: hasPremiumAccess } = useUserSubscriptionStatus(user?.id);
   const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
@@ -281,6 +285,8 @@ export function ProductDetailsPage() {
   const isCurrentTrack = currentTrack?.id === product?.id;
   const hasPreview = Boolean(product?.preview_url?.trim());
   const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
+  const isEarlyAccess = isEarlyAccessActive(product?.early_access_until);
+  const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(product?.early_access_until, hasPremiumAccess);
   const isCreditEligible = product?.product_type === 'beat' && !product?.is_exclusive && !product?.is_sold;
   const hasEnoughCredits = typeof creditBalance === 'number' && creditBalance >= requiredCredits;
   const isCreditPurchaseDisabled =
@@ -290,6 +296,7 @@ export function ProductDetailsPage() {
     isOwnershipLoading ||
     isPurchasingWithCredits ||
     isCreditBalanceLoading ||
+    isEarlyAccessPurchaseLocked ||
     !hasEnoughCredits ||
     requiredCredits <= 0;
   const shouldShowGetCreditsCta =
@@ -297,6 +304,7 @@ export function ProductDetailsPage() {
     isCreditEligible &&
     !hasPurchasedProduct &&
     !isCreditBalanceLoading &&
+    !isEarlyAccessPurchaseLocked &&
     typeof creditBalance === 'number' &&
     creditBalance < requiredCredits;
 
@@ -313,7 +321,7 @@ export function ProductDetailsPage() {
   };
 
   const handleAddToCart = async () => {
-    if (!product || product.is_sold) return;
+    if (!product || product.is_sold || isEarlyAccessPurchaseLocked) return;
 
     trackClickBuy({
       productId: product.id,
@@ -347,7 +355,7 @@ export function ProductDetailsPage() {
   };
 
   const handleCreditPurchase = async () => {
-    if (!product) return;
+    if (!product || isEarlyAccessPurchaseLocked) return;
 
     if (!isAuthenticated) {
       navigate('/login', { state: { from: { pathname: location.pathname } } });
@@ -455,6 +463,11 @@ export function ProductDetailsPage() {
             <p className="text-sm text-zinc-500 mb-2">{product.producer?.username || t('productDetails.unknownProducer')}</p>
             <h1 className="text-4xl font-bold text-white mb-3">{product.title}</h1>
             <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-400 mb-6">
+              {isEarlyAccess && (
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-300">
+                  🔥 {t('products.earlyAccess')}
+                </span>
+              )}
               {product.bpm && <span>{product.bpm} {t('products.bpm')}</span>}
               {product.key_signature && <span>{product.key_signature}</span>}
               {product.genre && <span>{getLocalizedName(product.genre, language)}</span>}
@@ -521,6 +534,9 @@ export function ProductDetailsPage() {
             {creditPurchaseError && (
               <p className="mb-4 text-sm text-red-400">{creditPurchaseError}</p>
             )}
+            {isEarlyAccessPurchaseLocked && (
+              <p className="mb-4 text-sm text-amber-300">{t('products.availableSoon')}</p>
+            )}
 
             <div className="flex flex-wrap items-center gap-3">
               {shouldShowGetCreditsCta ? (
@@ -546,11 +562,16 @@ export function ProductDetailsPage() {
               {!product.is_sold && (
                 <Button
                   onClick={handleAddToCart}
+                  disabled={isEarlyAccessPurchaseLocked}
                   isLoading={isAddingToCart}
                   leftIcon={<ShoppingCart className="w-4 h-4" />}
                   variant={isAuthenticated ? (ctaVariant === 'A' ? 'primary' : 'secondary') : 'outline'}
                 >
-                  {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
+                  {isEarlyAccessPurchaseLocked
+                    ? t('products.availableSoon')
+                    : isAuthenticated
+                      ? t('products.addToCart')
+                      : t('auth.loginButton')}
                 </Button>
               )}
             </div>

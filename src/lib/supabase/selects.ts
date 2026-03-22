@@ -10,6 +10,7 @@ export const PRODUCT_SAFE_COLUMNS = [
   'bpm',
   'key_signature',
   'price',
+  'early_access_until',
   'watermarked_path',
   'watermarked_bucket',
   'preview_url',

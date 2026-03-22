@@ -1,6 +1,7 @@
 import { supabase } from './client';
 import type { Database, Json } from './database.types';
 import { attachProductLicenses } from '../pricing';
+import { isEarlyAccessActive } from '../products/earlyAccess';
 import { fetchPublicProducerProfilesMap } from './publicProfiles';
 import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from './selects';
 import type { ProductWithRelations } from './types';
@@ -23,6 +24,7 @@ interface FetchCatalogProductsParams {
   filters: CatalogFilters;
   limit?: number;
   restrictToActiveProducers?: boolean;
+  hasPremiumAccess?: boolean;
 }
 
 interface FetchCatalogProductBySlugParams {
@@ -52,6 +54,7 @@ const CATALOG_SELECT_COLUMNS = [
   'bpm',
   'key_signature',
   'price',
+  'early_access_until',
   'watermarked_path',
   'watermarked_bucket',
   'preview_url',
@@ -108,6 +111,7 @@ const toProduct = (row: CatalogProductRow): ProductWithRelations => {
     bpm: row.bpm,
     key_signature: row.key_signature,
     price: row.price ?? 0,
+    early_access_until: row.early_access_until,
     watermarked_path: row.watermarked_path,
     watermarked_bucket: row.watermarked_bucket,
     preview_url: row.preview_url,
@@ -270,6 +274,7 @@ const fetchLegacyCatalogProducts = async ({
   filters,
   limit,
   restrictToActiveProducers,
+  hasPremiumAccess,
 }: FetchCatalogProductsParams): Promise<ProductWithRelations[]> => {
   let query = supabase
     .from('products')
@@ -332,7 +337,10 @@ const fetchLegacyCatalogProducts = async ({
   }
 
   const rows = (data as unknown as ProductWithRelations[] | null) ?? [];
-  const visibleProducts = await applyProducerVisibility(rows, restrictToActiveProducers ?? false);
+  const earlyAccessFilteredRows = hasPremiumAccess
+    ? rows
+    : rows.filter((row) => !isEarlyAccessActive(row.early_access_until));
+  const visibleProducts = await applyProducerVisibility(earlyAccessFilteredRows, restrictToActiveProducers ?? false);
   return visibleProducts;
 };
 
@@ -443,7 +451,7 @@ export async function fetchCatalogProducts({
   const { data, error } = await query.limit(limit);
   if (error) {
     console.warn('public_catalog_products query failed, falling back to products query', error);
-    return fetchLegacyCatalogProducts({ mode, filters, limit, restrictToActiveProducers });
+    return fetchLegacyCatalogProducts({ mode, filters, limit, restrictToActiveProducers, hasPremiumAccess });
   }
 
   const rows = (data as unknown as CatalogProductRow[] | null) ?? [];
@@ -477,7 +485,14 @@ export async function fetchCatalogProductBySlug({
   }
 
   const row = (data as unknown as CatalogProductRow | null) ?? null;
-  if (!row) return null;
+  if (!row) {
+    const fallbackRow = await fetchLegacyCatalogProductBySlug({ slug, routePrefix });
+    if (!fallbackRow) {
+      return null;
+    }
+
+    return isEarlyAccessActive(fallbackRow.early_access_until) ? fallbackRow : null;
+  }
 
   const product = toProduct(row);
   const [enriched] = await enrichMissingProducerIdentities([product]);

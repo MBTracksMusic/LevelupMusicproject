@@ -10,6 +10,7 @@ import { useCartStore } from '../../lib/stores/cart';
 import { useAuth, usePermissions } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
 import { getLocalizedField } from '../../lib/i18n/localized';
+import { isEarlyAccessActive, isEarlyAccessLocked } from '../../lib/products/earlyAccess';
 import { trackInteraction } from '../../lib/tracking';
 import { formatPrice } from '../../lib/utils/format';
 
@@ -18,6 +19,7 @@ interface ProductCardProps {
   playbackQueue?: Track[];
   onWishlistToggle?: (productId: string) => void | Promise<void>;
   isWishlisted?: boolean;
+  hasPremiumAccess?: boolean;
 }
 
 export function ProductCard({
@@ -25,6 +27,7 @@ export function ProductCard({
   playbackQueue,
   onWishlistToggle,
   isWishlisted,
+  hasPremiumAccess = false,
 }: ProductCardProps) {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuth();
@@ -36,6 +39,8 @@ export function ProductCard({
   const [isHovered, setIsHovered] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const hasPreview = Boolean(product.preview_url?.trim());
+  const isEarlyAccess = isEarlyAccessActive(product.early_access_until);
+  const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(product.early_access_until, hasPremiumAccess);
 
   const isCurrentTrack = currentTrack?.id === product.id;
   const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
@@ -64,6 +69,10 @@ export function ProductCard({
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (isEarlyAccessPurchaseLocked) {
+      return;
+    }
 
     if (!isAuthenticated) {
       navigate('/login', { state: { from: { pathname: location.pathname } } });
@@ -177,6 +186,11 @@ export function ProductCard({
             {product.is_sold && (
               <Badge variant="danger">{t('products.sold')}</Badge>
             )}
+            {isEarlyAccess && (
+              <Badge variant="warning">
+                🔥 {t('products.earlyAccess')}
+              </Badge>
+            )}
           </div>
 
           {isAuthenticated && (
@@ -230,6 +244,9 @@ export function ProductCard({
           {!hasPreview && (
             <p className="mb-3 text-xs text-zinc-500">{t('products.previewUnavailable')}</p>
           )}
+          {isEarlyAccessPurchaseLocked && (
+            <p className="mb-3 text-xs text-amber-300">{t('products.availableSoon')}</p>
+          )}
 
           <div className="flex items-center justify-between">
             <div>
@@ -241,11 +258,16 @@ export function ProductCard({
               <Button
                 size="sm"
                 onClick={handleAddToCart}
+                disabled={isEarlyAccessPurchaseLocked}
                 isLoading={isAddingToCart}
                 leftIcon={<ShoppingCart className="w-4 h-4" />}
                 variant={isAuthenticated ? 'primary' : 'outline'}
               >
-                {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
+                {isEarlyAccessPurchaseLocked
+                  ? t('products.availableSoon')
+                  : isAuthenticated
+                    ? t('products.addToCart')
+                    : t('auth.loginButton')}
               </Button>
             )}
           </div>

@@ -2982,6 +2982,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           duration_seconds: number | null
+          early_access_until: string | null
           exclusive_preview_url: string | null
           file_format: string | null
           genre_id: string | null
@@ -3028,6 +3029,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           duration_seconds?: number | null
+          early_access_until?: string | null
           exclusive_preview_url?: string | null
           file_format?: string | null
           genre_id?: string | null
@@ -3074,6 +3076,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           duration_seconds?: number | null
+          early_access_until?: string | null
           exclusive_preview_url?: string | null
           file_format?: string | null
           genre_id?: string | null
@@ -4733,6 +4736,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           duration_seconds: number | null
+          early_access_until: string | null
           exclusive_preview_url: string | null
           file_format: string | null
           genre_id: string | null
@@ -4789,6 +4793,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           duration_seconds?: number | null
+          early_access_until?: string | null
           exclusive_preview_url?: string | null
           file_format?: string | null
           genre_id?: string | null
@@ -4845,6 +4850,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           duration_seconds?: number | null
+          early_access_until?: string | null
           exclusive_preview_url?: string | null
           file_format?: string | null
           genre_id?: string | null

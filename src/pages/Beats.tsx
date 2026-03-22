@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import { fetchCatalogProducts } from '../lib/supabase/catalog';
+import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 import type { ProductWithRelations, Genre, Mood } from '../lib/supabase/types';
 import { getLocalizedName } from '../lib/i18n/localized';
 
@@ -20,6 +21,7 @@ interface BeatsPageProps {
 export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   const { t, language } = useTranslation();
   const { user } = useAuth();
+  const { isActive: hasPremiumAccess } = useUserSubscriptionStatus(user?.id);
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   const [beats, setBeats] = useState<ProductWithRelations[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -79,6 +81,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
           filters,
           limit: 50,
           restrictToActiveProducers: false,
+          hasPremiumAccess,
         });
         setBeats(nextBeats);
       } catch (error) {
@@ -91,7 +94,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
     const debounce = setTimeout(fetchBeats, 300);
     return () => clearTimeout(debounce);
-  }, [filters, mode, user?.id]);
+  }, [filters, hasPremiumAccess, mode, user?.id]);
 
   const clearFilters = () => {
     setFilters({
@@ -277,6 +280,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                 key={beat.id}
                 product={beat}
                 playbackQueue={playbackQueue}
+                hasPremiumAccess={hasPremiumAccess}
                 isWishlisted={wishlistProductIds.includes(beat.id)}
                 onWishlistToggle={handleWishlistToggle}
               />

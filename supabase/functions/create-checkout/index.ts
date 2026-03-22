@@ -29,6 +29,7 @@ interface ProductRow {
   title: string;
   slug: string;
   price: number;
+  early_access_until: string | null;
   cover_image_url: string | null;
   producer_id: string;
   is_exclusive: boolean;
@@ -676,7 +677,7 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
 
     const { data: product, error: productError } = await supabaseAdmin
       .from("products")
-      .select("id, title, slug, price, cover_image_url, producer_id, is_exclusive, is_sold, is_published, deleted_at, product_type")
+      .select("id, title, slug, price, early_access_until, cover_image_url, producer_id, is_exclusive, is_sold, is_published, deleted_at, product_type")
       .eq("id", resolvedBeatId)
       .maybeSingle();
 
@@ -829,6 +830,49 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (
+      productRow.product_type === "beat" &&
+      typeof productRow.early_access_until === "string" &&
+      new Date(productRow.early_access_until).getTime() > Date.now() &&
+      profile?.role !== "admin"
+    ) {
+      const { data: userSubscription, error: userSubscriptionError } = await supabaseAdmin
+        .from("user_subscriptions")
+        .select("subscription_status, current_period_end")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (userSubscriptionError) {
+        console.error("[create-checkout] Failed to load buyer subscription for early access", {
+          userId: user.id,
+          beatId: resolvedBeatId,
+          message: userSubscriptionError.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate product availability" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const hasPremiumAccess =
+        userSubscription !== null &&
+        ["active", "trialing"].includes(userSubscription.subscription_status) &&
+        (
+          userSubscription.current_period_end === null ||
+          new Date(userSubscription.current_period_end).getTime() > Date.now()
+        );
+
+      if (!hasPremiumAccess) {
+        return new Response(JSON.stringify({
+          error: "Disponible bientôt",
+          code: "early_access_premium_only",
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     if (productRow.is_exclusive) {

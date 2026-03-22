@@ -6,6 +6,8 @@ import { Card } from '../ui/Card';
 import { useAudioPlayer, type Track } from '../../context/AudioPlayerContext';
 import { useAuth } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
+import { isEarlyAccessActive, isEarlyAccessLocked } from '../../lib/products/earlyAccess';
+import { useUserSubscriptionStatus } from '../../lib/subscriptions/useUserSubscriptionStatus';
 import { supabase } from '@/lib/supabase/client';
 import { trackAddToCart } from '../../lib/analytics';
 import { useCartStore } from '../../lib/stores/cart';
@@ -20,6 +22,7 @@ interface HomeBeatRow {
   play_count: number;
   cover_image_url: string | null;
   preview_url: string | null;
+  early_access_until: string | null;
   is_sold: boolean;
   producer_id: string;
   producer?: {
@@ -36,6 +39,7 @@ interface HomeFeaturedBeatRpcRow {
   play_count: number | null;
   cover_image_url: string | null;
   preview_url: string | null;
+  early_access_until: string | null;
   is_sold: boolean | null;
   producer_id: string;
   producer_username: string | null;
@@ -48,7 +52,8 @@ function normalizePreviewUrl(previewUrl: string | null | undefined) {
 
 export function HomeFeaturedBeats() {
   const { t } = useTranslation();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { isActive: hasPremiumAccess } = useUserSubscriptionStatus(user?.id);
   const navigate = useNavigate();
   const location = useLocation();
   const { currentTrack, isPlaying, playQueue, playTrack } = useAudioPlayer();
@@ -73,6 +78,7 @@ export function HomeFeaturedBeats() {
           play_count: typeof row.play_count === 'number' ? row.play_count : 0,
           cover_image_url: row.cover_image_url,
           preview_url: row.preview_url,
+          early_access_until: row.early_access_until,
           is_sold: row.is_sold === true,
           producer_id: row.producer_id,
           producer: {
@@ -165,6 +171,10 @@ export function HomeFeaturedBeats() {
   };
 
   const handleAddToCart = async (beat: HomeBeatRow) => {
+    if (isEarlyAccessLocked(beat.early_access_until, hasPremiumAccess)) {
+      return;
+    }
+
     if (!isAuthenticated) {
       navigate('/login', { state: { from: { pathname: location.pathname } } });
       return;
@@ -233,6 +243,8 @@ export function HomeFeaturedBeats() {
               const hasPreview = Boolean(normalizePreviewUrl(beat.preview_url));
               const isCurrentTrack = currentTrack?.id === beat.id;
               const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
+              const isEarlyAccess = isEarlyAccessActive(beat.early_access_until);
+              const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(beat.early_access_until, hasPremiumAccess);
 
               return (
               <div
@@ -277,6 +289,9 @@ export function HomeFeaturedBeats() {
                       <p className="truncate text-sm font-semibold text-white transition-colors group-hover:text-rose-300">
                         {beat.title}
                       </p>
+                      {isEarlyAccess && (
+                        <p className="mt-0.5 text-xs text-amber-300">🔥 {t('products.earlyAccess')}</p>
+                      )}
                       <p className="truncate text-sm text-zinc-400 transition-colors group-hover:text-zinc-300">
                         {beat.producer?.username || t('home.unknownProducer')}
                       </p>
@@ -287,6 +302,9 @@ export function HomeFeaturedBeats() {
                         <p className="mt-1 text-xs text-zinc-500">
                           {t('products.previewUnavailable')}
                         </p>
+                      )}
+                      {isEarlyAccessPurchaseLocked && (
+                        <p className="mt-1 text-xs text-amber-300">{t('products.availableSoon')}</p>
                       )}
                     </div>
                   </div>
@@ -304,11 +322,16 @@ export function HomeFeaturedBeats() {
                           e.stopPropagation();
                           void handleAddToCart(beat);
                         }}
+                        disabled={isEarlyAccessPurchaseLocked}
                         isLoading={addingBeatId === beat.id}
                         leftIcon={<ShoppingCart className="w-4 h-4" />}
                         variant={isAuthenticated ? 'primary' : 'outline'}
                       >
-                        {isAuthenticated ? t('products.addToCart') : t('auth.loginButton')}
+                        {isEarlyAccessPurchaseLocked
+                          ? t('products.availableSoon')
+                          : isAuthenticated
+                            ? t('products.addToCart')
+                            : t('auth.loginButton')}
                       </Button>
                     )}
                   </div>

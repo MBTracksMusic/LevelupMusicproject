@@ -33,6 +33,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface PlanItem {
   icon: LucideIcon;
   text: string;
+  helperText?: string;
 }
 
 interface ProducerPlan {
@@ -465,7 +466,11 @@ export function PricingPage() {
     { icon: Music2, text: t('pricing.userPremiumItemCreditsPerMonth') },
     { icon: BadgeCheck, text: t('pricing.userPremiumItemPremiumBeats') },
     { icon: Check, text: t('pricing.userPremiumItemInstantPurchase') },
-    { icon: Users, text: t('pricing.userPremiumItemCreditsCap') },
+    {
+      icon: Users,
+      text: t('pricing.userPremiumItemCreditsCap'),
+      helperText: t('pricing.userPremiumItemCreditsCapHelper'),
+    },
     { icon: Flame, text: t('pricing.userPremiumItemPriorityAccess') },
   ];
   const proPlanItems: PlanItem[] = [
@@ -545,7 +550,12 @@ export function PricingPage() {
     return (
       <li key={item.text} className="flex items-start gap-3">
         <Icon className="w-4 h-4 text-zinc-200 flex-shrink-0 mt-1" />
-        <span className="text-zinc-200/95 text-sm">{item.text}</span>
+        <div>
+          <span className="text-zinc-200/95 text-sm">{item.text}</span>
+          {item.helperText ? (
+            <p className="mt-1 text-xs text-zinc-400">{item.helperText}</p>
+          ) : null}
+        </div>
       </li>
     );
   };
