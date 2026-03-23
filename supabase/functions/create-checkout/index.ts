@@ -832,16 +832,16 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       });
     }
 
-    // Stripe Connect: Validate producer has completed onboarding
-    if (!producerProfile.stripe_account_id || !producerProfile.stripe_account_charges_enabled) {
-      console.warn("[create-checkout] Producer Stripe Connect not ready", {
+    // Stripe Connect: Check if producer has completed onboarding (optional feature)
+    const hasStripeConnect =
+      producerProfile?.stripe_account_id &&
+      producerProfile?.stripe_account_charges_enabled;
+
+    if (!hasStripeConnect) {
+      console.warn("[create-checkout] Connect not ready → fallback to simple Stripe", {
         producerId: productRow.producer_id,
-        hasAccountId: !!producerProfile.stripe_account_id,
-        chargesEnabled: producerProfile.stripe_account_charges_enabled,
-      });
-      return new Response(JSON.stringify({ error: "Producer is not ready to accept payments" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        hasAccountId: !!producerProfile?.stripe_account_id,
+        chargesEnabled: producerProfile?.stripe_account_charges_enabled,
       });
     }
 
@@ -1030,9 +1030,13 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       // Backward compatibility for in-flight sessions created before snapshot key rollout.
       "metadata[db_price]": checkoutAmount.toString(),
       "metadata[price_source]": "products.price",
-      // Stripe Connect: destination account + application fee
-      "payment_intent_data[transfer_data][destination]": producerProfile.stripe_account_id,
-      "payment_intent_data[application_fee_amount]": applicationFeeAmount.toString(),
+      // Stripe Connect: destination account + application fee (only if available)
+      ...(hasStripeConnect
+        ? {
+            "payment_intent_data[transfer_data][destination]": producerProfile.stripe_account_id!,
+            "payment_intent_data[application_fee_amount]": applicationFeeAmount.toString(),
+          }
+        : {}),
     };
 
     if (customerId) {
@@ -1074,11 +1078,17 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       price_db: checkoutAmount,
       unit_amount: checkoutAmount,
       sessionId: session.id,
-      stripeConnectTransfer: {
-        destination: producerProfile.stripe_account_id,
-        applicationFeeAmount,
-        producerAmount: checkoutAmount - applicationFeeAmount,
-      },
+      ...(hasStripeConnect
+        ? {
+            stripeConnectTransfer: {
+              destination: producerProfile.stripe_account_id,
+              applicationFeeAmount,
+              producerAmount: checkoutAmount - applicationFeeAmount,
+            },
+          }
+        : {
+            checkoutMode: "simple_stripe",
+          }),
     });
 
     if (productRow.is_exclusive) {
