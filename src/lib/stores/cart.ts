@@ -63,9 +63,15 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   addToCart: async (productId: string) => {
+    console.log("🛒 [CART STORE] addToCart called with productId:", productId);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Must be logged in to add to cart');
+    console.log("🛒 [CART STORE] user:", user?.id);
+    if (!user) {
+      console.error("🛒 [CART STORE] ❌ NO USER - throwing error");
+      throw new Error('Must be logged in to add to cart');
+    }
 
+    console.log("🛒 [CART STORE] 📡 Upserting cart_items...");
     const { error } = await supabase
       .from('cart_items')
       .upsert({
@@ -77,8 +83,13 @@ export const useCartStore = create<CartState>((set, get) => ({
         onConflict: 'user_id,product_id',
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error("🛒 [CART STORE] ❌ UPSERT ERROR:", error);
+      throw error;
+    }
+    console.log("🛒 [CART STORE] ✅ UPSERT SUCCESS");
     await get().fetchCart();
+    console.log("🛒 [CART STORE] ✅ FETCHCART COMPLETE");
   },
 
   removeFromCart: async (productId: string) => {
