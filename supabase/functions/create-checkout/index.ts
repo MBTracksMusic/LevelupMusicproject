@@ -810,7 +810,7 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
 
     const { data: producerProfile, error: producerProfileError } = await supabaseAdmin
       .from("user_profiles")
-      .select("is_deleted, deleted_at")
+      .select("is_deleted, deleted_at, stripe_account_id, stripe_account_charges_enabled")
       .eq("id", productRow.producer_id)
       .maybeSingle();
 
@@ -827,6 +827,19 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
 
     if (!producerProfile || producerProfile.is_deleted === true || producerProfile.deleted_at !== null) {
       return new Response(JSON.stringify({ error: "Account deleted" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Stripe Connect: Validate producer has completed onboarding
+    if (!producerProfile.stripe_account_id || !producerProfile.stripe_account_charges_enabled) {
+      console.warn("[create-checkout] Producer Stripe Connect not ready", {
+        producerId: productRow.producer_id,
+        hasAccountId: !!producerProfile.stripe_account_id,
+        chargesEnabled: producerProfile.stripe_account_charges_enabled,
+      });
+      return new Response(JSON.stringify({ error: "Producer is not ready to accept payments" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -993,6 +1006,10 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     }
     lineItems.append("line_items[0][quantity]", "1");
 
+    // Stripe Connect: Calculate platform fee (20% of sale goes to producer, 80% to platform)
+    // Stripe application_fee is the amount kept by platform, charged ON TOP of the destination (producer) amount
+    const applicationFeeAmount = Math.round(checkoutAmount * 0.2); // Platform keeps 20%
+
     const sessionParamsData: Record<string, string> = {
       mode: "payment",
       success_url: validatedSuccessUrl,
@@ -1013,6 +1030,9 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       // Backward compatibility for in-flight sessions created before snapshot key rollout.
       "metadata[db_price]": checkoutAmount.toString(),
       "metadata[price_source]": "products.price",
+      // Stripe Connect: destination account + application fee
+      "payment_intent_data[transfer_data][destination]": producerProfile.stripe_account_id,
+      "payment_intent_data[application_fee_amount]": applicationFeeAmount.toString(),
     };
 
     if (customerId) {
@@ -1054,6 +1074,11 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       price_db: checkoutAmount,
       unit_amount: checkoutAmount,
       sessionId: session.id,
+      stripeConnectTransfer: {
+        destination: producerProfile.stripe_account_id,
+        applicationFeeAmount,
+        producerAmount: checkoutAmount - applicationFeeAmount,
+      },
     });
 
     if (productRow.is_exclusive) {
