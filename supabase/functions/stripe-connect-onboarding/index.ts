@@ -42,15 +42,16 @@ Deno.serve(async (req: Request) => {
 
     // Get user from auth header
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data, error: authError } = await supabaseAdmin.auth.getClaims(token);
 
-    if (authError || !user) {
+    if (authError || !data?.claims?.sub) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const userId = data.claims.sub;
     const body: StripeConnectRequest = await req.json();
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
 
@@ -62,7 +63,7 @@ Deno.serve(async (req: Request) => {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
       .select("stripe_account_id, is_producer_active")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profileError || !profile) {
@@ -82,7 +83,7 @@ Deno.serve(async (req: Request) => {
     // Handle different actions
     if (body.action === "create_account_link") {
       return await handleCreateAccountLink(
-        user.id,
+        userId,
         profile,
         supabaseAdmin,
         stripeSecretKey,

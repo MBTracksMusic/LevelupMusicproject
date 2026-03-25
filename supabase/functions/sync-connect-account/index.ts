@@ -36,32 +36,28 @@ Deno.serve(async (req: Request) => {
 
     const token = authHeader.slice(7);
 
-    // Initialize Supabase client with user token
-    const supabase = createClient(
+    // Initialize Supabase admin client
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_ANON_KEY") || "",
-      {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Verify token and get user claims
+    const { data, error: authError } = await supabaseAdmin.auth.getClaims(token);
+    if (authError || !data?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       });
     }
 
+    const userId = data.claims.sub;
+
     // Fetch user profile with account ID
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
       .select("id, stripe_account_id")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profileError || !profile) {
@@ -83,17 +79,17 @@ Deno.serve(async (req: Request) => {
     const account = await stripe.accounts.retrieve(profile.stripe_account_id);
 
     // Update database with current status
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from("user_profiles")
       .update({
         stripe_account_charges_enabled: account.charges_enabled || false,
         updated_at: new Date(),
       })
-      .eq("id", user.id);
+      .eq("id", userId);
 
     if (updateError) {
       console.error("[sync-connect-account] Failed to update account status", {
-        userId: user.id,
+        userId,
         accountId: profile.stripe_account_id,
         error: updateError.message,
       });
@@ -104,7 +100,7 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log("[sync-connect-account] Account synced successfully", {
-      userId: user.id,
+      userId,
       accountId: profile.stripe_account_id,
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,

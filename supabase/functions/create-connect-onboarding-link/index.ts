@@ -44,32 +44,28 @@ Deno.serve(async (req: Request) => {
 
     const token = authHeader.slice(7);
 
-    // Initialize Supabase client with user token
-    const supabase = createClient(
+    // Initialize Supabase admin client
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") || "",
-      Deno.env.get("SUPABASE_ANON_KEY") || "",
-      {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""
     );
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Verify token and get user claims
+    const { data, error: authError } = await supabaseAdmin.auth.getClaims(token);
+    if (authError || !data?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
       });
     }
 
+    const userId = data.claims.sub;
+
     // Fetch user profile with account ID
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
       .select("id, stripe_account_id")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (profileError || !profile) {
@@ -98,7 +94,7 @@ Deno.serve(async (req: Request) => {
     });
 
     console.log("[create-connect-onboarding-link] Link created", {
-      userId: user.id,
+      userId,
       accountId: profile.stripe_account_id,
       expiresAt: new Date(accountLink.expires_at * 1000).toISOString(),
     });

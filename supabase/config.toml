@@ -120,3 +120,12 @@ verify_jwt = false
 
 [functions.toggle-maintenance]
 verify_jwt = false
+
+[functions.stripe-connect-onboarding]
+verify_jwt = false
+
+[functions.create-connect-onboarding-link]
+verify_jwt = false
+
+[functions.sync-connect-account]
+verify_jwt = false

@@ -132,15 +132,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const token = authHeader.replace('Bearer ', '');
 
-    const { data, error: authError } = await supabaseAdmin.auth.getUser(token);
-    const user = data?.user;
+    const { data, error: authError } = await supabaseAdmin.auth.getClaims(token);
 
     console.log('[toggle-maintenance] Token verification:', {
-      userExists: !!user,
+      claimsExists: !!data?.claims,
       authError: authError?.message || null,
     });
 
-    if (authError || !user?.id) {
+    if (authError || !data?.claims?.sub) {
       console.warn('[toggle-maintenance] Token verification failed', { authError: authError?.message });
       return new Response(JSON.stringify({
         error: 'auth_failed',
@@ -151,7 +150,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const userId = user.id;
+    const userId = data.claims.sub;
 
     // === 8. Verify admin status using SERVICE_ROLE
 
