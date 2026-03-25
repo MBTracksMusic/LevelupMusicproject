@@ -369,6 +369,18 @@ export function AdminDashboardPage() {
     try {
       const nextValue = !maintenance;
 
+      // Debug: Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[AdminDashboard] toggle-maintenance called', {
+        hasSession: !!session,
+        sessionUserId: session?.user?.id,
+        sessionAccessToken: session?.access_token?.slice(0, 20) + '...',
+      });
+
+      if (!session) {
+        throw new Error('User is not authenticated. Please sign in first.');
+      }
+
       // Use Edge Function for safe admin operation with SERVER role
       const { data, error } = await supabase.functions.invoke('toggle-maintenance', {
         body: { maintenance_mode: nextValue },

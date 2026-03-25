@@ -96,6 +96,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // === 5. Extract and verify JWT
     const authHeader = req.headers.get('authorization');
+    console.log('[toggle-maintenance] Authorization header received:', {
+      hasAuthHeader: !!authHeader,
+      authHeaderPrefix: authHeader?.slice(0, 20) + '...',
+    });
+
     if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({
         error: 'no_auth',
@@ -132,6 +137,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // === 7. Get current user via token
     const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+
+    console.log('[toggle-maintenance] getUser() result:', {
+      hasUser: !!user,
+      userId: user?.id,
+      authError: authError?.message,
+    });
 
     if (authError || !user?.id) {
       console.warn('[toggle-maintenance] Auth verification failed', authError?.message);
