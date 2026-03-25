@@ -377,12 +377,17 @@ export function AdminDashboardPage() {
         sessionAccessToken: session?.access_token?.slice(0, 20) + '...',
       });
 
-      if (!session) {
+      if (!session?.access_token) {
         throw new Error('User is not authenticated. Please sign in first.');
       }
 
       // Use Edge Function for safe admin operation with SERVER role
+      // ✅ CRITICAL: Manually include Authorization header with session token
+      // The Supabase SDK does NOT automatically send user's JWT to Edge Functions
       const { data, error } = await supabase.functions.invoke('toggle-maintenance', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: { maintenance_mode: nextValue },
       });
 
