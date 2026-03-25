@@ -49,6 +49,13 @@ const corsHeaders = {
  */
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  // === DEBUG: Log all incoming headers
+  console.log('[DEBUG] All request headers:', {
+    headers: Array.from(req.headers.entries()),
+    authHeader_lowercase: req.headers.get('authorization'),
+    authHeader_capitalized: req.headers.get('Authorization'),
+  });
+
   // === 1. CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -95,7 +102,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // === 5. Extract and verify JWT
-    const authHeader = req.headers.get('authorization');
+    const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
     console.log('[toggle-maintenance] Authorization header received:', {
       hasAuthHeader: !!authHeader,
       authHeaderPrefix: authHeader?.slice(0, 20) + '...',
