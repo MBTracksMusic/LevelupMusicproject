@@ -2,12 +2,12 @@ import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Music, ArrowLeft } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import { Button, ToastContainer } from '../../components/ui';
 import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
 import { trackSignUp } from '../../lib/analytics';
 import { AuthFunctionError, signUp } from '../../lib/auth/service';
-import toast from 'react-hot-toast';
+import { useToast, useToastStore } from '../../lib/toast';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,32}$/;
 type AccountType = 'user' | 'producer';
@@ -15,6 +15,9 @@ type AccountType = 'user' | 'producer';
 export function RegisterPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const toast = useToast();
+  const toasts = useToastStore((state) => state.toasts);
+  const removeToast = useToastStore((state) => state.removeToast);
   const [formData, setFormData] = useState({
     email: '',
     username: '',
@@ -59,7 +62,7 @@ export function RegisterPage() {
   const handleCaptchaError = () => {
     captchaTokenRef.current = null;
     setCaptchaToken(null);
-    toast.error(t('auth.captchaUnavailable'));
+    toast.error(t('auth.captchaUnavailable'), 5000);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,7 +107,7 @@ export function RegisterPage() {
     if (submitLockRef.current || isLoading) return;
     if (cooldown > 0) return;
     if (!isCaptchaConfigured) {
-      toast.error(t('auth.captchaUnavailable'));
+      toast.error(t('auth.captchaUnavailable'), 5000);
       return;
     }
 
@@ -112,7 +115,7 @@ export function RegisterPage() {
     if (now - lastSubmitAtRef.current < 2000) return;
     if (!validate()) return;
     if (!captchaTokenRef.current) {
-      toast.error(t('auth.captchaRequired'));
+      toast.error(t('auth.captchaRequired'), 5000);
       return;
     }
 
@@ -137,7 +140,7 @@ export function RegisterPage() {
           navigate(`/email-confirmation?email=${encodeURIComponent(formData.email)}`);
         }
       } else {
-        toast.success(t('auth.registerSuccess'));
+        toast.success(t('auth.registerSuccess'), 3000);
         navigate(accountType === 'producer' ? producerRedirectPath : '/');
       }
     } catch (err: unknown) {
@@ -152,7 +155,7 @@ export function RegisterPage() {
       console.error('Erreur inscription:', error);
       if (isRateLimited) {
         setCooldown(60);
-        toast.error(t('auth.registerRateLimited'));
+        toast.error(t('auth.registerRateLimited'), 5000);
       } else if (error instanceof AuthFunctionError && error.code === 'user_already_exists') {
         setErrors({ email: t('auth.emailInUse') });
       } else if (error.message?.includes('duplicate key value') && error.message.includes('user_profiles_username_key')) {
@@ -160,7 +163,7 @@ export function RegisterPage() {
       } else if (error.message?.includes('already registered')) {
         setErrors({ email: t('auth.emailInUse') });
       } else {
-        toast.error(error.message || t('errors.generic'));
+        toast.error(error.message || t('errors.generic'), 5000);
       }
     } finally {
       resetCaptcha();
@@ -171,6 +174,7 @@ export function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-zinc-950 relative">
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="absolute top-6 left-4 sm:left-6">
         <Link
           to="/"
