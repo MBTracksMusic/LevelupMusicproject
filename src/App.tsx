@@ -52,7 +52,7 @@ const SettingsPage = lazyNamed(() => import('./pages/Settings'), 'SettingsPage')
 const ProducerDashboardPage = lazyNamed(() => import('./pages/ProducerDashboard'), 'ProducerDashboardPage');
 const ProducerBattlesPage = lazyNamed(() => import('./pages/ProducerBattles'), 'ProducerBattlesPage');
 const UploadBeatPage = lazyNamed(() => import('./pages/UploadBeat'), 'UploadBeatPage');
-const ProducerStripeConnect = lazyNamed(() => import('./pages/ProducerStripeConnect'), 'ProducerStripeConnect');
+const ProducerStripeConnect = lazyNamed(() => import('./pages/ProducerStripeConnect'), 'ProducerStripeConnectPage');
 const CartPage = lazyNamed(() => import('./pages/Cart'), 'CartPage');
 const WishlistPage = lazyNamed(() => import('./pages/Wishlist'), 'WishlistPage');
 const ProductDetailsPage = lazyNamed(() => import('./pages/ProductDetails'), 'ProductDetailsPage');
