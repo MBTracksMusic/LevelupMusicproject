@@ -478,33 +478,25 @@ export function AdminSettingsPage() {
 
     setIsEnqueueingReprocess(true);
 
-    // Get fresh session token for authorization
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !refreshed?.session?.access_token) {
-      toast.error(t('admin.settingsPage.authenticationExpired'));
-      setIsEnqueueingReprocess(false);
-      return;
+    try {
+      const { data, error } = await invokeWithAuth('enqueue-preview-reprocess', {});
+
+      if (error) {
+        console.error('enqueue-preview-reprocess invoke error', error);
+        toast.error(t('admin.settingsPage.reprocessError'));
+        setIsEnqueueingReprocess(false);
+        return;
+      }
+
+      const payload = (data ?? {}) as { enqueued_count?: number; skipped_count?: number };
+      const count = Number.isFinite(payload.enqueued_count) ? Number(payload.enqueued_count) : 0;
+      const skipped = Number.isFinite(payload.skipped_count) ? Number(payload.skipped_count) : 0;
+      setReprocessStats({ enqueued: count, skipped });
+      toast.success(t('admin.settingsPage.reprocessSuccess', { count, skipped }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : t('admin.settingsPage.authenticationExpired');
+      toast.error(errorMsg);
     }
-
-    const { data, error } = await supabase.functions.invoke('enqueue-preview-reprocess', {
-      headers: {
-        Authorization: `Bearer ${refreshed.session.access_token}`,
-      },
-      body: {},
-    });
-
-    if (error) {
-      console.error('enqueue-preview-reprocess invoke error', error);
-      toast.error(t('admin.settingsPage.reprocessError'));
-      setIsEnqueueingReprocess(false);
-      return;
-    }
-
-    const payload = (data ?? {}) as { enqueued_count?: number; skipped_count?: number };
-    const count = Number.isFinite(payload.enqueued_count) ? Number(payload.enqueued_count) : 0;
-    const skipped = Number.isFinite(payload.skipped_count) ? Number(payload.skipped_count) : 0;
-    setReprocessStats({ enqueued: count, skipped });
-    toast.success(t('admin.settingsPage.reprocessSuccess', { count, skipped }));
     setIsEnqueueingReprocess(false);
   };
 

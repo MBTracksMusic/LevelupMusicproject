@@ -28,6 +28,7 @@ import {
 import { getFunnelData } from '../../lib/funnelService';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '../../lib/supabase/client';
+import { invokeWithAuth } from '../../lib/supabase/invokeWithAuth';
 import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 
 type AiBattleSuggestionMode = 'ai_only' | 'hybrid' | 'sql_only';
@@ -369,26 +370,9 @@ export function AdminDashboardPage() {
     try {
       const nextValue = !maintenance;
 
-      // Debug: Check if user is authenticated
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('[AdminDashboard] toggle-maintenance called', {
-        hasSession: !!session,
-        sessionUserId: session?.user?.id,
-        sessionAccessToken: session?.access_token?.slice(0, 20) + '...',
-      });
-
-      if (!session?.access_token) {
-        throw new Error('User is not authenticated. Please sign in first.');
-      }
-
-      // Use Edge Function for safe admin operation with SERVER role
-      // ✅ CRITICAL: Manually include Authorization header with session token
-      // The Supabase SDK does NOT automatically send user's JWT to Edge Functions
-      const { data, error } = await supabase.functions.invoke('toggle-maintenance', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: { maintenance_mode: nextValue },
+      // Use invokeWithAuth helper which automatically includes Authorization header
+      const { data, error } = await invokeWithAuth('toggle-maintenance', {
+        maintenance_mode: nextValue,
       });
 
       if (error) {

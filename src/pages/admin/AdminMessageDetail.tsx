@@ -281,26 +281,14 @@ export function AdminMessageDetailPage() {
 
     setIsSubmittingReply(true);
 
-    // Get session token for authorization
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      toast.error(t('admin.messages.authenticationExpired'));
-      setIsSubmittingReply(false);
-      return;
-    }
-
-    const { data, error } = await supabase.functions.invoke<AdminReplyResponse>('admin-reply-contact-message', {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: {
+    try {
+      const { data, error } = await invokeWithAuth<AdminReplyResponse>('admin-reply-contact-message', {
         message_id: message.id,
         reply: normalizedReply,
         status: replyStatus,
-      },
-    });
+      });
 
-    if (error) {
+      if (error) {
       console.error('Error sending admin reply:', error);
       toast.error(data?.error || error.message || t('admin.messages.updateError'));
       setIsSubmittingReply(false);
