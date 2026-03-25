@@ -1006,9 +1006,10 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
     }
     lineItems.append("line_items[0][quantity]", "1");
 
-    // Stripe Connect: Calculate platform fee (20% of sale goes to producer, 80% to platform)
-    // Stripe application_fee is the amount kept by platform, charged ON TOP of the destination (producer) amount
-    const applicationFeeAmount = Math.round(checkoutAmount * 0.2); // Platform keeps 20%
+    // Stripe Connect: Calculate fee split (80% to producer, 20% platform commission)
+    // application_fee_amount is retained by platform; transfer_data.destination receives (checkoutAmount - applicationFeeAmount)
+    const applicationFeeAmount = Math.round(checkoutAmount * 0.2); // Platform commission = 20%, Producer receives 80%
+    const producerPayoutAmount = Math.round(checkoutAmount * 0.8); // Producer always receives 80%, whether via Connect or fallback
 
     const sessionParamsData: Record<string, string> = {
       mode: "payment",
@@ -1030,6 +1031,9 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       // Backward compatibility for in-flight sessions created before snapshot key rollout.
       "metadata[db_price]": checkoutAmount.toString(),
       "metadata[price_source]": "products.price",
+      // Stripe Connect: Track whether this is a Connect payment or fallback (for webhook processing)
+      "metadata[stripe_connect_mode]": hasStripeConnect ? "connect" : "fallback",
+      "metadata[producer_payout_amount]": producerPayoutAmount.toString(),
       // Stripe Connect: destination account + application fee (only if available)
       ...(hasStripeConnect
         ? {

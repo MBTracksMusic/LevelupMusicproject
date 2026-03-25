@@ -1612,6 +1612,44 @@ async function handleCheckoutCompleted(
     throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
   }
 
+  // Fallback payment tracking: if producer lacks Stripe Connect
+  const stripeConnectMode = asNonEmptyString(metadata.stripe_connect_mode);
+  const metadataProducerPayoutAmount = asNonEmptyString(metadata.producer_payout_amount);
+
+  if (stripeConnectMode === "fallback" && purchaseId) {
+    const producerAmount = metadataProducerPayoutAmount
+      ? Number.parseInt(metadataProducerPayoutAmount, 10)
+      : 0;
+
+    // Fetch existing to preserve license info
+    const { data: existingPurchase, error: fetchError } = await supabase
+      .from("purchases")
+      .select("metadata")
+      .eq("id", purchaseId)
+      .maybeSingle();
+
+    if (!fetchError && existingPurchase) {
+      const existingMetadata =
+        typeof existingPurchase?.metadata === "object" && existingPurchase?.metadata !== null
+          ? existingPurchase.metadata
+          : {};
+
+      const mergedMetadata = {
+        ...existingMetadata,
+        payout_mode: "platform_fallback",
+        payout_amount: producerAmount,
+        requires_manual_payout: true,
+        payout_status: existingMetadata?.payout_status ?? "pending",
+        tracked_at: new Date().toISOString(),
+      };
+
+      await supabase
+        .from("purchases")
+        .update({ metadata: mergedMetadata })
+        .eq("id", purchaseId);
+    }
+  }
+
   const { error: notificationError } = await supabase
     .from("notifications")
     .upsert(
