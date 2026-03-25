@@ -111,3 +111,9 @@ verify_jwt = false
 
 [functions.send-waitlist-campaign]
 verify_jwt = false
+
+[functions.stripe-connect-webhook]
+verify_jwt = false
+
+[functions.auth-send-email]
+verify_jwt = false

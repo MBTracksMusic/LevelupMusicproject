@@ -1302,6 +1302,96 @@ serveWithErrorHandling("stripe-webhook", async (req: Request, context: RequestCo
           await handlePaymentFailed(supabase, event.data.object);
           break;
         }
+        case "payout.failed": {
+          const payout = event.data.object as Stripe.Payout;
+
+          console.log("[stripe-webhook] payout.failed", {
+            payout_id: payout.id,
+            amount: payout.amount,
+            currency: payout.currency,
+            failure_code: payout.failure_code,
+            failure_message: payout.failure_message,
+            arrival_date: payout.arrival_date,
+          });
+
+          const stripeAccountId = event.account;
+
+          if (!stripeAccountId) {
+            console.warn("[stripe-webhook] payout.failed without account, skipped");
+            break;
+          }
+
+          const { data: producer, error: producerError } = await supabase
+            .from("user_profiles")
+            .select("id, email, full_name")
+            .eq("stripe_account_id", stripeAccountId)
+            .single();
+
+          if (producerError || !producer) {
+            console.error("[stripe-webhook] Producer not found for payout.failed", {
+              stripeAccountId,
+              error: producerError?.message,
+            });
+            break;
+          }
+
+          await supabase.from("stripe_payout_failures").insert({
+            user_id: producer.id,
+            stripe_account_id: stripeAccountId,
+            payout_id: payout.id,
+            amount: payout.amount,
+            currency: payout.currency,
+            failure_code: payout.failure_code ?? "unknown",
+            failure_message: payout.failure_message ?? "Unknown error",
+            arrival_date: payout.arrival_date ? new Date(payout.arrival_date * 1000).toISOString() : null,
+          });
+
+          console.log("[stripe-webhook] payout.failed processed", {
+            producerId: producer.id,
+            payoutId: payout.id,
+            failureCode: payout.failure_code,
+          });
+
+          break;
+        }
+        case "account.application.deauthorized": {
+          const stripeAccountId = event.account;
+
+          console.log("[stripe-webhook] account.application.deauthorized", {
+            stripe_account_id: stripeAccountId,
+          });
+
+          if (!stripeAccountId) {
+            console.warn("[stripe-webhook] deauthorized event without account ID, skipped");
+            break;
+          }
+
+          const { data: updated, error: updateError } = await supabase
+            .from("user_profiles")
+            .update({
+              stripe_account_id: null,
+              stripe_account_charges_enabled: false,
+              stripe_account_details_submitted: false,
+            })
+            .eq("stripe_account_id", stripeAccountId)
+            .select("id, email")
+            .single();
+
+          if (updateError || !updated) {
+            console.error("[stripe-webhook] Failed to clear deauthorized account", {
+              account: stripeAccountId,
+              error: updateError?.message,
+            });
+            break;
+          }
+
+          console.log("[stripe-webhook] Stripe Connect account cleared after deauthorization", {
+            producerId: updated.id,
+            stripeAccountId: stripeAccountId,
+          });
+
+          break;
+        }
         default:
           console.log("[stripe-webhook] Unhandled event type", { eventId: event.id, eventType: event.type });
       }

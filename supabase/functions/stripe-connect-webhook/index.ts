@@ -7,6 +7,95 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+/**
+ * Verify Stripe webhook signature using HMAC-SHA256
+ * Stripe header format: t=timestamp,v1=signature
+ */
+async function verifyStripeSignature(
+  body: string,
+  signature: string,
+  secret: string,
+): Promise<boolean> {
+  try {
+    // Parse signature header: "t=timestamp,v1=signature"
+    const parts = signature.split(",");
+    let timestamp: string | null = null;
+    let providedSignature: string | null = null;
+
+    for (const part of parts) {
+      const [key, value] = part.split("=");
+      if (key === "t") timestamp = value;
+      if (key === "v1") providedSignature = value;
+    }
+
+    if (!timestamp || !providedSignature) {
+      console.warn("[stripe-connect-webhook] Invalid signature format");
+      return false;
+    }
+
+    // Check timestamp is not too old (5 minutes tolerance)
+    const currentTime = Math.floor(Date.now() / 1000);
+    const signedTime = parseInt(timestamp, 10);
+    if (Math.abs(currentTime - signedTime) > 300) {
+      console.warn("[stripe-connect-webhook] Signature timestamp too old", {
+        age: Math.abs(currentTime - signedTime),
+      });
+      return false;
+    }
+
+    // Create signed content: timestamp.body
+    const signedContent = `${timestamp}.${body}`;
+
+    // Compute HMAC-SHA256
+    const encoder = new TextEncoder();
+    const secretKey = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+
+    const computed = await crypto.subtle.sign(
+      "HMAC",
+      secretKey,
+      encoder.encode(signedContent),
+    );
+
+    // Convert computed signature to hex string
+    const computedHex = Array.from(new Uint8Array(computed))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Timing-safe comparison using XOR accumulation (no short-circuit)
+    const computedBuf = new TextEncoder().encode(computedHex);
+    const providedBuf = new TextEncoder().encode(providedSignature);
+
+    // Check length first (explicit, safe)
+    if (computedBuf.length !== providedBuf.length) {
+      console.error("[stripe-connect-webhook] Signature verification failed");
+      return false;
+    }
+
+    // Compare all bytes with XOR accumulation (constant-time)
+    let mismatch = 0;
+    for (let i = 0; i < computedBuf.length; i++) {
+      mismatch |= computedBuf[i] ^ providedBuf[i];
+    }
+
+    const match = mismatch === 0;
+    if (!match) {
+      console.error("[stripe-connect-webhook] Signature verification failed");
+    }
+    return match;
+  } catch (error) {
+    console.error("[stripe-connect-webhook] Signature verification error:", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -39,8 +128,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Verify signature (simplified - in production, use proper crypto verification)
-    // For now, we'll trust the signature from Stripe
+    // Verify Stripe signature
+    const isValid = await verifyStripeSignature(body, signature, stripeWebhookSecret);
+    if (!isValid) {
+      console.error("[stripe-connect-webhook] Invalid webhook signature");
+      return new Response(
+        JSON.stringify({ error: "Invalid signature" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Parse event after signature verification
     const event = JSON.parse(body);
 
     console.log("[stripe-connect-webhook] Received event:", {

@@ -149,6 +149,15 @@ async function handleCreateAccountLink(
 
     if (updateError) {
       console.error("[stripe-connect-onboarding] Failed to save account ID:", updateError);
+
+      // Check for unique constraint violation (error code 23505)
+      if (updateError.code === "23505") {
+        return new Response(
+          JSON.stringify({ error: "Stripe account already linked to another user" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: "Failed to save account ID" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

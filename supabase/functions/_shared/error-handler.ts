@@ -145,7 +145,19 @@ export const serveWithErrorHandling = (
         });
         return response;
       } catch (error) {
-        return handleError(error, context);
+        // Build CORS headers for error response
+        const origin = req.headers.get("origin");
+        const corsHeaders: Record<string, string> = origin
+          ? {
+              "Access-Control-Allow-Origin": origin,
+              "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+              "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            }
+          : {
+              "Access-Control-Allow-Origin": "null",
+            };
+
+        return handleError(error, context, { corsHeaders });
       }
     });
   });

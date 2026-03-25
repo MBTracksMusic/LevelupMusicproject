@@ -19,7 +19,7 @@ type JoinWaitlistBody = {
 type JoinWaitlistResponse =
   | { message: "success" }
   | { message: "already_registered" }
-  | { error: "invalid_email" | "method_not_allowed" | "server_error" };
+  | { error: "invalid_email" | "method_not_allowed" | "server_error" | "rate_limit_exceeded" | "captcha_failed" };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const jsonResponse = (
@@ -113,10 +113,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ error: "invalid_email" }, 400, corsHeaders);
     }
 
-    await verifyHcaptchaToken({
-      captchaToken,
-      remoteIp: extractIpAddress(req),
-    });
+    try {
+      await verifyHcaptchaToken({
+        captchaToken,
+        remoteIp: extractIpAddress(req),
+      });
+    } catch (captchaError) {
+      console.warn("[join-waitlist] captcha verification failed", {
+        error: captchaError instanceof Error ? captchaError.message : String(captchaError),
+        email: email.substring(0, 3) + '***',
+      });
+      return jsonResponse({ error: "captcha_failed" }, 403, corsHeaders);
+    }
 
     const ipAddress = extractIpAddress(req) ?? "__unknown_ip__";
     const ipHash = await sha256Hex(ipAddress);
@@ -128,9 +136,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (rateLimitError) {
       if (rateLimitError.message.toLowerCase().includes("rate_limit_exceeded")) {
-        throw new ApiError(429, "rate_limit_exceeded", "Rate limit exceeded");
+        console.warn("[join-waitlist] rate limit exceeded", {
+          email: email.substring(0, 3) + '***',
+          ipHash: ipHash.substring(0, 8) + '***',
+        });
+        return jsonResponse({ error: "rate_limit_exceeded" }, 429, corsHeaders);
       }
-      throw rateLimitError;
+      console.error("[join-waitlist] rate limit check error", {
+        error: rateLimitError.message,
+      });
+      return jsonResponse({ error: "server_error" }, 500, corsHeaders);
     }
 
     const { error: insertError } = await adminClient
@@ -139,11 +154,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (insertError) {
       if (insertError.code === "23505") {
+        console.log("[join-waitlist] email already registered", {
+          email: email.substring(0, 3) + '***',
+        });
         return jsonResponse({ message: "already_registered" }, 200, corsHeaders);
       }
 
+      console.error("[join-waitlist] insert error", {
+        code: insertError.code,
+        message: insertError.message,
+        email: email.substring(0, 3) + '***',
+      });
       return jsonResponse({ error: "server_error" }, 500, corsHeaders);
     }
+
+    console.log("[join-waitlist] email inserted successfully", {
+      email: email.substring(0, 3) + '***',
+      timestamp: new Date().toISOString(),
+    });
 
     try {
       getEmailConfig();
@@ -225,10 +253,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ message: "success" }, 200, corsHeaders);
   } catch (error) {
     if (error instanceof ApiError) {
+      console.error("[join-waitlist] API error", {
+        status: error.status,
+        message: error.message,
+      });
+
+      if (error.message.toLowerCase().includes("captcha")) {
+        return jsonResponse({ error: "captcha_failed" }, error.status, corsHeaders);
+      }
+      if (error.message.toLowerCase().includes("rate_limit")) {
+        return jsonResponse({ error: "rate_limit_exceeded" }, error.status, corsHeaders);
+      }
+
       return jsonResponse({ error: "server_error" }, error.status, corsHeaders);
     }
     console.error("[join-waitlist] unexpected error", {
       error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     });
     return jsonResponse({ error: "server_error" }, 500, corsHeaders);
   }

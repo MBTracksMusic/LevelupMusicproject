@@ -13,6 +13,7 @@ import { CookieBanner } from './components/system/CookieBanner';
 import { MaintenanceScreen } from './components/system/MaintenanceScreen';
 import { MaintenanceModeProvider } from './lib/supabase/MaintenanceModeContext';
 import { useMaintenanceMode } from './lib/supabase/useMaintenanceMode';
+import { parseMaintenanceWhitelist } from './lib/maintenance/whitelist';
 import { initAnalytics, setAnalyticsUserId } from './lib/analytics';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { GlobalAudioPlayer } from './components/player/GlobalAudioPlayer';
@@ -295,12 +296,19 @@ function AppShell({
   launchVideoUrl: string | null;
   isMaintenanceLoading: boolean;
 }) {
-  const { profile, isInitialized } = useAuth();
+  const { user, profile, isInitialized } = useAuth();
   const location = useLocation();
   const isAdmin = profile?.role === 'admin';
   const canBypassMaintenance = MAINTENANCE_BYPASS_PATHS.has(location.pathname);
 
-  if (isMaintenanceLoading || (maintenance && !isAdmin && !canBypassMaintenance && !isInitialized)) {
+  // Check whitelist for maintenance mode bypass
+  const whitelistedEmails = parseMaintenanceWhitelist(
+    import.meta.env.VITE_MAINTENANCE_WHITELIST,
+  );
+  const userEmail = user?.email?.toLowerCase() || null;
+  const isWhitelisted = userEmail !== null && whitelistedEmails.includes(userEmail);
+
+  if (isMaintenanceLoading || (maintenance && !isAdmin && !isWhitelisted && !canBypassMaintenance && !isInitialized)) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <LogoLoader label="Initializing Beatelion..." iconClassName="h-14 w-14" />
@@ -308,7 +316,7 @@ function AppShell({
     );
   }
 
-  if (maintenance && !isAdmin && !canBypassMaintenance) {
+  if (maintenance && !isAdmin && !isWhitelisted && !canBypassMaintenance) {
     return (
       <MaintenanceScreen launchDate={launchDate} launchVideoUrl={launchVideoUrl} />
     );

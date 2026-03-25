@@ -64,13 +64,26 @@ async function parseFunctionInvokeError(error: unknown) {
 }
 
 async function invokeAuthFunction<T>(functionName: string, body: Record<string, unknown>) {
+  console.log(`[auth] Invoking function: ${functionName}`, {
+    bodyKeys: Object.keys(body),
+    url: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`
+  });
+
   const { data, error } = await supabase.functions.invoke<T>(functionName, {
     body,
+    method: 'POST',
   });
 
   if (error) {
+    console.error(`[auth] Function ${functionName} error:`, {
+      error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorContext: (error as any)?.context,
+    });
     throw await parseFunctionInvokeError(error);
   }
+
+  console.log(`[auth] Function ${functionName} success`);
 
   if (data == null) {
     throw new AuthFunctionError(`Empty response from ${functionName}`);

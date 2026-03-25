@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 import { supabase } from '@/lib/supabase/client';
+import toast from 'react-hot-toast';
 
 interface MaintenanceScreenProps {
   launchDate: string | null;
@@ -117,13 +119,54 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
   const [waitlistFeedback, setWaitlistFeedback] = useState<WaitlistFeedback>(null);
   const [isSubmittingWaitlist, setIsSubmittingWaitlist] = useState(false);
 
+  // hCaptcha configuration
+  const captchaSiteKey = (import.meta.env.VITE_HCAPTCHA_SITE_KEY as string | undefined)?.trim() ?? '';
+  const isCaptchaConfigured = captchaSiteKey.length > 0;
+  const captchaTokenRef = useRef<string | null>(null);
+  const [captchaInstanceKey, setCaptchaInstanceKey] = useState(0);
+
+  const resetCaptcha = () => {
+    captchaTokenRef.current = null;
+    setCaptchaInstanceKey((current) => current + 1);
+  };
+
+  const handleCaptchaVerify = (token: string) => {
+    captchaTokenRef.current = token;
+  };
+
+  const handleCaptchaExpire = () => {
+    captchaTokenRef.current = null;
+  };
+
+  const handleCaptchaError = () => {
+    captchaTokenRef.current = null;
+    toast.error('Captcha indisponible. Réessayez dans quelques instants.');
+  };
+
   const handleWaitlistSubmit = async (email: string) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
       setWaitlistFeedback({
         tone: 'error',
-        message: 'Erreur, reessaie plus tard',
+        message: 'Adresse email requise',
+      });
+      return;
+    }
+
+    // Check captcha
+    if (!isCaptchaConfigured) {
+      setWaitlistFeedback({
+        tone: 'error',
+        message: 'Captcha indisponible. Réessayez dans quelques instants.',
+      });
+      return;
+    }
+
+    if (!captchaTokenRef.current) {
+      setWaitlistFeedback({
+        tone: 'error',
+        message: 'Validez le captcha avant de continuer',
       });
       return;
     }
@@ -133,14 +176,19 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
 
     try {
       const { data, error } = await supabase.functions.invoke<WaitlistSubmitResponse>('join-waitlist', {
-        body: { email: normalizedEmail },
+        body: {
+          email: normalizedEmail,
+          captchaToken: captchaTokenRef.current,
+        },
       });
 
       if (error) {
+        console.error('[waitlist] function error:', error);
         setWaitlistFeedback({
           tone: 'error',
           message: 'Erreur, réessaie plus tard',
         });
+        resetCaptcha();
         return;
       }
 
@@ -149,6 +197,16 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
           tone: 'error',
           message: 'Adresse email invalide',
         });
+        resetCaptcha();
+        return;
+      }
+
+      if (data?.error === 'rate_limit_exceeded') {
+        setWaitlistFeedback({
+          tone: 'error',
+          message: 'Trop de tentatives. Réessayez plus tard.',
+        });
+        resetCaptcha();
         return;
       }
 
@@ -157,6 +215,7 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
           tone: 'success',
           message: 'Tu es déjà inscrit 👍',
         });
+        resetCaptcha();
         return;
       }
 
@@ -166,6 +225,7 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
           message: 'Merci ! Tu seras informé 🚀',
         });
         setWaitlistEmail('');
+        resetCaptcha();
         return;
       }
 
@@ -173,6 +233,7 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
         tone: 'error',
         message: 'Erreur, réessaie plus tard',
       });
+      resetCaptcha();
     } finally {
       setIsSubmittingWaitlist(false);
     }
@@ -217,6 +278,18 @@ export function MaintenanceScreen({ launchDate, launchVideoUrl }: MaintenanceScr
                 disabled={isSubmittingWaitlist}
                 required
               />
+
+              {isCaptchaConfigured && (
+                <div className="flex justify-center rounded-lg overflow-hidden">
+                  <HCaptcha
+                    key={captchaInstanceKey}
+                    sitekey={captchaSiteKey}
+                    onVerify={handleCaptchaVerify}
+                    onExpire={handleCaptchaExpire}
+                    onError={handleCaptchaError}
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"

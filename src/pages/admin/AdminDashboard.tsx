@@ -97,7 +97,6 @@ export function AdminDashboardPage() {
     launchVideoUrl,
     updatedAt,
     isLoading,
-    updateMaintenanceMode,
     updateSettings,
   } = useMaintenanceModeContext();
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
@@ -369,10 +368,26 @@ export function AdminDashboardPage() {
 
     try {
       const nextValue = !maintenance;
-      await updateMaintenanceMode(nextValue);
+
+      // Use Edge Function for safe admin operation with SERVER role
+      const { data, error } = await supabase.functions.invoke('toggle-maintenance', {
+        body: { maintenance_mode: nextValue },
+      });
+
+      if (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(message);
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || 'Failed to toggle maintenance mode');
+      }
+
       toast.success(nextValue ? 'Mode maintenance activé.' : 'Mode maintenance désactivé.');
-    } catch {
-      toast.error("Impossible de mettre à jour le mode maintenance.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Impossible de mettre à jour le mode maintenance.";
+      console.error('maintenance toggle error:', err);
+      toast.error(errorMsg);
     } finally {
       setIsSavingMaintenance(false);
     }
