@@ -289,22 +289,26 @@ export function AdminMessageDetailPage() {
       });
 
       if (error) {
-      console.error('Error sending admin reply:', error);
-      toast.error(data?.error || error.message || t('admin.messages.updateError'));
-      setIsSubmittingReply(false);
-      return;
-    }
+        console.error('Error sending admin reply:', error);
+        toast.error(data?.error || error.message || t('admin.messages.updateError'));
+        return;
+      }
 
-    if (data?.ok !== true) {
-      toast.error(data?.error || t('admin.messages.invalidResponse'));
-      setIsSubmittingReply(false);
-      return;
-    }
+      if (data?.ok !== true) {
+        toast.error(data?.error || t('admin.messages.invalidResponse'));
+        return;
+      }
 
-    toast.success(t('common.save'));
-    setReplyText('');
-    await loadMessageDetail();
-    setIsSubmittingReply(false);
+      toast.success(t('common.save'));
+      setReplyText('');
+      await loadMessageDetail();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : t('admin.messages.updateError');
+      console.error('Error sending admin reply:', err);
+      toast.error(errorMsg);
+    } finally {
+      setIsSubmittingReply(false);
+    }
   };
 
   const handleDeleteMessage = async () => {
