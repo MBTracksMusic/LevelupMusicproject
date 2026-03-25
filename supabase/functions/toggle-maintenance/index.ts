@@ -18,6 +18,13 @@ interface SuccessResponse {
 
 type Response = ErrorResponse | SuccessResponse;
 
+// ✅ CORS headers for all responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+};
+
 /**
  * TOGGLE-MAINTENANCE Edge Function (FIXED VERSION)
  *
@@ -46,11 +53,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, content-type',
-      },
+      headers: corsHeaders,
     });
   }
 
@@ -61,7 +64,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       message: 'Only POST is allowed',
     } as ErrorResponse), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 
@@ -76,7 +79,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Request body must be valid JSON',
       } as ErrorResponse), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -87,7 +90,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Body must contain { maintenance_mode: boolean }',
       } as ErrorResponse), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -99,7 +102,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Missing or invalid Authorization header',
       } as ErrorResponse), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -117,7 +120,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Server configuration error',
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -137,7 +140,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Invalid or expired JWT token',
       } as ErrorResponse), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -162,7 +165,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Failed to verify admin status',
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -173,7 +176,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'User profile does not exist',
       } as ErrorResponse), {
         status: 403,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -193,7 +196,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Only admins can toggle maintenance mode',
       } as ErrorResponse), {
         status: 403,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -211,7 +214,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Failed to query settings',
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -222,7 +225,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Settings singleton row not found. Database may not be initialized.',
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -246,7 +249,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         details: updateError.message,
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -257,7 +260,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         message: 'Settings update succeeded but result not found.',
       } as ErrorResponse), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -275,7 +278,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       updated_at: updated.updated_at,
     } as SuccessResponse), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   } catch (error) {
     console.error('[toggle-maintenance] Unexpected error:', error);
@@ -284,7 +287,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       message: error instanceof Error ? error.message : 'An unexpected error occurred',
     } as ErrorResponse), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 });
