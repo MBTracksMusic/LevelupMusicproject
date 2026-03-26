@@ -40,6 +40,15 @@ export function Header() {
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
 
   const cartItemCount = items.length;
+  const canAccessProducer =
+    profile?.is_producer_active === true ||
+    profile?.role === 'producer' ||
+    profile?.role === 'admin';
+
+  console.log('Header visibility:', {
+    role: profile?.role,
+    is_producer_active: profile?.is_producer_active,
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -251,15 +260,25 @@ export function Header() {
                           <Bell className="w-4 h-4" />
                           {t('user.notifications')}
                         </Link>
-                        {profile?.is_producer_active && (
-                          <Link
-                            to="/producer"
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
-                          >
-                            <Music className="w-4 h-4" />
-                            {t('producer.dashboard')}
-                          </Link>
+                        {canAccessProducer && (
+                          <>
+                            <Link
+                              to="/producer"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            >
+                              <Music className="w-4 h-4" />
+                              {t('producer.dashboard')}
+                            </Link>
+                            <Link
+                              to="/producer/stripe-connect"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                              Stripe Connect
+                            </Link>
+                          </>
                         )}
                         <Link
                           to="/leaderboard"
@@ -288,6 +307,14 @@ export function Header() {
                             >
                               <Shield className="w-4 h-4" />
                               {t('admin.layout.title')}
+                            </Link>
+                            <Link
+                              to="/admin/payouts"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            >
+                              <ShoppingBag className="w-4 h-4" />
+                              Admin Payouts
                             </Link>
                             <div className="my-1 border-t border-zinc-800" />
                           </>
