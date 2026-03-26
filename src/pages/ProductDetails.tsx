@@ -4,6 +4,7 @@ import { ArrowLeft, Coins, Pause, Play, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '../components/ui/Button';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../lib/audio/track';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { getLocalizedName } from '../lib/i18n/localized';
 import { fetchCatalogProductBySlug } from '../lib/supabase/catalog';
@@ -283,7 +284,14 @@ export function ProductDetailsPage() {
   }, [product]);
 
   const isCurrentTrack = currentTrack?.id === product?.id;
-  const hasPreview = Boolean(product?.preview_url?.trim());
+  const hasPreview = product
+    ? hasPlayableTrackSource({
+        preview_url: product.preview_url,
+        watermarked_path: product.watermarked_path,
+        exclusive_preview_url: product.exclusive_preview_url,
+        watermarked_bucket: product.watermarked_bucket,
+      })
+    : false;
   const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
   const isEarlyAccess = isEarlyAccessActive(product?.early_access_until);
   const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(product?.early_access_until, hasPremiumAccess);
@@ -311,13 +319,20 @@ export function ProductDetailsPage() {
   const handlePlay = () => {
     if (!product || !hasPreview) return;
 
-    playTrack({
+    const track = toTrack({
       id: product.id,
       title: product.title,
-      audioUrl: product.preview_url!.trim(),
+      audioUrl: product.preview_url,
       cover_image_url: product.cover_image_url,
       producerId: product.producer_id,
+      preview_url: product.preview_url,
+      watermarked_path: product.watermarked_path,
+      exclusive_preview_url: product.exclusive_preview_url,
+      watermarked_bucket: product.watermarked_bucket,
     });
+    if (track) {
+      playTrack(track);
+    }
   };
 
   const handleAddToCart = async () => {

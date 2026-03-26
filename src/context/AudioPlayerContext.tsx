@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { trackBeatComplete, trackBeatPause, trackBeatPlay } from '../lib/analytics';
+import { buildResolvedAudioSourceCandidates, type AudioSourceFields } from '../lib/audio/sources';
 import { isTrackableBeatId, trackInteraction } from '../lib/tracking';
 
-export type Track = {
+export type Track = AudioSourceFields & {
   id: string;
   title: string;
   audioUrl: string;
@@ -36,6 +37,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const currentTrackRef = useRef<Track | null>(null);
   const currentTimeRef = useRef(0);
   const durationRef = useRef(0);
+  const playbackRequestIdRef = useRef(0);
+  const sourceCandidatesRef = useRef<string[]>([]);
+  const sourceCandidateIndexRef = useRef(0);
+  const handledFailureKeyRef = useRef<string | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -82,6 +87,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     currentTrackRef.current = null;
     currentTimeRef.current = 0;
     durationRef.current = 0;
+    sourceCandidatesRef.current = [];
+    sourceCandidateIndexRef.current = 0;
+    handledFailureKeyRef.current = null;
     setQueue([]);
     setIsPlaying(false);
     setCurrentTrack(null);
@@ -145,6 +153,28 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         queueRef.current = [];
         setCurrentIndex(-1);
         currentIndexRef.current = -1;
+      };
+      audioRef.current.onerror = () => {
+        const activeTrack = currentTrackRef.current;
+        if (!activeTrack) {
+          setIsPlaying(false);
+          return;
+        }
+
+        const failureKey = `${playbackRequestIdRef.current}:${sourceCandidateIndexRef.current}`;
+        if (handledFailureKeyRef.current === failureKey) {
+          return;
+        }
+        handledFailureKeyRef.current = failureKey;
+
+        const nextIndex = sourceCandidateIndexRef.current + 1;
+        const nextCandidate = sourceCandidatesRef.current[nextIndex];
+        if (!nextCandidate) {
+          setIsPlaying(false);
+          return;
+        }
+
+        tryPlayResolvedSource(activeTrack, nextIndex, playbackRequestIdRef.current);
       };
     }
     return audioRef.current;
@@ -216,8 +246,65 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const shouldRetryTrackResolution = (audio: HTMLAudioElement) =>
+    !audio.currentSrc || audio.error !== null || (currentTimeRef.current === 0 && durationRef.current === 0);
+
+  const tryPlayResolvedSource = (track: Track, candidateIndex: number, requestId: number) => {
+    const audio = ensureAudio();
+    if (!audio) {
+      return;
+    }
+
+    const candidateUrl = sourceCandidatesRef.current[candidateIndex];
+    if (!candidateUrl) {
+      setIsPlaying(false);
+      return;
+    }
+
+    sourceCandidateIndexRef.current = candidateIndex;
+    handledFailureKeyRef.current = null;
+    clearFadeInterval();
+    audio.pause();
+    audio.volume = 1;
+    audio.src = candidateUrl;
+    audio.preload = 'auto';
+    audio.currentTime = 0;
+    void audio.play().then(() => {
+      if (requestId !== playbackRequestIdRef.current || candidateIndex !== sourceCandidateIndexRef.current) {
+        return;
+      }
+
+      setIsPlaying(true);
+      reportBeatPlay(track);
+    }).catch((error: unknown) => {
+      if (requestId !== playbackRequestIdRef.current || candidateIndex !== sourceCandidateIndexRef.current) {
+        return;
+      }
+
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setIsPlaying(false);
+        return;
+      }
+
+      const failureKey = `${requestId}:${candidateIndex}`;
+      if (handledFailureKeyRef.current === failureKey) {
+        return;
+      }
+      handledFailureKeyRef.current = failureKey;
+
+      const nextIndex = candidateIndex + 1;
+      if (!sourceCandidatesRef.current[nextIndex]) {
+        setIsPlaying(false);
+        return;
+      }
+
+      tryPlayResolvedSource(track, nextIndex, requestId);
+    });
+  };
+
   const playAudioTrack = (track: Track, index?: number) => {
-    if (!track.audioUrl) {
+    const resolvedCandidates = buildResolvedAudioSourceCandidates(track);
+    if (resolvedCandidates.length === 0) {
       return;
     }
 
@@ -230,12 +317,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       currentIndexRef.current = index;
       setCurrentIndex(index);
     }
-    clearFadeInterval();
-    audio.pause();
-    audio.volume = 1;
-    audio.src = track.audioUrl;
-    audio.preload = 'auto';
-    audio.currentTime = 0;
+    const requestId = playbackRequestIdRef.current + 1;
+    playbackRequestIdRef.current = requestId;
+    sourceCandidatesRef.current = resolvedCandidates;
+    sourceCandidateIndexRef.current = 0;
+    handledFailureKeyRef.current = null;
     currentTrackRef.current = track;
     currentTimeRef.current = 0;
     durationRef.current = 0;
@@ -243,12 +329,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     setDuration(0);
     setProgress(0);
     setCurrentTrack(track);
-    void audio.play().then(() => {
-      setIsPlaying(true);
-      reportBeatPlay(track);
-    }).catch(() => {
-      setIsPlaying(false);
-    });
+    tryPlayResolvedSource(track, 0, requestId);
   };
 
   const playTrack = (track: Track) => {
@@ -267,6 +348,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         fadeOutAndPause();
         setIsPlaying(false);
       } else {
+        if (shouldRetryTrackResolution(audio)) {
+          playAudioTrack(track, currentIndexRef.current >= 0 ? currentIndexRef.current : undefined);
+          return;
+        }
+
         clearFadeInterval();
         audio.volume = 1;
         void audio.play().then(() => {
@@ -324,6 +410,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       fadeOutAndPause();
       setIsPlaying(false);
     } else {
+      if (currentTrackRef.current && shouldRetryTrackResolution(audio)) {
+        playAudioTrack(
+          currentTrackRef.current,
+          currentIndexRef.current >= 0 ? currentIndexRef.current : undefined,
+        );
+        return;
+      }
+
       clearFadeInterval();
       audio.volume = 1;
       void audio.play().then(() => {

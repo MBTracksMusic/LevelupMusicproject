@@ -4,6 +4,7 @@ import { Play, Pause, Heart, ShoppingCart, Star, Lock } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { useAudioPlayer, type Track } from '../../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../../lib/audio/track';
 import type { ProductWithRelations } from '../../lib/supabase/types';
 import { trackAddToCart, trackBeatLike } from '../../lib/analytics';
 import { useCartStore } from '../../lib/stores/cart';
@@ -38,7 +39,12 @@ export function ProductCard({
   const { addToCart } = useCartStore();
   const [isHovered, setIsHovered] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
-  const hasPreview = Boolean(product.preview_url?.trim());
+  const hasPreview = hasPlayableTrackSource({
+    preview_url: product.preview_url,
+    watermarked_path: product.watermarked_path,
+    exclusive_preview_url: product.exclusive_preview_url,
+    watermarked_bucket: product.watermarked_bucket,
+  });
   const isEarlyAccess = isEarlyAccessActive(product.early_access_until);
   const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(product.early_access_until, hasPremiumAccess);
 
@@ -57,13 +63,20 @@ export function ProductCard({
       return;
     }
 
-    playTrack({
+    const track = toTrack({
       id: product.id,
       title: product.title,
-      audioUrl: product.preview_url!.trim(),
+      audioUrl: product.preview_url,
       cover_image_url: product.cover_image_url,
       producerId: product.producer_id,
+      preview_url: product.preview_url,
+      watermarked_path: product.watermarked_path,
+      exclusive_preview_url: product.exclusive_preview_url,
+      watermarked_bucket: product.watermarked_bucket,
     });
+    if (track) {
+      playTrack(track);
+    }
   };
 
   const handleAddToCart = async (e: React.MouseEvent) => {

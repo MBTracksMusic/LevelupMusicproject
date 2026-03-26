@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Instagram, Pause, Play, Twitter, Users, Youtube } from 'lucide-react';
 import { PublishedBeatsList } from '../components/producers/PublishedBeatsList';
-import { useAudioPlayer } from '../context/AudioPlayerContext';
+import { useAudioPlayer, type Track } from '../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../lib/audio/track';
 import { ReputationBadge, formatRankTier } from '../components/reputation/ReputationBadge';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
@@ -31,6 +32,10 @@ interface PublicProducerBeat {
   slug: string;
   cover_image_url: string | null;
   audio_url: string;
+  preview_url?: string | null;
+  watermarked_path?: string | null;
+  exclusive_preview_url?: string | null;
+  watermarked_bucket?: string | null;
   price: number;
   bpm: number | null;
   key_signature: string | null;
@@ -100,14 +105,29 @@ export function ProducerPublicProfilePage() {
   const topBeatQueue = useMemo(
     () =>
       topBeats
-        .filter((beat) => Boolean(beat.audio_url))
-        .map((beat) => ({
-          id: beat.id,
-          title: beat.title,
-          audioUrl: beat.audio_url,
-          cover_image_url: beat.cover_image_url,
-          producerId: producer?.user_id,
-        })),
+        .filter((beat) =>
+          hasPlayableTrackSource({
+            audioUrl: beat.audio_url,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .map((beat) =>
+          toTrack({
+            id: beat.id,
+            title: beat.title,
+            audioUrl: beat.audio_url,
+            cover_image_url: beat.cover_image_url,
+            producerId: producer?.user_id,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .filter((track): track is Track => track !== null),
     [producer?.user_id, topBeats],
   );
 
@@ -261,7 +281,7 @@ export function ProducerPublicProfilePage() {
           }),
           supabase
             .from('products')
-            .select('id, title, slug, cover_image_url, preview_url, price, bpm, key_signature, created_at')
+            .select('id, title, slug, cover_image_url, preview_url, watermarked_path, exclusive_preview_url, watermarked_bucket, price, bpm, key_signature, created_at')
             .eq('producer_id', producerRow.user_id)
             .eq('product_type', 'beat')
             .eq('is_published', true)
@@ -283,6 +303,8 @@ export function ProducerPublicProfilePage() {
           ...beat,
           audio_url: (beat as PublicProducerBeat & { preview_url?: string | null }).audio_url
             || (beat as PublicProducerBeat & { preview_url?: string | null }).preview_url
+            || beat.watermarked_path
+            || beat.exclusive_preview_url
             || '',
         }));
 
@@ -328,6 +350,10 @@ export function ProducerPublicProfilePage() {
                     bpm: fallbackBeat?.bpm ?? null,
                     key_signature: fallbackBeat?.key_signature ?? null,
                     audio_url: fallbackBeat?.audio_url ?? '',
+                    preview_url: fallbackBeat?.preview_url ?? null,
+                    watermarked_path: fallbackBeat?.watermarked_path ?? null,
+                    exclusive_preview_url: fallbackBeat?.exclusive_preview_url ?? null,
+                    watermarked_bucket: fallbackBeat?.watermarked_bucket ?? null,
                     created_at: row.created_at,
                     producer_rank: row.producer_rank,
                     top_10_flag: row.top_10_flag,

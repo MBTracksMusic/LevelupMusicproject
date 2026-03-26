@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Headphones, Pause, Play, ShoppingCart } from 'lucide-react';
+import { ArrowRight, Headphones, ShoppingCart } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAudioPlayer, type Track } from '../../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../../lib/audio/track';
 import { useAuth } from '../../lib/auth/hooks';
 import { useTranslation } from '../../lib/i18n';
 import { isEarlyAccessActive, isEarlyAccessLocked } from '../../lib/products/earlyAccess';
@@ -22,6 +23,9 @@ interface HomeBeatRow {
   play_count: number;
   cover_image_url: string | null;
   preview_url: string | null;
+  watermarked_path: string | null;
+  exclusive_preview_url: string | null;
+  watermarked_bucket: string | null;
   early_access_until: string | null;
   is_sold: boolean;
   producer_id: string;
@@ -39,6 +43,9 @@ interface HomeFeaturedBeatRpcRow {
   play_count: number | null;
   cover_image_url: string | null;
   preview_url: string | null;
+  watermarked_path?: string | null;
+  exclusive_preview_url?: string | null;
+  watermarked_bucket?: string | null;
   early_access_until: string | null;
   is_sold: boolean | null;
   producer_id: string;
@@ -78,6 +85,9 @@ export function HomeFeaturedBeats() {
           play_count: typeof row.play_count === 'number' ? row.play_count : 0,
           cover_image_url: row.cover_image_url,
           preview_url: row.preview_url,
+          watermarked_path: row.watermarked_path ?? null,
+          exclusive_preview_url: row.exclusive_preview_url ?? null,
+          watermarked_bucket: row.watermarked_bucket ?? null,
           early_access_until: row.early_access_until,
           is_sold: row.is_sold === true,
           producer_id: row.producer_id,
@@ -94,7 +104,7 @@ export function HomeFeaturedBeats() {
         if (missingPreviewIds.length > 0) {
           const { data: previewRows, error: previewError } = await supabase
             .from('products')
-            .select('id, preview_url')
+            .select('id, preview_url, watermarked_path, exclusive_preview_url, watermarked_bucket')
             .in('id', missingPreviewIds)
             .eq('is_published', true);
 
@@ -102,15 +112,28 @@ export function HomeFeaturedBeats() {
             console.error('Error hydrating featured beat previews:', previewError);
           } else {
             const previewById = new Map(
-              ((previewRows ?? []) as Array<{ id: string; preview_url: string | null }>).map((row) => [
+              ((
+                previewRows ?? []
+              ) as Array<{
+                id: string;
+                preview_url: string | null;
+                watermarked_path: string | null;
+                exclusive_preview_url: string | null;
+                watermarked_bucket: string | null;
+              }>).map((row) => [
                 row.id,
-                normalizePreviewUrl(row.preview_url),
+                row,
               ]),
             );
 
             featuredBeats = featuredBeats.map((beat) => ({
               ...beat,
-              preview_url: normalizePreviewUrl(beat.preview_url) ?? previewById.get(beat.id) ?? null,
+              preview_url:
+                normalizePreviewUrl(beat.preview_url) ?? normalizePreviewUrl(previewById.get(beat.id)?.preview_url) ?? null,
+              watermarked_path: beat.watermarked_path ?? previewById.get(beat.id)?.watermarked_path ?? null,
+              exclusive_preview_url:
+                beat.exclusive_preview_url ?? previewById.get(beat.id)?.exclusive_preview_url ?? null,
+              watermarked_bucket: beat.watermarked_bucket ?? previewById.get(beat.id)?.watermarked_bucket ?? null,
             }));
           }
         }
@@ -135,20 +158,44 @@ export function HomeFeaturedBeats() {
   const playbackQueue = useMemo<Track[]>(
     () =>
       beats
-        .filter((beat) => Boolean(normalizePreviewUrl(beat.preview_url)))
-        .map((beat) => ({
-          id: beat.id,
-          title: beat.title,
-          audioUrl: normalizePreviewUrl(beat.preview_url)!,
-          cover_image_url: beat.cover_image_url,
-          producerId: beat.producer_id,
-        })),
+        .filter((beat) =>
+          hasPlayableTrackSource({
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .map((beat) =>
+          toTrack({
+            id: beat.id,
+            title: beat.title,
+            audioUrl: beat.preview_url,
+            cover_image_url: beat.cover_image_url,
+            producerId: beat.producer_id,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .filter((track): track is Track => track !== null),
     [beats],
   );
 
   const handlePlay = (beat: HomeBeatRow) => {
-    const previewUrl = normalizePreviewUrl(beat.preview_url);
-    if (!previewUrl) {
+    const track = toTrack({
+      id: beat.id,
+      title: beat.title,
+      audioUrl: beat.preview_url,
+      cover_image_url: beat.cover_image_url,
+      producerId: beat.producer_id,
+      preview_url: beat.preview_url,
+      watermarked_path: beat.watermarked_path,
+      exclusive_preview_url: beat.exclusive_preview_url,
+      watermarked_bucket: beat.watermarked_bucket,
+    });
+    if (!track) {
       return;
     }
 
@@ -161,13 +208,7 @@ export function HomeFeaturedBeats() {
       return;
     }
 
-    playTrack({
-      id: beat.id,
-      title: beat.title,
-      audioUrl: previewUrl,
-      cover_image_url: beat.cover_image_url,
-      producerId: beat.producer_id,
-    });
+    playTrack(track);
   };
 
   const handleAddToCart = async (beat: HomeBeatRow) => {
@@ -240,7 +281,12 @@ export function HomeFeaturedBeats() {
         ) : (
           <div className="flex flex-col gap-2">
             {beats.map((beat) => {
-              const hasPreview = Boolean(normalizePreviewUrl(beat.preview_url));
+              const hasPreview = hasPlayableTrackSource({
+                preview_url: beat.preview_url,
+                watermarked_path: beat.watermarked_path,
+                exclusive_preview_url: beat.exclusive_preview_url,
+                watermarked_bucket: beat.watermarked_bucket,
+              });
               const isCurrentTrack = currentTrack?.id === beat.id;
               const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
               const isEarlyAccess = isEarlyAccessActive(beat.early_access_until);

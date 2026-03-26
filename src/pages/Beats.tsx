@@ -5,6 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { ProductCard } from '../components/products/ProductCard';
 import type { Track } from '../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../lib/audio/track';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
@@ -120,14 +121,28 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   const playbackQueue = useMemo<Track[]>(
     () =>
       beats
-        .filter((beat) => Boolean(beat.preview_url?.trim()))
-        .map((beat) => ({
-          id: beat.id,
-          title: beat.title,
-          audioUrl: beat.preview_url!.trim(),
-          cover_image_url: beat.cover_image_url,
-          producerId: beat.producer_id,
-        })),
+        .filter((beat) =>
+          hasPlayableTrackSource({
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .map((beat) =>
+          toTrack({
+            id: beat.id,
+            title: beat.title,
+            audioUrl: beat.preview_url,
+            cover_image_url: beat.cover_image_url,
+            producerId: beat.producer_id,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .filter((track): track is Track => track !== null),
     [beats],
   );
 

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Music2 } from 'lucide-react';
 import { useAudioPlayer, type Track } from '../../context/AudioPlayerContext';
+import { hasPlayableTrackSource, toTrack } from '../../lib/audio/track';
 import { formatPrice } from '../../lib/utils/format';
 
 export type PublishedBeatListItem = {
@@ -13,6 +14,10 @@ export type PublishedBeatListItem = {
   price: number;
   cover_image_url: string | null;
   audio_url: string;
+  preview_url?: string | null;
+  watermarked_path?: string | null;
+  exclusive_preview_url?: string | null;
+  watermarked_bucket?: string | null;
 };
 
 export function PublishedBeatsList({ beats }: { beats: PublishedBeatListItem[] }) {
@@ -20,13 +25,28 @@ export function PublishedBeatsList({ beats }: { beats: PublishedBeatListItem[] }
   const queue = useMemo<Track[]>(
     () =>
       beats
-        .filter((beat) => Boolean(beat.audio_url))
-        .map((beat) => ({
-          id: beat.id,
-          title: beat.title,
-          audioUrl: beat.audio_url,
-          cover_image_url: beat.cover_image_url,
-        })),
+        .filter((beat) =>
+          hasPlayableTrackSource({
+            audioUrl: beat.audio_url,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .map((beat) =>
+          toTrack({
+            id: beat.id,
+            title: beat.title,
+            audioUrl: beat.audio_url,
+            cover_image_url: beat.cover_image_url,
+            preview_url: beat.preview_url,
+            watermarked_path: beat.watermarked_path,
+            exclusive_preview_url: beat.exclusive_preview_url,
+            watermarked_bucket: beat.watermarked_bucket,
+          }),
+        )
+        .filter((track): track is Track => track !== null),
     [beats],
   );
 
@@ -70,7 +90,13 @@ export function PublishedBeatsList({ beats }: { beats: PublishedBeatListItem[] }
                     if (startIndex === -1) return;
                     playQueue(queue, startIndex);
                   }}
-                  disabled={!beat.audio_url}
+                  disabled={!hasPlayableTrackSource({
+                    audioUrl: beat.audio_url,
+                    preview_url: beat.preview_url,
+                    watermarked_path: beat.watermarked_path,
+                    exclusive_preview_url: beat.exclusive_preview_url,
+                    watermarked_bucket: beat.watermarked_bucket,
+                  })}
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 text-zinc-400 transition hover:border-zinc-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {currentTrack?.id === beat.id && isPlaying ? '⏸' : '▶'}
