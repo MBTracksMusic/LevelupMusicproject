@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { useAudioPlayer } from '../../context/AudioPlayerContext';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
+import { invokeWithAuth } from '@/lib/supabase/invokeWithAuth';
 import type { Json } from '../../lib/supabase/database.types';
 import { formatDateTime } from '../../lib/utils/format';
 
