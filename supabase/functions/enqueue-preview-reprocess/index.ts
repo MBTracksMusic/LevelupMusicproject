@@ -95,9 +95,10 @@ serveWithErrorHandling("enqueue-preview-reprocess", async (req: Request): Promis
     }
 
     const { supabaseAdmin, user } = authContext;
+    const adminClient = supabaseAdmin as any;
     const userId = user.id;
 
-    const { data: rateLimitAllowed, error: rateLimitError } = await supabaseAdmin.rpc(
+    const { data: rateLimitAllowed, error: rateLimitError } = await adminClient.rpc(
       "check_rpc_rate_limit",
       {
         p_user_id: userId,
@@ -120,9 +121,47 @@ serveWithErrorHandling("enqueue-preview-reprocess", async (req: Request): Promis
       });
     }
 
+    const { data: activeSettingsData, error: settingsError } = await adminClient
+      .from("site_audio_settings")
+      .select("id, watermark_audio_path")
+      .eq("enabled", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const activeSettings = (activeSettingsData ?? null) as {
+      id: string;
+      watermark_audio_path: string | null;
+    } | null;
+
+    if (settingsError) {
+      console.error("[enqueue-preview-reprocess] failed to load active site audio settings", {
+        userId,
+        settingsError,
+      });
+      return new Response(JSON.stringify({ error: "Failed to validate site audio settings" }), {
+        status: 500,
+        headers: jsonHeaders,
+      });
+    }
+
+    const watermarkAudioPath = typeof activeSettings?.watermark_audio_path === "string"
+      ? activeSettings.watermark_audio_path.trim()
+      : "";
+
+    if (!activeSettings?.id || watermarkAudioPath.length === 0) {
+      return new Response(JSON.stringify({
+        error: "Active watermark settings are required before preview reprocessing can be enqueued",
+        code: "active_watermark_required",
+      }), {
+        status: 409,
+        headers: jsonHeaders,
+      });
+    }
+
     console.log("[enqueue-preview-reprocess] enqueue requested", { userId });
 
-    const { data, error } = await supabaseAdmin.rpc("enqueue_reprocess_all_previews");
+    const { data, error } = await adminClient.rpc("enqueue_reprocess_all_previews");
     if (error) {
       console.error("[enqueue-preview-reprocess] rpc failed", {
         message: error.message,
@@ -137,21 +176,6 @@ serveWithErrorHandling("enqueue-preview-reprocess", async (req: Request): Promis
         status: 500,
         headers: jsonHeaders,
       });
-    }
-
-    const audioWorkerSecret = Deno.env.get("AUDIO_WORKER_SECRET")?.trim();
-    if (audioWorkerSecret) {
-      const { error: workerError } = await supabaseAdmin.functions.invoke("process-audio-jobs", {
-        headers: {
-          "x-audio-worker-secret": audioWorkerSecret,
-        },
-        body: {},
-      });
-      if (workerError) {
-        console.error("[enqueue-preview-reprocess] worker invoke failed", workerError);
-      }
-    } else {
-      console.warn("[enqueue-preview-reprocess] AUDIO_WORKER_SECRET not configured, jobs will not be processed immediately");
     }
 
     const payload = (data ?? {}) as { enqueued_count?: number; skipped_count?: number };
