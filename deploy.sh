@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🚀 Déploiement intelligent en cours..."
+echo "🚀 Déploiement intelligent + audit..."
 
 # =========================
 # 0. CHECK CHANGEMENTS
@@ -13,7 +13,7 @@ if [[ -z $(git status -s) ]]; then
 fi
 
 # =========================
-# 1. CHECK SECRETS (important)
+# 1. CHECK SECRETS
 # =========================
 if [ -f "./check-secrets.sh" ]; then
   echo "🔐 Scan sécurité..."
@@ -21,7 +21,41 @@ if [ -f "./check-secrets.sh" ]; then
 fi
 
 # =========================
-# 2. COMMIT PROPRE
+# 2. AUDIT CODE (NEW)
+# =========================
+echo "🔍 Audit du code..."
+
+if [ -f "./audit.sh" ]; then
+  ./audit.sh || {
+    echo "❌ Audit échoué. Corrige avant déploiement."
+    exit 1
+  }
+else
+  echo "⚠️ Aucun audit.sh trouvé (skip)"
+fi
+
+# =========================
+# 3. AUTO FIX (NEW)
+# =========================
+echo "🛠 Tentative auto-fix..."
+
+if [ -f "./fix.sh" ]; then
+  ./fix.sh || echo "⚠️ Fix partiel ou ignoré"
+else
+  echo "⚠️ Aucun fix.sh trouvé (skip)"
+fi
+
+# =========================
+# 4. BUILD CHECK
+# =========================
+echo "🧪 Vérification build..."
+
+npm run build
+
+echo "✅ Build OK"
+
+# =========================
+# 5. COMMIT PROPRE
 # =========================
 echo "📦 Commit & Push Git..."
 
@@ -31,22 +65,12 @@ if [ -z "$commit_message" ]; then
   commit_message="auto: deploy update"
 fi
 
-git add -u
-git add .
-git commit -m "$commit_message"
+git add -A
+git commit -m "$commit_message" || echo "⚠️ Rien à commit"
 git push origin main
 
 # =========================
-# 3. BUILD CHECK
-# =========================
-echo "🧪 Vérification build..."
-
-npm run build
-
-echo "✅ Build OK"
-
-# =========================
-# 4. SUPABASE DB
+# 6. SUPABASE DB
 # =========================
 echo "🧠 Vérification migrations..."
 
@@ -58,7 +82,7 @@ else
 fi
 
 # =========================
-# 5. EDGE FUNCTIONS
+# 7. EDGE FUNCTIONS
 # =========================
 echo "⚡ Vérification functions..."
 
@@ -70,7 +94,7 @@ else
 fi
 
 # =========================
-# 6. VERCEL
+# 8. VERCEL
 # =========================
 echo "🌐 Déploiement frontend..."
 vercel --prod

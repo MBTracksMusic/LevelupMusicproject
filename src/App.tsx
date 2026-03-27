@@ -97,6 +97,7 @@ const AdminMessageDetailPage = lazyNamed(
 );
 const AdminReputationPage = lazyNamed(() => import('./pages/admin/AdminReputation'), 'AdminReputationPage');
 const AdminPayouts = lazyNamed(() => import('./pages/admin/AdminPayouts'), 'AdminPayouts');
+const AdminRevenuePage = lazyNamed(() => import('./pages/admin/AdminRevenue'), 'AdminRevenuePage');
 
 function RouteFallback() {
   return (
@@ -275,6 +276,7 @@ function AppContent() {
             <Route path="forum/categories" element={<AdminForumCategoriesPage />} />
             <Route path="beat-analytics" element={<AdminBeatAnalyticsPage />} />
             <Route path="reputation" element={<AdminReputationPage />} />
+            <Route path="revenue" element={<AdminRevenuePage />} />
             <Route path="payouts" element={<AdminPayouts />} />
             <Route path="settings" element={<AdminSettingsPage />} />
           </Route>

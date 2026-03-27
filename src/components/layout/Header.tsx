@@ -16,6 +16,7 @@ import {
   Music,
   Globe,
   Trophy,
+  Euro,
   Sparkles,
   Bell,
 } from 'lucide-react';
@@ -323,6 +324,14 @@ export function Header() {
                             >
                               <Shield className="w-4 h-4" />
                               {t('admin.layout.title')}
+                            </Link>
+                            <Link
+                              to="/admin/revenue"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                            >
+                              <Euro className="w-4 h-4" />
+                              {t('admin.sidebar.revenue')}
                             </Link>
                             <Link
                               to="/admin/payouts"
