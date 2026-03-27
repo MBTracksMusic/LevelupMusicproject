@@ -577,7 +577,7 @@ export function PricingPage() {
         </div>
 
         <div className="grid items-stretch gap-6 md:grid-cols-3">
-          <Card className="flex h-full flex-col justify-between border border-emerald-700/60 bg-zinc-900 p-6">
+          <Card className="flex h-full flex-col justify-between border border-emerald-700/60 bg-zinc-900 p-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:shadow-black/20">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.userPlanTitle')}</h3>
@@ -626,7 +626,7 @@ export function PricingPage() {
             </div>
           </Card>
 
-          <Card className="flex h-full flex-col justify-between border border-sky-500/60 bg-zinc-900 p-6 shadow-md shadow-sky-900/20 transition duration-200 hover:scale-[1.02]">
+          <Card className="flex h-full flex-col justify-between border border-sky-500/60 bg-zinc-900 p-6 shadow-md shadow-sky-900/20 transition-all duration-300 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-xl hover:shadow-sky-950/30">
             <div className="mb-3 flex justify-center">
               <span className="rounded-full bg-gradient-to-r from-pink-500 to-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-md">
                 {t('pricing.userPremiumPopular')}
@@ -705,7 +705,7 @@ export function PricingPage() {
             </div>
           </Card>
 
-          <Card className="flex h-full flex-col justify-between border border-rose-500 bg-zinc-900 p-6">
+          <Card className="flex h-full flex-col justify-between border border-rose-500 bg-zinc-900 p-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:shadow-black/20">
             <div className="flex items-start justify-between gap-3 mb-6">
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{t('pricing.proPlanTitle')}</h3>
