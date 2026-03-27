@@ -14,6 +14,8 @@ interface FallbackPayout {
   urgency_level: string;
 }
 
+const adminDb = supabase as any;
+
 export function AdminPayouts() {
   const { profile } = useAuth();
   const [payouts, setPayouts] = useState<FallbackPayout[]>([]);
@@ -46,37 +48,11 @@ export function AdminPayouts() {
     try {
       setIsProcessing(purchaseId);
 
-      // Fetch current purchase metadata
-      const { data: purchase, error: fetchError } = await supabase
-        .from('purchases')
-        .select('metadata')
-        .eq('id', purchaseId)
-        .single();
+      const { error } = await adminDb.rpc('mark_fallback_payout_processed', {
+        p_purchase_id: purchaseId,
+      });
 
-      if (fetchError) throw fetchError;
-
-      // Safety check: verify it's a fallback payout that's still pending
-      if (purchase.metadata?.payout_mode !== 'platform_fallback') {
-        throw new Error('Not a fallback payout');
-      }
-      if (purchase.metadata?.payout_processed_at) {
-        throw new Error('Already processed');
-      }
-
-      // Modify metadata (client-side)
-      const updatedMetadata = {
-        ...purchase.metadata,
-        payout_status: 'processed',
-        payout_processed_at: new Date().toISOString(),
-      };
-
-      // Update in database
-      const { error: updateError } = await supabase
-        .from('purchases')
-        .update({ metadata: updatedMetadata })
-        .eq('id', purchaseId);
-
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       // Remove from list
       const paidPayout = payouts.find((p) => p.purchase_id === purchaseId);
@@ -84,7 +60,8 @@ export function AdminPayouts() {
       toast.success(`Payout marked as paid for ${paidPayout?.username}`);
     } catch (err) {
       console.error('Failed to mark payout as paid:', err);
-      const message = err instanceof Error ? err.message : 'Failed to mark payout as paid';
+      const rawMessage = err instanceof Error ? err.message : 'Failed to mark payout as paid';
+      const message = rawMessage.includes('already_processed') ? 'Already processed' : rawMessage;
       toast.error(message);
     } finally {
       setIsProcessing(null);

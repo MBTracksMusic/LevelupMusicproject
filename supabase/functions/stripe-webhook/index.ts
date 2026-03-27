@@ -330,32 +330,29 @@ const toIsoFromUnixSeconds = (value: number | null | undefined): string | null =
   return new Date(value * 1000).toISOString();
 };
 
-const resolveInvoiceBillingPeriod = (invoice: Stripe.Invoice) => {
-  const linePeriods = (invoice.lines?.data || [])
-    .map((line) => line.period)
-    .filter((period): period is { start: number; end: number } =>
-      Boolean(period)
-      && typeof period.start === "number"
-      && Number.isFinite(period.start)
-      && period.start > 0
-      && typeof period.end === "number"
-      && Number.isFinite(period.end)
-      && period.end > period.start
-    );
+const resolveStripeSubscriptionBillingPeriod = (
+  subscription: Stripe.Subscription | null | undefined,
+) => {
+  const periodStart = toIsoFromUnixSeconds(subscription?.current_period_start ?? null);
+  const periodEnd = toIsoFromUnixSeconds(resolveSubscriptionCurrentPeriodEnd(subscription));
 
-  if (linePeriods.length === 0) {
+  if (!periodStart || !periodEnd) {
     return {
       periodStart: null,
       periodEnd: null,
     };
   }
 
-  const start = Math.min(...linePeriods.map((period) => period.start));
-  const end = Math.max(...linePeriods.map((period) => period.end));
+  if (Date.parse(periodEnd) <= Date.parse(periodStart)) {
+    return {
+      periodStart: null,
+      periodEnd: null,
+    };
+  }
 
   return {
-    periodStart: toIsoFromUnixSeconds(start),
-    periodEnd: toIsoFromUnixSeconds(end),
+    periodStart,
+    periodEnd,
   };
 };
 
@@ -1945,6 +1942,7 @@ async function handlePaymentSucceeded(
       subscriptionId,
       invoiceId: asNonEmptyString(invoice.id),
       invoice,
+      stripeSubscription,
     });
   }
 
@@ -2013,28 +2011,50 @@ async function allocateMonthlyCredits(
     subscriptionId: string;
     invoiceId: string | null;
     invoice: Stripe.Invoice;
+    stripeSubscription: Stripe.Subscription;
   },
 ) {
-  const { customerId, subscriptionId, invoiceId, invoice } = params;
+  const { customerId, subscriptionId, invoiceId, invoice, stripeSubscription } = params;
 
   if (!invoiceId) {
-    console.warn("[allocateMonthlyCredits] Missing invoice id", {
+    throw new Error(`allocateMonthlyCredits_missing_invoice_id:${subscriptionId}:${customerId}`);
+  }
+
+  const amountPaid = typeof invoice.amount_paid === "number" && Number.isFinite(invoice.amount_paid)
+    ? invoice.amount_paid
+    : null;
+
+  if (amountPaid !== null && amountPaid <= 0) {
+    console.log("[allocateMonthlyCredits] Skipping non-positive paid invoice", {
+      invoiceId,
       customerId,
       subscriptionId,
+      amountPaid,
     });
     return;
   }
 
-  const { periodStart, periodEnd } = resolveInvoiceBillingPeriod(invoice);
+  let { periodStart, periodEnd } = resolveStripeSubscriptionBillingPeriod(stripeSubscription);
+  let periodSource = "stripe_subscription";
 
   if (!periodStart || !periodEnd) {
-    console.warn("[allocateMonthlyCredits] Missing invoice billing period", {
-      invoiceId,
-      customerId,
-      subscriptionId,
-      invoiceLineCount: invoice.lines?.data?.length ?? 0,
-    });
-    return;
+    const { data: persistedSubscription, error: persistedSubscriptionError } = await supabase
+      .from("user_subscriptions")
+      .select("current_period_start, current_period_end")
+      .eq("stripe_subscription_id", subscriptionId)
+      .maybeSingle();
+
+    if (persistedSubscriptionError) {
+      throw new Error(`allocateMonthlyCredits_load_subscription_period_failed:${persistedSubscriptionError.message}`);
+    }
+
+    periodStart = asNonEmptyString(persistedSubscription?.current_period_start);
+    periodEnd = asNonEmptyString(persistedSubscription?.current_period_end);
+    periodSource = "user_subscriptions";
+  }
+
+  if (!periodStart || !periodEnd) {
+    throw new Error(`allocateMonthlyCredits_missing_subscription_period:${invoiceId}`);
   }
 
   const { data, error } = await supabase.rpc("allocate_monthly_user_credits_for_invoice", {
@@ -2044,9 +2064,11 @@ async function allocateMonthlyCredits(
     p_billing_period_end: periodEnd,
     p_metadata: {
       source: "stripe_webhook",
-      stripe_event_source: "invoice_payment_succeeded",
+      stripe_event_source: "invoice_payment",
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
+      invoice_amount_paid: amountPaid,
+      period_source: periodSource,
     },
   });
 
@@ -2086,6 +2108,9 @@ async function allocateMonthlyCredits(
     allocated_credits?: number;
     previous_balance?: number;
     new_balance?: number;
+    existing_status?: string;
+    requested_stripe_invoice_id?: string;
+    stripe_invoice_id?: string;
   };
 
   // RULE 3: Log all RPC outcomes for forensics
@@ -2117,9 +2142,19 @@ async function allocateMonthlyCredits(
     return;
   }
 
-  if (payload.status === "duplicate") {
+  if (payload.status === "duplicate" || payload.status === "duplicate_invoice") {
     console.log("[allocateMonthlyCredits] ⏭️  SKIPPED (duplicate invoice)", {
       invoiceId,
+    });
+    return;
+  }
+
+  if (payload.status === "duplicate_period") {
+    console.log("[allocateMonthlyCredits] ⏭️  SKIPPED (duplicate billing period)", {
+      invoiceId,
+      existingInvoiceId: payload.stripe_invoice_id ?? null,
+      existingStatus: payload.existing_status ?? null,
+      subscriptionId,
     });
     return;
   }
