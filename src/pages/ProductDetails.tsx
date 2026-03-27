@@ -24,7 +24,6 @@ import {
   trackPurchase,
   trackViewItem,
 } from '../lib/analytics';
-import { getExperimentVariant } from '../lib/experiments';
 import { trackInteraction } from '../lib/tracking';
 
 interface CreditPurchaseResult {
@@ -80,11 +79,6 @@ export function ProductDetailsPage() {
     useCreditBalance(user?.id);
 
   const routePrefix = useMemo(() => location.pathname.split('/')[1] || 'beats', [location.pathname]);
-  const ctaVariant = useMemo(
-    () => getExperimentVariant(user?.id ?? 'guest', 'product-buy-cta'),
-    [user?.id],
-  );
-
   useEffect(() => {
     let isCancelled = false;
 
@@ -301,7 +295,11 @@ export function ProductDetailsPage() {
   const isPlayingCurrent = hasPreview && isCurrentTrack && isPlaying;
   const isEarlyAccess = isEarlyAccessActive(product?.early_access_until);
   const isEarlyAccessPurchaseLocked = isEarlyAccessLocked(product?.early_access_until, hasPremiumAccess);
-  const isProductAvailable = !product?.is_sold;
+  const isProductAvailable =
+    !!product &&
+    !product.is_sold &&
+    product.is_published &&
+    product.status === 'active';
   const isCreditEligible = product?.product_type === 'beat' && !product?.is_exclusive && !product?.is_sold;
   const hasEnoughCredits = typeof creditBalance === 'number' && creditBalance >= requiredCredits;
   const isCreditPurchaseDisabled =
@@ -610,19 +608,17 @@ export function ProductDetailsPage() {
                 </Button>
               )}
 
-              {!product.is_sold && (
-                <Button
-                  onClick={handleAddToCart}
-                  disabled={!isProductAvailable}
-                  isLoading={isAddingToCart}
-                  leftIcon={<ShoppingCart className="w-4 h-4" />}
-                  variant={isAuthenticated ? (ctaVariant === 'A' ? 'primary' : 'secondary') : 'outline'}
-                >
-                  {isAuthenticated
-                    ? t('products.addToCart')
-                    : t('auth.loginButton')}
-                </Button>
-              )}
+              <Button
+                onClick={handleAddToCart}
+                disabled={!isProductAvailable}
+                isLoading={isAddingToCart}
+                leftIcon={<ShoppingCart className="w-4 h-4" />}
+                variant="primary"
+              >
+                {isAuthenticated
+                  ? t('products.addToCart')
+                  : t('auth.loginButton')}
+              </Button>
             </div>
 
             {isCreditEligible && (
