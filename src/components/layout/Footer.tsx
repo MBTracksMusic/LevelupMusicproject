@@ -8,23 +8,37 @@ import beatelionIcon from '../../assets/beatelion-icon.svg';
 const SOCIAL_SETTINGS_KEY = 'social_links';
 
 interface SocialLinks {
-  twitter: string;
-  instagram: string;
-  youtube: string;
+  twitter: string | null;
+  instagram: string | null;
+  youtube: string | null;
 }
 
 const EMPTY_SOCIAL_LINKS: SocialLinks = {
-  twitter: '',
-  instagram: '',
-  youtube: '',
+  twitter: null,
+  instagram: null,
+  youtube: null,
 };
 
-const HTTP_URL_REGEX = /^https?:\/\//i;
+const sanitizeUrl = (value?: unknown): string | null => {
+  if (typeof value !== 'string') return null;
 
-const sanitizeUrl = (value: unknown) => {
-  if (typeof value !== 'string') return '';
   const trimmed = value.trim();
-  return HTTP_URL_REGEX.test(trimmed) ? trimmed : '';
+
+  if (!trimmed) return null;
+
+  const fixed = trimmed.replace('https:,//', 'https://');
+
+  try {
+    const parsed = new URL(fixed);
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return null;
+    }
+
+    return parsed.href;
+  } catch {
+    return null;
+  }
 };
 
 export function Footer() {
