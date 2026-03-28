@@ -138,7 +138,7 @@ export function ResetPasswordPage() {
 
     const timeoutId = setTimeout(() => {
       settleValidationError(t('auth.resetPasswordLinkValidationFailed'));
-    }, 12_000);
+    }, 15_000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
@@ -155,8 +155,20 @@ export function ResetPasswordPage() {
       }
     });
 
+    const getExistingSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return session;
+    };
+
     const bootstrapRecoverySession = async () => {
       try {
+        const existingSession = await getExistingSession();
+        if (existingSession) {
+          settleReady();
+          return;
+        }
+
         if (initialRecoveryContext.code) {
           const { error } = await supabase.auth.exchangeCodeForSession(initialRecoveryContext.code);
           if (error) throw error;
@@ -167,22 +179,20 @@ export function ResetPasswordPage() {
           });
           if (error) throw error;
         } else if (initialRecoveryContext.accessToken && initialRecoveryContext.refreshToken) {
-          const { data: { session: existingSession } } = await supabase.auth.getSession();
-          const hasSameSession =
-            existingSession?.access_token === initialRecoveryContext.accessToken &&
-            existingSession?.refresh_token === initialRecoveryContext.refreshToken;
-
-          if (!hasSameSession) {
-            const { error } = await supabase.auth.setSession({
-              access_token: initialRecoveryContext.accessToken,
-              refresh_token: initialRecoveryContext.refreshToken,
-            });
-            if (error) throw error;
+          const fallbackSession = await getExistingSession();
+          if (fallbackSession) {
+            settleReady();
+            return;
           }
+
+          const { error } = await supabase.auth.setSession({
+            access_token: initialRecoveryContext.accessToken,
+            refresh_token: initialRecoveryContext.refreshToken,
+          });
+          if (error) throw error;
         }
 
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        const session = await getExistingSession();
 
         if (session) {
           settleReady();
