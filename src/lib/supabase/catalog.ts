@@ -1,7 +1,9 @@
 import { supabase } from './client';
 import type { Database, Json } from './database.types';
 import { attachProductLicenses } from '../pricing';
+import { isEarlyAccessActive } from '../products/earlyAccess';
 import { fetchPublicProducerProfilesMap } from './publicProfiles';
+import { GENRE_SAFE_COLUMNS, MOOD_SAFE_COLUMNS, PRODUCT_SAFE_COLUMNS } from './selects';
 import type { ProductWithRelations } from './types';
 
 export type CatalogMode = 'beats' | 'exclusives' | 'kits';
@@ -219,18 +221,133 @@ const applyProducerVisibility = async (
   }
 };
 
+const hasAuthenticatedCatalogSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('catalog auth session lookup failed, defaulting to public view', error);
+      return false;
+    }
+
+    return Boolean(session);
+  } catch (error) {
+    console.warn('catalog auth session lookup crashed, defaulting to public view', error);
+    return false;
+  }
+};
+
 const fetchLegacyCatalogProducts = async (
-  params: FetchCatalogProductsParams
+  {
+    mode,
+    filters,
+    limit,
+    restrictToActiveProducers,
+    hasPremiumAccess,
+  }: FetchCatalogProductsParams
 ): Promise<ProductWithRelations[]> => {
-  void params;
-  return [];
+  let query = supabase
+    .from('products')
+    .select(`
+      ${PRODUCT_SAFE_COLUMNS},
+      genre:genres(${GENRE_SAFE_COLUMNS}),
+      mood:moods(${MOOD_SAFE_COLUMNS})
+    `)
+    .eq('is_published', true);
+
+  if (mode === 'exclusives') {
+    query = query.eq('product_type', 'exclusive').eq('is_sold', false);
+  } else if (mode === 'kits') {
+    query = query.eq('product_type', 'kit');
+  } else {
+    query = query.eq('product_type', 'beat');
+  }
+
+  if (filters.genre) {
+    query = query.eq('genre_id', filters.genre);
+  }
+  if (filters.mood) {
+    query = query.eq('mood_id', filters.mood);
+  }
+  if (filters.bpmMin) {
+    query = query.gte('bpm', Number.parseInt(filters.bpmMin, 10));
+  }
+  if (filters.bpmMax) {
+    query = query.lte('bpm', Number.parseInt(filters.bpmMax, 10));
+  }
+  if (filters.priceMin) {
+    query = query.gte('price', Number.parseInt(filters.priceMin, 10) * 100);
+  }
+  if (filters.priceMax) {
+    query = query.lte('price', Number.parseInt(filters.priceMax, 10) * 100);
+  }
+  if (filters.search) {
+    const escaped = filters.search.replace(/,/g, '');
+    query = query.or(`title.ilike.%${escaped}%,tags.cs.{${escaped}}`);
+  }
+
+  switch (filters.sort) {
+    case 'popular':
+      query = query.order('play_count', { ascending: false });
+      break;
+    case 'price_asc':
+      query = query.order('price', { ascending: true });
+      break;
+    case 'price_desc':
+      query = query.order('price', { ascending: false });
+      break;
+    default:
+      query = query.order('created_at', { ascending: false });
+      break;
+  }
+
+  const { data, error } = await query.limit(limit ?? 50);
+  if (error) {
+    throw error;
+  }
+
+  const rows = (data as unknown as ProductWithRelations[] | null) ?? [];
+  const earlyAccessFilteredRows = hasPremiumAccess
+    ? rows
+    : rows.filter((row) => !isEarlyAccessActive(row.early_access_until));
+  const visibleProducts = await applyProducerVisibility(earlyAccessFilteredRows, restrictToActiveProducers ?? false);
+  return visibleProducts;
 };
 
 const fetchLegacyCatalogProductBySlug = async (
-  params: FetchCatalogProductBySlugParams
+  {
+    slug,
+    routePrefix,
+  }: FetchCatalogProductBySlugParams
 ): Promise<ProductWithRelations | null> => {
-  void params;
-  return null;
+  let query = supabase
+    .from('products')
+    .select(`
+      ${PRODUCT_SAFE_COLUMNS},
+      genre:genres(${GENRE_SAFE_COLUMNS}),
+      mood:moods(${MOOD_SAFE_COLUMNS})
+    `)
+    .eq('slug', slug)
+    .eq('is_published', true);
+
+  if (routePrefix === 'exclusives') {
+    query = query.eq('is_exclusive', true);
+  } else if (routePrefix === 'kits') {
+    query = query.eq('product_type', 'kit');
+  } else if (routePrefix === 'beats') {
+    query = query.eq('product_type', 'beat').eq('is_exclusive', false);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw error;
+  }
+
+  const row = (data as unknown as ProductWithRelations | null) ?? null;
+  if (!row) return null;
+
+  const [enriched] = await enrichMissingProducerIdentities([row]);
+  const [withLicenses] = await attachProductLicenses([enriched ?? row]);
+  return withLicenses ?? enriched ?? row;
 };
 
 export async function fetchCatalogProducts({
@@ -240,6 +357,10 @@ export async function fetchCatalogProducts({
   restrictToActiveProducers = false,
   hasPremiumAccess = false,
 }: FetchCatalogProductsParams): Promise<ProductWithRelations[]> {
+  if (await hasAuthenticatedCatalogSession()) {
+    return fetchLegacyCatalogProducts({ mode, filters, limit, restrictToActiveProducers, hasPremiumAccess });
+  }
+
   const query = supabase
     .from('public_catalog_products')
     .select(CATALOG_SELECT_COLUMNS);
@@ -247,7 +368,7 @@ export async function fetchCatalogProducts({
   const { data, error } = await query.limit(limit);
   if (error) {
     console.warn('public_catalog_products query failed, returning empty catalog result', error);
-    return fetchLegacyCatalogProducts({ mode, filters, limit, restrictToActiveProducers, hasPremiumAccess });
+    return [];
   }
 
   const rows = (data as unknown as Partial<CatalogProductRow>[] | null) ?? [];
@@ -260,8 +381,12 @@ export async function fetchCatalogProductBySlug({
   slug,
   routePrefix,
 }: FetchCatalogProductBySlugParams): Promise<ProductWithRelations | null> {
-  if (!CATALOG_SELECT_COLUMNS.includes('slug')) {
+  if (await hasAuthenticatedCatalogSession()) {
     return fetchLegacyCatalogProductBySlug({ slug, routePrefix });
+  }
+
+  if (!CATALOG_SELECT_COLUMNS.includes('slug')) {
+    return null;
   }
 
   const query = supabase
@@ -272,12 +397,12 @@ export async function fetchCatalogProductBySlug({
   const { data, error } = await query.maybeSingle();
   if (error) {
     console.warn('public_catalog_products detail query failed, returning null', error);
-    return fetchLegacyCatalogProductBySlug({ slug, routePrefix });
+    return null;
   }
 
   const row = (data as unknown as Partial<CatalogProductRow> | null) ?? null;
   if (!row) {
-    return fetchLegacyCatalogProductBySlug({ slug, routePrefix });
+    return null;
   }
 
   const product = toProduct(row);
