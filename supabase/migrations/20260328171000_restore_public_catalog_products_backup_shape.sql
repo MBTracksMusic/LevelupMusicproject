@@ -1,5 +1,7 @@
 BEGIN;
 
+DROP POLICY IF EXISTS "Public read products simple" ON public.products;
+
 DROP VIEW IF EXISTS public.public_catalog_products;
 
 DO $$
