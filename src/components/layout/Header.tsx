@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu,
   X,
@@ -38,6 +38,7 @@ export function Header() {
   const { reputation } = useMyReputation();
   const { isActive: hasActiveUserSubscription } = useUserSubscriptionStatus(user?.id);
   const { items } = useCartStore();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -91,6 +92,25 @@ export function Header() {
   }, [closeAllMenus, isLangMenuOpen, isMenuOpen, isUserMenuOpen]);
 
   useEffect(() => {
+    const nextSearchQuery = location.pathname === '/beats'
+      ? new URLSearchParams(location.search).get('search') ?? ''
+      : '';
+
+    const activeElement = document.activeElement;
+    const isTypingInHeaderSearch =
+      activeElement instanceof HTMLInputElement &&
+      activeElement.name === 'header-search';
+
+    setSearchQuery((prev) => {
+      if (isTypingInHeaderSearch && prev.trim() !== nextSearchQuery) {
+        return prev;
+      }
+
+      return prev === nextSearchQuery ? prev : nextSearchQuery;
+    });
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
     if (!isLangMenuOpen && !isUserMenuOpen && !isMenuOpen) {
       return;
     }
@@ -124,6 +144,15 @@ export function Header() {
 
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
+
+    const currentSearch = location.pathname === '/beats'
+      ? new URLSearchParams(location.search).get('search')?.trim() ?? ''
+      : '';
+
+    if (currentSearch === trimmed) {
+      navigate(`/beats?search=${encodeURIComponent(trimmed)}`, { replace: true });
+      return;
+    }
 
     navigate(`/beats?search=${encodeURIComponent(trimmed)}`);
   };
@@ -193,6 +222,7 @@ export function Header() {
             <form onSubmit={handleSearchSubmit} className="hidden md:flex items-center relative">
               <Search className="absolute left-3 w-4 h-4 text-zinc-500" />
               <input
+                name="header-search"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

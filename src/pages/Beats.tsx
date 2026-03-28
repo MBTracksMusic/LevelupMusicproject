@@ -24,6 +24,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   const { t, language } = useTranslation();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const { isActive: hasPremiumAccess } = useUserSubscriptionStatus(user?.id);
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   const [beats, setBeats] = useState<ProductWithRelations[]>([]);
@@ -68,15 +69,13 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   }, []);
 
   useEffect(() => {
-    const searchFromUrl = searchParams.get('search');
+    const searchFromUrl = new URLSearchParams(searchParamsString).get('search');
 
-    if (searchFromUrl !== null) {
-      setFilters((prev) => ({
-        ...prev,
-        search: searchFromUrl,
-      }));
-    }
-  }, [searchParams]);
+    setFilters((prev) => ({
+      ...prev,
+      search: searchFromUrl ?? '',
+    }));
+  }, [searchParamsString]);
 
   useEffect(() => {
     if (!user) {
