@@ -31,12 +31,14 @@ DROP POLICY IF EXISTS "Service role can insert failed credit allocations" ON pub
 CREATE POLICY "Service role can insert failed credit allocations"
   ON public.failed_credit_allocations
   FOR INSERT
+  TO service_role
   WITH CHECK (auth.role() = 'service_role');
 
 DROP POLICY IF EXISTS "Service role can update failed credit allocations" ON public.failed_credit_allocations;
 CREATE POLICY "Service role can update failed credit allocations"
   ON public.failed_credit_allocations
   FOR UPDATE
+  TO service_role
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');
 
@@ -44,6 +46,7 @@ DROP POLICY IF EXISTS "Service role can select failed credit allocations" ON pub
 CREATE POLICY "Service role can select failed credit allocations"
   ON public.failed_credit_allocations
   FOR SELECT
+  TO service_role
   USING (auth.role() = 'service_role');
 
 COMMIT;
