@@ -663,6 +663,7 @@ export const fr = {
     proItemVerifiedBadge: 'Badge Producteur verifie',
     proItemAdvancedStats: 'Statistiques avancees',
     proItemTopBeatsBoost: 'Mise en avant de tes 10 meilleurs beats',
+    proItemRevenueShare: '70 % des ventes te reviennent directement',
     proVisibilityHint: 'Plus tes beats performent, plus ils sont visibles.',
     elitePlanTitle: 'Producteur ELITE',
     elitePlanSubtitle: 'En cours de developpement. Un niveau superieur pour les producteurs prets a passer a l’etape suivante.',

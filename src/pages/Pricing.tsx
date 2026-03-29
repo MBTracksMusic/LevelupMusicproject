@@ -8,6 +8,7 @@ import {
   Globe2,
   Music2,
   Target,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -540,6 +541,7 @@ export function PricingPage() {
     { icon: BadgeCheck, text: t('pricing.proItemVerifiedBadge') },
     { icon: BarChart3, text: t('pricing.proItemAdvancedStats') },
     { icon: Target, text: t('pricing.proItemTopBeatsBoost') },
+    { icon: TrendingUp, text: t('pricing.proItemRevenueShare') },
   ];
   const proPrice = formatPlanPrice(
     proPlan,
