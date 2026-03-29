@@ -38,6 +38,7 @@ interface CreditPurchaseResult {
 
 const CREDIT_VALUE_EUR = 10;
 const CREDIT_VALUE_CENTS = CREDIT_VALUE_EUR * 100;
+const MAX_CREDIT_CAP = 6;
 const DEFAULT_OG_IMAGE = 'https://beatelion.com/og-default.jpg';
 
 const mapCreditPurchaseError = (message: string, t: TranslateFn) => {
@@ -300,7 +301,7 @@ export function ProductDetailsPage() {
     !product.is_sold &&
     product.is_published &&
     product.status === 'active';
-  const isCreditEligible = product?.product_type === 'beat' && !product?.is_exclusive && !product?.is_sold;
+  const isCreditEligible = product?.product_type === 'beat' && !product?.is_exclusive && !product?.is_sold && requiredCredits <= MAX_CREDIT_CAP;
   const hasEnoughCredits = typeof creditBalance === 'number' && creditBalance >= requiredCredits;
   const isCreditPurchaseDisabled =
     !isAuthenticated ||
@@ -534,9 +535,11 @@ export function ProductDetailsPage() {
 
               <div>
                 <span className="text-2xl font-bold text-white">{formatPrice(displayPrice)}</span>
-                <div className="mt-1 text-sm text-zinc-400">
-                  {formatPrice(displayPrice)} → {requiredCredits} {t('productDetails.creditsLabel')}
-                </div>
+                {isCreditEligible && (
+                  <div className="mt-1 text-sm text-zinc-400">
+                    {formatPrice(displayPrice)} → {requiredCredits} {t('productDetails.creditsLabel')}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -588,24 +591,26 @@ export function ProductDetailsPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-3">
-              {shouldShowGetCreditsCta ? (
-                <Button
-                  onClick={() => navigate('/pricing')}
-                  leftIcon={<Coins className="w-4 h-4" />}
-                  variant="secondary"
-                >
-                  {t('pricing.getCredits')}
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleCreditPurchase}
-                  isLoading={isPurchasingWithCredits}
-                  disabled={isCreditPurchaseDisabled}
-                  leftIcon={<Coins className="w-4 h-4" />}
-                  variant="secondary"
-                >
-                  {t('productDetails.buyWithCredits', { count: requiredCredits })}
-                </Button>
+              {isCreditEligible && (
+                shouldShowGetCreditsCta ? (
+                  <Button
+                    onClick={() => navigate('/pricing')}
+                    leftIcon={<Coins className="w-4 h-4" />}
+                    variant="secondary"
+                  >
+                    {t('pricing.getCredits')}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleCreditPurchase}
+                    isLoading={isPurchasingWithCredits}
+                    disabled={isCreditPurchaseDisabled}
+                    leftIcon={<Coins className="w-4 h-4" />}
+                    variant="secondary"
+                  >
+                    {t('productDetails.buyWithCredits', { count: requiredCredits })}
+                  </Button>
+                )
               )}
 
               <Button
