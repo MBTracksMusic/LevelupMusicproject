@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { AlertCircle, CheckCircle, RotateCcw, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle, Download, RotateCcw, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -19,10 +19,33 @@ type UrgencyFilter = 'all' | 'critical' | 'warning' | 'ok';
 type AgeFilter = 'all' | '0_6' | '7_13' | '14_plus';
 type SortOption = 'days_desc' | 'days_asc' | 'amount_desc' | 'amount_asc' | 'producer_asc';
 
+const urgencyFilterLabel: Record<UrgencyFilter, string> = {
+  all: 'All urgency levels',
+  critical: 'Critical',
+  warning: 'Warning',
+  ok: 'OK',
+};
+
+const ageFilterLabel: Record<AgeFilter, string> = {
+  all: 'All delays',
+  '0_6': '0 to 6 days',
+  '7_13': '7 to 13 days',
+  '14_plus': '14+ days',
+};
+
+const sortOptionLabel: Record<SortOption, string> = {
+  days_desc: 'Oldest first',
+  days_asc: 'Newest first',
+  amount_desc: 'Highest amount',
+  amount_asc: 'Lowest amount',
+  producer_asc: 'Producer A-Z',
+};
+
 export function AdminPayouts() {
   const [payouts, setPayouts] = useState<FallbackPayout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>('all');
   const [ageFilter, setAgeFilter] = useState<AgeFilter>('all');
@@ -147,6 +170,66 @@ export function AdminPayouts() {
     setSortBy('days_desc');
   };
 
+  const handleExportExcel = async () => {
+    if (filteredPayouts.length === 0) {
+      toast.error('No visible payouts to export');
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+
+      const XLSX = await import('xlsx');
+      const exportedAt = new Date();
+      const exportRows = filteredPayouts.map((payout) => ({
+        'Purchase ID': payout.purchase_id,
+        'Producer ID': payout.producer_id,
+        Producer: payout.username,
+        Email: payout.email,
+        'Amount (EUR)': payout.payout_amount_eur,
+        'Days Pending': payout.days_pending,
+        Urgency: payout.urgency_level,
+      }));
+
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['Metric', 'Value'],
+        ['Exported at', exportedAt.toLocaleString('fr-FR')],
+        ['Visible payouts', filteredPayouts.length],
+        ['Visible total (EUR)', filteredAmountTotal],
+        ['Search', searchTerm.trim() || 'All'],
+        ['Urgency filter', urgencyFilterLabel[urgencyFilter]],
+        ['Age filter', ageFilterLabel[ageFilter]],
+        ['Sort', sortOptionLabel[sortBy]],
+      ]);
+      summarySheet['!cols'] = [{ wch: 20 }, { wch: 28 }];
+
+      const payoutSheet = XLSX.utils.json_to_sheet(exportRows);
+      payoutSheet['!cols'] = [
+        { wch: 38 },
+        { wch: 38 },
+        { wch: 22 },
+        { wch: 34 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 16 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+      XLSX.utils.book_append_sheet(workbook, payoutSheet, 'Payouts');
+
+      const fileStamp = exportedAt.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      XLSX.writeFile(workbook, `fallback-payouts-${fileStamp}.xlsx`);
+
+      toast.success(`Excel export ready (${filteredPayouts.length} payout${filteredPayouts.length === 1 ? '' : 's'})`);
+    } catch (error) {
+      console.error('Failed to export payouts to Excel:', error);
+      toast.error('Failed to export Excel file');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -241,6 +324,18 @@ export function AdminPayouts() {
                     €{filteredAmountTotal.toFixed(2)}
                   </p>
                 </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  onClick={handleExportExcel}
+                  disabled={filteredPayouts.length === 0}
+                  isLoading={isExporting}
+                  leftIcon={<Download className="h-4 w-4" />}
+                >
+                  Export Excel
+                </Button>
 
                 <Button
                   type="button"
