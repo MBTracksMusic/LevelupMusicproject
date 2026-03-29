@@ -11,7 +11,7 @@ export type EmailDeliveryState =
   | "provider_accepted_db_persist_failed";
 
 const BRAND_NAME = "Beatelion";
-const DEFAULT_APP_URL = "https://beatelion.com";
+const DEFAULT_APP_URL = "https://www.beatelion.com";
 const DEFAULT_UNSUBSCRIBE_URL = `${DEFAULT_APP_URL}/unsubscribe`;
 const DEFAULT_PREFERENCES_URL = `${DEFAULT_APP_URL}/settings/notifications`;
 const DEFAULT_SUPPORT_EMAIL = "support@beatelion.com";

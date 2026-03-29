@@ -64,19 +64,40 @@ const getHookSecret = () => {
   return secret.replace("v1,whsec_", "");
 };
 
+const CANONICAL_PUBLIC_APP_URL = "https://www.beatelion.com";
+
+const normalizePublicUrl = (value: string | null) => {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    if (url.hostname === "beatelion.com") {
+      url.hostname = "www.beatelion.com";
+    }
+    return url;
+  } catch {
+    return null;
+  }
+};
+
+const resolveActionBaseUrl = (redirectTo: string | null, siteUrl: string | null) =>
+  normalizePublicUrl(redirectTo)
+  ?? normalizePublicUrl(siteUrl)
+  ?? new URL(CANONICAL_PUBLIC_APP_URL);
+
+const resolveAppOrigin = (redirectTo: string | null, siteUrl: string | null) =>
+  (normalizePublicUrl(redirectTo) ?? normalizePublicUrl(siteUrl))?.origin
+  ?? CANONICAL_PUBLIC_APP_URL;
+
 const buildActionUrl = (params: {
   redirectTo: string | null;
   siteUrl: string | null;
   tokenHash: string;
   type: string;
 }) => {
-  const base = params.redirectTo ?? params.siteUrl ?? "https://beatelion.com";
-  const url = new URL(base);
+  const url = resolveActionBaseUrl(params.redirectTo, params.siteUrl);
   url.searchParams.set("token_hash", params.tokenHash);
   url.searchParams.set("type", params.type);
-  if (params.redirectTo) {
-    url.searchParams.set("redirect_to", params.redirectTo);
-  }
   return url.toString();
 };
 
@@ -243,7 +264,7 @@ const sendAuthEmail = async (params: {
     type: "transactional",
     title: params.title,
     preheader: params.preheader,
-    appUrl: params.siteUrl ?? undefined,
+    appUrl: resolveAppOrigin(params.redirectTo, params.siteUrl),
     bodyHtml: [
       ...params.bodyLines.map((line) =>
         `<p style="margin:0 0 14px;line-height:1.55;color:#111827;">${line}</p>`
