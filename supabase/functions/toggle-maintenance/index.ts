@@ -127,24 +127,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const token = authHeader.replace('Bearer ', '');
 
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false },
-      global: { headers: { authorization: `Bearer ${token}` } },
-    });
-
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false },
     });
 
-    const { data: authData, error: authError } = await supabaseAuth.auth.getUser(token);
-    const user = authData?.user;
+    const { data, error: authError } = await supabaseAdmin.auth.getClaims(token);
 
     console.log('[toggle-maintenance] Token verification:', {
-      userExists: !!user,
+      claimsExists: !!data?.claims,
       authError: authError?.message || null,
     });
 
-    if (authError || !user?.id) {
+    if (authError || !data?.claims?.sub) {
       console.warn('[toggle-maintenance] Token verification failed', { authError: authError?.message });
       return new Response(JSON.stringify({
         error: 'auth_failed',
@@ -155,7 +149,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const userId = user.id;
+    const userId = data.claims.sub;
 
     // === 8. Verify admin status using SERVICE_ROLE
 
@@ -225,15 +219,50 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    if (!settingsRow?.id) {
-      console.warn('[toggle-maintenance] Settings singleton not found');
-      return new Response(JSON.stringify({
-        error: 'settings_not_found',
-        message: 'Settings singleton row not found. Database may not be initialized.',
-      } as ErrorResponse), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    let resolvedSettingsRow = settingsRow;
+
+    if (!resolvedSettingsRow?.id) {
+      console.warn('[toggle-maintenance] Settings singleton not found, recreating missing row');
+
+      const { data: insertedSettingsRow, error: insertSettingsError } = await supabaseAdmin
+        .from('settings')
+        .insert({
+          maintenance_mode: body.maintenance_mode,
+        })
+        .select('id, maintenance_mode, updated_at')
+        .single();
+
+      if (insertSettingsError) {
+        console.error('[toggle-maintenance] Settings recreation failed:', insertSettingsError.message);
+
+        const { data: recoveredSettingsRow, error: recoveredSettingsError } = await supabaseAdmin
+          .from('settings')
+          .select('id')
+          .limit(1)
+          .maybeSingle();
+
+        if (recoveredSettingsError || !recoveredSettingsRow?.id) {
+          return new Response(JSON.stringify({
+            error: 'settings_not_found',
+            message: 'Settings singleton row not found. Database may not be initialized.',
+            details: insertSettingsError.message,
+          } as ErrorResponse), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          });
+        }
+
+        resolvedSettingsRow = recoveredSettingsRow;
+      } else {
+        return new Response(JSON.stringify({
+          success: true,
+          maintenance_mode: insertedSettingsRow.maintenance_mode,
+          updated_at: insertedSettingsRow.updated_at,
+        } as SuccessResponse), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
     }
 
     // === 10. Update settings with SERVICE_ROLE
@@ -244,7 +273,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         maintenance_mode: body.maintenance_mode,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', settingsRow.id)  // ✅ WHERE clause: update only this specific row
+      .eq('id', resolvedSettingsRow.id)  // ✅ WHERE clause: update only this specific row
       .select('maintenance_mode, updated_at')
       .single();
 
@@ -274,7 +303,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // === 11. Success - log action
     console.log('[toggle-maintenance] Success', {
       userId,
-      settingsId: settingsRow.id,
+      settingsId: resolvedSettingsRow.id,
       maintenance_mode: updated.maintenance_mode,
       updated_at: updated.updated_at,
     });
