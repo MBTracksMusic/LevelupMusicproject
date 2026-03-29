@@ -653,11 +653,6 @@ export function ProductDetailsPage() {
             {product.is_exclusive && (
               <p className="mt-3 text-xs text-zinc-500">{t('productDetails.creditPurchaseUnavailable')}</p>
             )}
-            {!product.is_exclusive && isOverCreditPriceLimit && (
-              <p className="mt-3 text-xs text-zinc-500">
-                {t('productDetails.creditPurchasePriceLimit', { price: formattedCreditPriceCap })}
-              </p>
-            )}
             {isCreditEligible && isAuthenticated && !isCreditBalanceLoading && typeof creditBalance === 'number' && creditBalance < requiredCredits && (
               <p className="mt-3 text-xs text-zinc-500">
                 {t('productDetails.creditPurchaseMissingCredits', { count: missingCredits })}
