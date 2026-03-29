@@ -1,5 +1,35 @@
 import { supabase } from '@/lib/supabase/client';
 
+type EdgeFunctionBody =
+  | string
+  | Record<string, unknown>
+  | Blob
+  | ArrayBuffer
+  | FormData
+  | null;
+
+export async function getFreshAccessToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('User is not authenticated. Please sign in first.');
+  }
+
+  const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+
+  if (!refreshError && refreshed?.session?.access_token) {
+    return refreshed.session.access_token;
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (!userError && userData.user && session.access_token) {
+    return session.access_token;
+  }
+
+  throw new Error('Authentication expired. Please sign in again.');
+}
+
 /**
  * Invoke a protected Edge Function with automatic Authorization header.
  *
@@ -19,17 +49,13 @@ import { supabase } from '@/lib/supabase/client';
  */
 export async function invokeWithAuth<T = unknown>(
   functionName: string,
-  body?: unknown,
+  body?: EdgeFunctionBody,
 ) {
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error('User is not authenticated. Please sign in first.');
-  }
+  const token = await getFreshAccessToken();
 
   return supabase.functions.invoke<T>(functionName, {
     headers: {
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${token}`,
     },
     body,
   });

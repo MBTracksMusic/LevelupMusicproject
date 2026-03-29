@@ -3,6 +3,7 @@ import type { Database } from './database.types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const AUTH_STORAGE_KEY = 'sb-levelupmusic-auth';
 
 function isServiceRole(key: string) {
   try {
@@ -22,11 +23,42 @@ if (isServiceRole(supabaseAnonKey)) {
   throw new Error('Do not use the service_role key in the frontend. Provide the anon public key.');
 }
 
+function getDefaultAuthStorageKey(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    const projectRef = host.split('.')[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : null;
+  } catch {
+    return null;
+  }
+}
+
+function migrateAuthStorage(url: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const defaultStorageKey = getDefaultAuthStorageKey(url);
+  if (!defaultStorageKey || defaultStorageKey === AUTH_STORAGE_KEY) {
+    return;
+  }
+
+  const dedicatedSession = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  const defaultSession = window.localStorage.getItem(defaultStorageKey);
+
+  if (!dedicatedSession && defaultSession) {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, defaultSession);
+  }
+}
+
+migrateAuthStorage(supabaseUrl);
+
 export const supabase = createClient<Database>(
   supabaseUrl,
   supabaseAnonKey,
   {
     auth: {
+      storageKey: AUTH_STORAGE_KEY,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
