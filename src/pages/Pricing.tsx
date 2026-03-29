@@ -23,13 +23,12 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import toast from 'react-hot-toast';
 import { trackSubscriptionStart } from '../lib/analytics';
-import type { Database } from '../lib/supabase/types';
 import { formatDate, formatPrice } from '../lib/utils/format';
 import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 
 type ProducerTier = 'starter' | 'pro' | 'elite';
 type CheckoutTier = 'pro' | 'elite';
-const eliteWaitlistSource = 'elite_interest' as unknown as keyof Database['public']['Tables'];
+const eliteWaitlistSource = 'elite_interest' as string;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface PlanItem {
   icon: LucideIcon;
@@ -542,6 +541,7 @@ export function PricingPage() {
     { icon: BarChart3, text: t('pricing.proItemAdvancedStats') },
     { icon: Target, text: t('pricing.proItemTopBeatsBoost') },
     { icon: TrendingUp, text: t('pricing.proItemRevenueShare') },
+    { icon: Target, text: t('pricing.proItemSetPrices') },
   ];
   const proPrice = formatPlanPrice(
     proPlan,

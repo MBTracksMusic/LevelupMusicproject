@@ -665,6 +665,7 @@ export const en: TranslationSchema = {
     proItemAdvancedStats: 'Advanced analytics',
     proItemTopBeatsBoost: 'Priority placement for your top 10 beats',
     proItemRevenueShare: '70% of each sale goes directly to you',
+    proItemSetPrices: 'You set your own beat prices freely',
     proVisibilityHint: 'The better your beats perform, the more visible they become.',
     elitePlanTitle: 'ELITE Producer',
     elitePlanSubtitle: 'In development. A higher tier for producers ready for the next step.',
