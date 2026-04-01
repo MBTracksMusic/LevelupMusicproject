@@ -147,6 +147,7 @@ export const initSentry = (functionName?: string) => {
   Sentry.init({
     dsn,
     environment:
+      asNonEmptyString(Deno.env.get("SENTRY_ENVIRONMENT")) ||
       asNonEmptyString(Deno.env.get("ENVIRONMENT")) ||
       asNonEmptyString(Deno.env.get("ENV")) ||
       "development",

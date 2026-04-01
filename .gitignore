@@ -28,6 +28,7 @@ dist-ssr
 *.sw?
 .env
 .env.local
+.env.staging
 .env.production
 supabase/.temp/
 backups/
@@ -41,4 +42,8 @@ backups/
 
 # services backend
 audio-worker/.env
+audio-worker/.env.staging
+audio-worker/.env.production
 contract-service/.env
+contract-service/.env.staging
+contract-service/.env.production

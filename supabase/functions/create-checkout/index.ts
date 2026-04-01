@@ -62,6 +62,7 @@ const isProduction = () => {
   const runtimeEnv = (
     Deno.env.get("ENV") ??
     Deno.env.get("NODE_ENV") ??
+    Deno.env.get("SENTRY_ENVIRONMENT") ??
     Deno.env.get("ENVIRONMENT") ??
     ""
   ).trim().toLowerCase();

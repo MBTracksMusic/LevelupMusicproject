@@ -70,6 +70,11 @@ CREATE INDEX idx_battles_status_response_deadline ON public.battles USING btree 
 
 alter table "public"."watermark_profiles" add constraint "watermark_profiles_pkey" PRIMARY KEY using index "watermark_profiles_pkey";
 
+update "public"."producer_plans"
+set "stripe_price_id" = ('price_shadow_' || regexp_replace("tier"::text, '[^A-Za-z0-9]', '', 'g'))
+where "tier" <> 'user'::public.producer_tier_type
+  and "stripe_price_id" is null;
+
 alter table "public"."producer_plans" add constraint "producer_plans_price_not_null" CHECK (((tier = 'user'::public.producer_tier_type) OR (stripe_price_id IS NOT NULL))) not valid;
 
 alter table "public"."producer_plans" validate constraint "producer_plans_price_not_null";
@@ -486,6 +491,5 @@ CREATE TRIGGER trg_lock_battle_created_at_on_update BEFORE UPDATE ON public.batt
 using (((bucket_id = 'purchase_contracts'::text) AND (EXISTS ( SELECT 1
    FROM public.purchases p
   WHERE ((p.user_id = auth.uid()) AND (p.contract_pdf_path = objects.name))))));
-
 
 
