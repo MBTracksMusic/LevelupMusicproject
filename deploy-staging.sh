@@ -116,7 +116,8 @@ git push origin main
 echo "🧠 Vérification migrations..."
 if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/migrations/"; then
   echo "📡 Déploiement DB STAGING..."
-  supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+  supabase link --project-ref "$SUPABASE_PROJECT_REF"
+  supabase db push
 else
   echo "✅ Aucune migration détectée."
 fi
