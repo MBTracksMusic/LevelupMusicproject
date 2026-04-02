@@ -13,7 +13,7 @@
     "test:contracts": "node --test tests/integration/contracts-immutability.test.mjs",
     "test:contract-runtime": "node --test tests/unit/contract-generation-runtime.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts",
+    "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts.tmp && mv src/lib/supabase/database.types.ts.tmp src/lib/supabase/database.types.ts && echo 'Types generated successfully'",
     "supabase:deploy:get-producer-plans:public": "supabase functions deploy get-producer-plans --no-verify-jwt",
     "supabase:deploy:stripe-webhook:public": "supabase functions deploy stripe-webhook --no-verify-jwt",
     "supabase:deploy:create-checkout:private": "supabase functions deploy create-checkout",

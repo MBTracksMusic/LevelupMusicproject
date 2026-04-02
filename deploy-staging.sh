@@ -90,14 +90,32 @@ else
 fi
 
 # =========================
-# 7. BUILD CHECK
+# 7. CHECK DATABASE TYPES
+# =========================
+echo "🔍 Vérification database.types.ts..."
+TYPES_FILE="src/lib/supabase/database.types.ts"
+TYPES_SIZE=$(wc -c < "$TYPES_FILE" 2>/dev/null || echo 0)
+if [ "$TYPES_SIZE" -lt 10000 ]; then
+  echo "⚠️  database.types.ts vide ou trop petit (${TYPES_SIZE} bytes) — régénération..."
+  npm run supabase:types || {
+    echo "❌ Échec de la génération des types Supabase. Déploiement annulé."
+    exit 1
+  }
+  echo "✅ Types régénérés — vérification commit..."
+  git add src/lib/supabase/database.types.ts
+else
+  echo "✅ database.types.ts OK (${TYPES_SIZE} bytes)"
+fi
+
+# =========================
+# 8. BUILD CHECK
 # =========================
 echo "🧪 Vérification build..."
 npm run build
 echo "✅ Build OK"
 
 # =========================
-# 8. COMMIT PROPRE
+# 9. COMMIT PROPRE
 # =========================
 echo "📦 Commit & Push Git..."
 read -p "📝 Message de commit: " commit_message
@@ -111,7 +129,7 @@ git commit -m "$commit_message" || echo "⚠️ Rien à commit"
 git push origin main
 
 # =========================
-# 9. SUPABASE DB
+# 10. SUPABASE DB
 # =========================
 echo "🧠 Vérification migrations..."
 if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/migrations/"; then
@@ -123,7 +141,7 @@ else
 fi
 
 # =========================
-# 10. EDGE FUNCTIONS
+# 11. EDGE FUNCTIONS
 # =========================
 echo "⚡ Vérification functions..."
 if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/functions/"; then
@@ -134,7 +152,7 @@ else
 fi
 
 # =========================
-# 11. VERCEL PREVIEW / STAGING
+# 12. VERCEL PREVIEW / STAGING
 # =========================
 echo "🌐 Déploiement frontend STAGING..."
 vercel
