@@ -21,6 +21,7 @@ export const computeWatermarkHash = (settings: SiteAudioSettingsRow) => {
     asGainSignatureComponent(settings.gain_db),
     asIntervalSignatureComponent(settings.min_interval_sec, 20),
     asIntervalSignatureComponent(settings.max_interval_sec, 45),
+    settings.updated_at ?? "",
   ].join("|");
 
   return createHash("sha256").update(source).digest("hex");
