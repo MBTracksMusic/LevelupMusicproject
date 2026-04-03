@@ -312,9 +312,7 @@ serveWithErrorHandling("get-producer-plans", async (req: Request) => {
       .map((row) => ({
         battleLimit: typeof row.battle_limit === "number"
           ? row.battle_limit
-          : typeof row.max_battles_created_per_month === "number"
-          ? row.max_battles_created_per_month
-          : null,
+          : 0,
         tier: isProducerTier(row.tier) ? row.tier : null,
         max_beats_published: typeof row.max_beats_published === "number" ? row.max_beats_published : null,
         max_battles_created_per_month: null as number | null,
@@ -329,7 +327,7 @@ serveWithErrorHandling("get-producer-plans", async (req: Request) => {
         ...row,
         max_battles_created_per_month: battleLimit === -1
           ? null
-          : battleLimit,
+          : Math.max(battleLimit, 0),
       }))
       .filter((row): row is {
         tier: ProducerTier;

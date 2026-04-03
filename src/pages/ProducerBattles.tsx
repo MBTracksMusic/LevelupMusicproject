@@ -60,6 +60,16 @@ interface BattleQuotaStatus {
   reset_at: string;
 }
 
+interface RawBattleQuotaStatus {
+  tier?: unknown;
+  used_this_month?: unknown;
+  battle_limit?: unknown;
+  remaining_this_month?: unknown;
+  can_create?: unknown;
+  reason?: unknown;
+  reset_at?: unknown;
+}
+
 interface MatchmakingOpponent {
   user_id: string;
   username: string | null;
@@ -201,11 +211,41 @@ function getBattleQuotaBlockedMessage(quotaStatus: BattleQuotaStatus | null, t: 
 
   if (quotaStatus.reason === 'quota_reached') {
     return t('producerBattles.quotaReachedError', {
-      date: formatDate(quotaStatus.reset_at),
+      date: quotaStatus.reset_at ? formatDate(quotaStatus.reset_at) : t('common.notAvailable'),
+      limit: quotaStatus.battle_limit,
+      used: quotaStatus.used_this_month,
     });
   }
 
   return t('producerBattles.quotaUnavailable');
+}
+
+function normalizeBattleQuotaStatus(row: RawBattleQuotaStatus | null): BattleQuotaStatus | null {
+  if (!row) {
+    return null;
+  }
+
+  const usedThisMonth =
+    typeof row.used_this_month === 'number' && Number.isFinite(row.used_this_month)
+      ? row.used_this_month
+      : 0;
+  const battleLimit =
+    typeof row.battle_limit === 'number' && Number.isFinite(row.battle_limit)
+      ? row.battle_limit
+      : 0;
+  const isUnlimited = battleLimit === -1;
+  const canCreate = isUnlimited || (battleLimit > 0 && usedThisMonth < battleLimit);
+  const remainingThisMonth = isUnlimited ? -1 : Math.max(battleLimit - usedThisMonth, 0);
+
+  return {
+    tier: typeof row.tier === 'string' && row.tier.trim().length > 0 ? row.tier : 'user',
+    used_this_month: usedThisMonth,
+    battle_limit: battleLimit,
+    remaining_this_month: remainingThisMonth,
+    can_create: canCreate,
+    reason: canCreate ? 'eligible' : battleLimit <= 0 ? 'plan_insufficient' : 'quota_reached',
+    reset_at: typeof row.reset_at === 'string' ? row.reset_at : '',
+  };
 }
 
 function toOfficialCampaignErrorMessage(message: string) {
@@ -310,7 +350,9 @@ export function ProducerBattlesPage() {
       return null;
     }
 
-    const quotaRow = (Array.isArray(data) ? data[0] : data) as BattleQuotaStatus | null;
+    const quotaRow = normalizeBattleQuotaStatus(
+      (Array.isArray(data) ? data[0] : data) as RawBattleQuotaStatus | null
+    );
     setQuotaStatus(quotaRow);
     setQuotaError(null);
     setIsQuotaLoading(false);
@@ -376,14 +418,14 @@ export function ProducerBattlesPage() {
     }
   }, [profile?.id, t]);
 
-  const loadMatchmakingOpponents = useCallback(async (currentQuota?: BattleQuotaStatus | null) => {
+  const loadMatchmakingOpponents = useCallback(async (currentQuota: BattleQuotaStatus | null) => {
     if (!profile?.id) {
       setMatchmakingOpponents([]);
       setIsMatchmakingLoading(false);
       return;
     }
 
-    if (currentQuota && !currentQuota.can_create) {
+    if (!currentQuota || !currentQuota.can_create) {
       setMatchmakingOpponents([]);
       setIsMatchmakingLoading(false);
       return;
@@ -693,7 +735,7 @@ export function ProducerBattlesPage() {
     }
 
     const latestQuota = await loadQuotaStatus();
-    if (latestQuota && !latestQuota.can_create) {
+    if (!latestQuota || !latestQuota.can_create) {
       setError(getBattleQuotaBlockedMessage(latestQuota, t));
       setIsSaving(false);
       return;
@@ -791,21 +833,33 @@ export function ProducerBattlesPage() {
   const battleLimit = quotaStatus?.battle_limit;
   const isUnlimited = battleLimit === -1;
   const hasFiniteBattleLimit = typeof battleLimit === 'number' && battleLimit >= 0;
-  const quotaSummaryMax = typeof battleLimit === 'number'
-    ? (isUnlimited ? t('common.unlimited') : String(battleLimit))
-    : t('common.notAvailable');
+  const displayLimit = battleLimit == null
+    ? 0
+    : isUnlimited
+    ? t('common.unlimited')
+    : String(battleLimit);
+  const hasPlanBattleAccess = isUnlimited || (typeof battleLimit === 'number' && battleLimit > 0);
+  const hasReachedBattleLimit = Boolean(
+    quotaStatus
+    && !isUnlimited
+    && typeof battleLimit === 'number'
+    && quotaStatus.used_this_month >= battleLimit
+  );
+  const canCreateBattle = Boolean(quotaStatus) && hasPlanBattleAccess && !hasReachedBattleLimit;
   const quotaProgressPercent = hasFiniteBattleLimit && typeof battleLimit === 'number' && battleLimit > 0
     ? Math.min((quotaStatus?.used_this_month ?? 0) / battleLimit * 100, 100)
     : 0;
-  const quotaBlockedMessage = quotaStatus?.reason === 'plan_insufficient'
+  const quotaBlockedMessage = quotaStatus && !hasPlanBattleAccess
     ? t('producerBattles.planInsufficientNotice')
-    : quotaStatus?.reason === 'quota_reached'
+    : hasReachedBattleLimit
     ? t('producerBattles.quotaReachedNotice', {
+      limit: battleLimit,
+      used: quotaStatus.used_this_month,
       date: quotaStatus.reset_at ? formatDate(quotaStatus.reset_at) : t('common.notAvailable'),
     })
     : null;
-  const canUseMatchmaking = quotaStatus?.can_create !== false;
-  const shouldShowPlansCta = quotaStatus?.tier !== 'elite' && quotaStatus?.can_create === false;
+  const canUseMatchmaking = canCreateBattle;
+  const shouldShowPlansCta = Boolean(quotaStatus) && quotaStatus.tier !== 'elite' && !canCreateBattle;
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
@@ -1022,7 +1076,7 @@ export function ProducerBattlesPage() {
               {quotaStatus
                 ? t('producerBattles.quotaSummary', {
                   used: quotaStatus.used_this_month,
-                  max: quotaSummaryMax,
+                  max: displayLimit,
                 })
                 : isQuotaLoading
                 ? t('producerBattles.loadingQuota')
@@ -1060,7 +1114,7 @@ export function ProducerBattlesPage() {
               <Button
                 onClick={createBattle}
                 isLoading={isSaving}
-                disabled={quotaStatus !== null && !quotaStatus.can_create}
+                disabled={isQuotaLoading || !canCreateBattle}
               >
                 {t('common.create')}
               </Button>
