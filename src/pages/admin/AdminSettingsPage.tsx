@@ -256,7 +256,7 @@ export function AdminSettingsPage() {
     }
 
     playTrack({
-      id: 'admin-watermark-preview',
+      id: `admin-watermark-preview-${siteAudioSettings?.updated_at ?? 'default'}`,
       title: t('admin.settingsPage.currentSampleLabel'),
       audioUrl: watermarkPreviewUrl,
     });
@@ -518,7 +518,7 @@ export function AdminSettingsPage() {
       setReprocessStats({ enqueued: count, skipped });
       toast.success(t('admin.settingsPage.reprocessSuccess', { count, skipped }));
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('admin.settingsPage.authenticationExpired');
+      const errorMsg = err instanceof Error ? err.message : t('admin.settingsPage.reprocessError');
       toast.error(errorMsg);
     }
     setIsEnqueueingReprocess(false);
