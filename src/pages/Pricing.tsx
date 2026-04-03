@@ -21,6 +21,7 @@ import { invokeProtectedEdgeFunction } from '../lib/supabase/edgeAuth';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { useMaintenanceModeContext } from '../lib/supabase/MaintenanceModeContext';
 import toast from 'react-hot-toast';
 import { trackSubscriptionStart } from '../lib/analytics';
 import { formatDate, formatPrice } from '../lib/utils/format';
@@ -175,6 +176,7 @@ const toProducerTier = (value: unknown): ProducerTier => {
 export function PricingPage() {
   const { t } = useTranslation();
   const { user, session, profile } = useAuth();
+  const { showPricingPlans, isLoading: isPublicSettingsLoading } = useMaintenanceModeContext();
   const navigate = useNavigate();
   const [isPlanLoading, setIsPlanLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +202,21 @@ export function PricingPage() {
   const proPlan = plans.pro;
 
   useEffect(() => {
+    if (isPublicSettingsLoading) {
+      return;
+    }
+
+    if (!showPricingPlans) {
+      setPlans({
+        starter: { ...DEFAULT_PLANS.starter },
+        pro: { ...DEFAULT_PLANS.pro },
+        elite: { ...DEFAULT_PLANS.elite },
+      });
+      setError(null);
+      setIsPlanLoading(false);
+      return;
+    }
+
     const fetchPlan = async () => {
       setIsPlanLoading(true);
       setError(null);
@@ -236,7 +253,7 @@ export function PricingPage() {
     };
 
     void fetchPlan();
-  }, [t]);
+  }, [isPublicSettingsLoading, showPricingPlans, t]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -620,6 +637,19 @@ export function PricingPage() {
       </li>
     );
   };
+
+  if (!isPublicSettingsLoading && !showPricingPlans) {
+    return (
+      <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
+        <div className="max-w-3xl mx-auto px-4">
+          <Card className="border-zinc-800 bg-zinc-900/70 p-8 text-center">
+            <h1 className="text-4xl font-bold text-white mb-4">{t('pricing.title')}</h1>
+            <p className="text-xl text-zinc-400">{t('pricing.plansUnavailable')}</p>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">

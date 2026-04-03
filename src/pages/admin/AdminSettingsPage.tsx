@@ -8,12 +8,12 @@ import { useAudioPlayer } from '../../context/AudioPlayerContext';
 import { useTranslation } from '../../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import { invokeWithAuth } from '@/lib/supabase/invokeWithAuth';
+import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 import type { Json } from '../../lib/supabase/database.types';
 import { formatDateTime } from '../../lib/utils/format';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';
-const HOMEPAGE_STATS_SETTINGS_KEY = 'show_homepage_stats';
-const SITE_AUDIO_SETTINGS_TABLE = 'site_audio_settings';
+const SITE_AUDIO_SETTINGS_TABLE = 'site_audio_settings' as const;
 
 interface SocialLinksForm {
   twitter: string;
@@ -42,6 +42,17 @@ interface WatermarkSettingsForm {
 interface ReprocessStats {
   enqueued: number;
   skipped: number;
+}
+
+interface VisibilityToggleCardConfig {
+  key: string;
+  title: string;
+  subtitle: string;
+  label: string;
+  checked: boolean;
+  setChecked: React.Dispatch<React.SetStateAction<boolean>>;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>;
+  isSaving: boolean;
 }
 
 const EMPTY_FORM: SocialLinksForm = {
@@ -80,25 +91,6 @@ const sanitizeUrl = (value?: unknown): string | null => {
   } catch {
     return null;
   }
-};
-
-const parseEnabledToggle = (value: unknown) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false;
-  }
-
-  const enabled = (value as Record<string, unknown>).enabled;
-  if (typeof enabled === 'boolean') {
-    return enabled;
-  }
-
-  if (typeof enabled === 'string') {
-    const normalized = enabled.trim().toLowerCase();
-    if (normalized === 'true') return true;
-    if (normalized === 'false') return false;
-  }
-
-  return false;
 };
 
 const isAllowedUrl = (value: string) => value.length === 0 || sanitizeUrl(value) !== null;
@@ -143,17 +135,24 @@ const toEdgeInvokeErrorMessage = async (error: unknown) => {
   }
 };
 
-const adminDb = supabase as any;
-
 export function AdminSettingsPage() {
   const { currentTrack, isPlaying, playTrack } = useAudioPlayer();
   const { t } = useTranslation();
+  const {
+    showHomepageStats: storedShowHomepageStats,
+    showPricingPlans: storedShowPricingPlans,
+    isLoading: isPublicSettingsLoading,
+    error: publicSettingsError,
+    updateHomepageStatsVisibility,
+    updatePricingPlansVisibility,
+  } = useMaintenanceModeContext();
   const [socialForm, setSocialForm] = useState<SocialLinksForm>(EMPTY_FORM);
   const [isSocialLoading, setIsSocialLoading] = useState(true);
   const [isSocialSaving, setIsSocialSaving] = useState(false);
-  const [showHomepageStats, setShowHomepageStats] = useState(false);
-  const [isHomepageStatsLoading, setIsHomepageStatsLoading] = useState(true);
+  const [showHomepageStatsInput, setShowHomepageStatsInput] = useState(false);
   const [isHomepageStatsSaving, setIsHomepageStatsSaving] = useState(false);
+  const [showPricingPlansInput, setShowPricingPlansInput] = useState(true);
+  const [isPricingPlansSaving, setIsPricingPlansSaving] = useState(false);
 
   const [siteAudioSettings, setSiteAudioSettings] = useState<SiteAudioSettingsRow | null>(null);
   const [watermarkForm, setWatermarkForm] = useState<WatermarkSettingsForm>(EMPTY_WATERMARK_FORM);
@@ -173,6 +172,26 @@ export function AdminSettingsPage() {
     if (Number.isNaN(parsed.getTime())) return t('common.unknown');
     return formatDateTime(parsed);
   }, [siteAudioSettings?.updated_at, t]);
+
+  useEffect(() => {
+    if (!isHomepageStatsSaving) {
+      setShowHomepageStatsInput(storedShowHomepageStats);
+    }
+  }, [isHomepageStatsSaving, storedShowHomepageStats]);
+
+  useEffect(() => {
+    if (!isPricingPlansSaving) {
+      setShowPricingPlansInput(storedShowPricingPlans);
+    }
+  }, [isPricingPlansSaving, storedShowPricingPlans]);
+
+  useEffect(() => {
+    if (!publicSettingsError) {
+      return;
+    }
+
+    toast.error(t('admin.settingsPage.publicSettingsLoadError'));
+  }, [publicSettingsError, t]);
 
   useEffect(() => {
     const loadSocialLinks = async () => {
@@ -200,28 +219,9 @@ export function AdminSettingsPage() {
       setIsSocialLoading(false);
     };
 
-    const loadHomepageStatsToggle = async () => {
-      setIsHomepageStatsLoading(true);
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', HOMEPAGE_STATS_SETTINGS_KEY)
-        .maybeSingle();
-
-      if (error) {
-        console.error('admin homepage stats settings load error', error);
-        toast.error(t('admin.settingsPage.homepageStatsLoadError'));
-        setIsHomepageStatsLoading(false);
-        return;
-      }
-
-      setShowHomepageStats(parseEnabledToggle(data?.value));
-      setIsHomepageStatsLoading(false);
-    };
-
     const loadSiteAudioSettings = async () => {
       setIsWatermarkLoading(true);
-      const { data, error } = await adminDb
+      const { data, error } = await supabase
         .from(SITE_AUDIO_SETTINGS_TABLE)
         .select('id, enabled, watermark_audio_path, gain_db, min_interval_sec, max_interval_sec, updated_at, created_at')
         .limit(1)
@@ -247,7 +247,7 @@ export function AdminSettingsPage() {
       setIsWatermarkLoading(false);
     };
 
-    void Promise.all([loadSocialLinks(), loadHomepageStatsToggle(), loadSiteAudioSettings()]);
+    void Promise.all([loadSocialLinks(), loadSiteAudioSettings()]);
   }, [t]);
 
   const handlePlayWatermarkPreview = () => {
@@ -356,29 +356,34 @@ export function AdminSettingsPage() {
 
   const handleHomepageStatsSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (isHomepageStatsSaving) return;
+    if (isHomepageStatsSaving || isPublicSettingsLoading) return;
 
     setIsHomepageStatsSaving(true);
-    const { error } = await supabase
-      .from('app_settings')
-      .upsert(
-        {
-          key: HOMEPAGE_STATS_SETTINGS_KEY,
-          value: { enabled: showHomepageStats } as unknown as Json,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'key' },
-      );
-
-    if (error) {
+    try {
+      await updateHomepageStatsVisibility(showHomepageStatsInput);
+      toast.success(t('admin.settingsPage.homepageStatsSaveSuccess'));
+    } catch (error) {
       console.error('admin homepage stats settings save error', error);
       toast.error(t('admin.settingsPage.homepageStatsSaveError'));
+    } finally {
       setIsHomepageStatsSaving(false);
-      return;
     }
+  };
 
-    toast.success(t('admin.settingsPage.homepageStatsSaveSuccess'));
-    setIsHomepageStatsSaving(false);
+  const handlePricingPlansSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isPricingPlansSaving || isPublicSettingsLoading) return;
+
+    setIsPricingPlansSaving(true);
+    try {
+      await updatePricingPlansVisibility(showPricingPlansInput);
+      toast.success(t('admin.settingsPage.pricingPlansSaveSuccess'));
+    } catch (error) {
+      console.error('admin pricing plans settings save error', error);
+      toast.error(t('admin.settingsPage.pricingPlansSaveError'));
+    } finally {
+      setIsPricingPlansSaving(false);
+    }
   };
 
   const handleWatermarkSettingsSave = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -410,11 +415,11 @@ export function AdminSettingsPage() {
     };
 
     const query = siteAudioSettings?.id
-      ? adminDb
+      ? supabase
           .from(SITE_AUDIO_SETTINGS_TABLE)
           .update(payload)
           .eq('id', siteAudioSettings.id)
-      : adminDb
+      : supabase
           .from(SITE_AUDIO_SETTINGS_TABLE)
           .insert({
             ...payload,
@@ -527,6 +532,29 @@ export function AdminSettingsPage() {
     }
     setIsEnqueueingReprocess(false);
   };
+
+  const visibilityToggleCards: VisibilityToggleCardConfig[] = [
+    {
+      key: 'homepage-stats',
+      title: t('admin.settingsPage.homepageStatsTitle'),
+      subtitle: t('admin.settingsPage.homepageStatsSubtitle'),
+      label: t('admin.settingsPage.homepageStatsLabel'),
+      checked: showHomepageStatsInput,
+      setChecked: setShowHomepageStatsInput,
+      onSubmit: handleHomepageStatsSave,
+      isSaving: isHomepageStatsSaving,
+    },
+    {
+      key: 'pricing-plans',
+      title: t('admin.settingsPage.pricingPlansTitle'),
+      subtitle: t('admin.settingsPage.pricingPlansSubtitle'),
+      label: t('admin.settingsPage.pricingPlansLabel'),
+      checked: showPricingPlansInput,
+      setChecked: setShowPricingPlansInput,
+      onSubmit: handlePricingPlansSave,
+      isSaving: isPricingPlansSaving,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -656,35 +684,37 @@ export function AdminSettingsPage() {
         </form>
       </Card>
 
-      <Card className="p-6 border-zinc-800">
-        <h2 className="text-xl font-semibold text-white">{t('admin.settingsPage.homepageStatsTitle')}</h2>
-        <p className="text-zinc-400 text-sm mt-1">
-          {t('admin.settingsPage.homepageStatsSubtitle')}
-        </p>
+      {visibilityToggleCards.map((card) => (
+        <Card key={card.key} className="p-6 border-zinc-800">
+          <h2 className="text-xl font-semibold text-white">{card.title}</h2>
+          <p className="text-zinc-400 text-sm mt-1">
+            {card.subtitle}
+          </p>
 
-        <form onSubmit={handleHomepageStatsSave} className="mt-6 space-y-4">
-          <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200">
-            <input
-              type="checkbox"
-              checked={showHomepageStats}
-              onChange={(event) => setShowHomepageStats(event.target.checked)}
-              disabled={isHomepageStatsLoading || isHomepageStatsSaving}
-              className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
-            />
-            {t('admin.settingsPage.homepageStatsLabel')}
-          </label>
+          <form onSubmit={card.onSubmit} className="mt-6 space-y-4">
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                checked={card.checked}
+                onChange={(event) => card.setChecked(event.target.checked)}
+                disabled={isPublicSettingsLoading || card.isSaving}
+                className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
+              />
+              {card.label}
+            </label>
 
-          <div className="pt-2">
-            <Button
-              type="submit"
-              isLoading={isHomepageStatsSaving}
-              disabled={isHomepageStatsLoading || isHomepageStatsSaving}
-            >
-              {t('common.save')}
-            </Button>
-          </div>
-        </form>
-      </Card>
+            <div className="pt-2">
+              <Button
+                type="submit"
+                isLoading={card.isSaving}
+                disabled={isPublicSettingsLoading || card.isSaving}
+              >
+                {t('common.save')}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ))}
 
       <Card className="p-6 border-zinc-800">
         <h2 className="text-xl font-semibold text-white">{t('admin.settingsPage.socialTitle')}</h2>

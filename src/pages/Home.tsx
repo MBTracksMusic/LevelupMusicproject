@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import { fetchCatalogProducts } from '../lib/supabase/catalog';
+import { useMaintenanceModeContext } from '../lib/supabase/MaintenanceModeContext';
 import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatNumber } from '../lib/utils/format';
 
@@ -35,6 +36,7 @@ interface HomeStatsPayload {
 export function HomePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { showHomepageStats } = useMaintenanceModeContext();
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   // TODO(levelup): reactiver cette section quand les categories Exclusifs/Kits reviennent.
   const isExclusiveSectionEnabled = false;
@@ -42,11 +44,9 @@ export function HomePage() {
   const [homeStats, setHomeStats] = useState<{
     beatsPublished: number | null;
     activeProducers: number | null;
-    showHomepageStats: boolean;
   }>({
     beatsPublished: null,
     activeProducers: null,
-    showHomepageStats: false,
   });
   const [isHomeStatsLoading, setIsHomeStatsLoading] = useState(true);
   useEffect(() => {
@@ -55,7 +55,7 @@ export function HomePage() {
       return;
     }
     void fetchWishlist();
-  }, [user?.id, fetchWishlist, clearWishlist]);
+  }, [user, fetchWishlist, clearWishlist]);
 
   const handleWishlistToggle = async (productId: string) => {
     try {
@@ -107,14 +107,12 @@ export function HomePage() {
           setHomeStats({
             beatsPublished: null,
             activeProducers: null,
-            showHomepageStats: false,
           });
         } else {
           const stats = (data as HomeStatsPayload | null) ?? null;
           setHomeStats({
             beatsPublished: typeof stats?.beats_published === 'number' ? stats.beats_published : null,
             activeProducers: typeof stats?.active_producers === 'number' ? stats.active_producers : null,
-            showHomepageStats: stats?.show_homepage_stats === true,
           });
         }
         setIsHomeStatsLoading(false);
@@ -158,7 +156,7 @@ export function HomePage() {
             </Link>
           </div>
 
-          {homeStats.showHomepageStats && (
+          {showHomepageStats && (
             <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-zinc-300">
               <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
                 <Headphones className="w-4 h-4 text-orange-400" />

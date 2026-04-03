@@ -7,10 +7,10 @@ type SettingsRow = Database['public']['Tables']['settings']['Row'];
 type SettingsUpdate = Database['public']['Tables']['settings']['Update'];
 type SettingsRowShape = Pick<
   SettingsRow,
-  'id' | 'launch_date' | 'launch_video_url' | 'maintenance_mode' | 'updated_at'
+  'id' | 'launch_date' | 'launch_video_url' | 'maintenance_mode' | 'show_homepage_stats' | 'show_pricing_plans' | 'updated_at'
 >;
 
-const SETTINGS_SELECT = 'id, launch_date, launch_video_url, maintenance_mode, updated_at';
+const SETTINGS_SELECT = 'id, launch_date, launch_video_url, maintenance_mode, show_homepage_stats, show_pricing_plans, updated_at';
 const SETTINGS_CHANNEL = 'public:settings:maintenance-mode';
 
 function isSettingsRow(value: unknown): value is SettingsRowShape {
@@ -22,12 +22,16 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
     && (typeof candidate.launch_date === 'string' || candidate.launch_date === null)
     && (typeof candidate.launch_video_url === 'string' || candidate.launch_video_url === null)
     && typeof candidate.maintenance_mode === 'boolean'
+    && typeof candidate.show_homepage_stats === 'boolean'
+    && typeof candidate.show_pricing_plans === 'boolean'
     && typeof candidate.updated_at === 'string'
   );
 }
 
 export function useMaintenanceMode() {
   const [maintenance, setMaintenance] = useState(false);
+  const [showHomepageStats, setShowHomepageStats] = useState(false);
+  const [showPricingPlans, setShowPricingPlans] = useState(true);
   const [launchDate, setLaunchDate] = useState<string | null>(null);
   const [launchVideoUrl, setLaunchVideoUrl] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -38,6 +42,8 @@ export function useMaintenanceMode() {
   const applySettingsRow = useCallback((row: SettingsRowShape | null) => {
     if (!row) {
       setMaintenance(false);
+      setShowHomepageStats(false);
+      setShowPricingPlans(true);
       setLaunchDate(null);
       setLaunchVideoUrl(null);
       setSettingsId(null);
@@ -46,6 +52,8 @@ export function useMaintenanceMode() {
     }
 
     setMaintenance(row.maintenance_mode);
+    setShowHomepageStats(row.show_homepage_stats);
+    setShowPricingPlans(row.show_pricing_plans);
     setLaunchDate(row.launch_date);
     setLaunchVideoUrl(row.launch_video_url ?? null);
     setSettingsId(row.id);
@@ -124,8 +132,18 @@ export function useMaintenanceMode() {
     return updateSettings({ maintenance_mode: nextValue });
   }, [updateSettings]);
 
+  const updateHomepageStatsVisibility = useCallback(async (nextValue: boolean) => {
+    return updateSettings({ show_homepage_stats: nextValue });
+  }, [updateSettings]);
+
+  const updatePricingPlansVisibility = useCallback(async (nextValue: boolean) => {
+    return updateSettings({ show_pricing_plans: nextValue });
+  }, [updateSettings]);
+
   return {
     maintenance,
+    showHomepageStats,
+    showPricingPlans,
     launchDate,
     launchVideoUrl,
     settingsId,
@@ -135,5 +153,7 @@ export function useMaintenanceMode() {
     refresh,
     updateSettings,
     updateMaintenanceMode,
+    updateHomepageStatsVisibility,
+    updatePricingPlansVisibility,
   };
 }
