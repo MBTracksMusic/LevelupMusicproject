@@ -135,3 +135,4 @@ verify_jwt = false
 
 [functions.empty-storage-buckets]
 verify_jwt = false
+

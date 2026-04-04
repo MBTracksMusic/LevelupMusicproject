@@ -1,25 +1,47 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { requireAdminUser } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json; charset=utf-8",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const BUCKETS = [
-  "battle-campaign-images",
-  "avatars",
-  "beats-masters",
-  "beats-watermarked",
-  "contracts",
-  "beats-audio",
-  "beats-covers",
-] as const;
+const DEFAULT_CORS_ORIGIN = "https://www.beatelion.com";
 
-const PROTECTED_BUCKETS = new Set(["watermark-assets"]);
+const resolveAllowedCorsOrigins = () => {
+  const allowed = new Set<string>([
+    "https://beatelion.com",
+    "https://www.beatelion.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+  ]);
+
+  const csv = Deno.env.get("CORS_ALLOWED_ORIGINS");
+  if (typeof csv === "string" && csv.trim().length > 0) {
+    for (const token of csv.split(",")) {
+      const trimmed = token.trim();
+      if (trimmed) allowed.add(trimmed);
+    }
+  }
+
+  return allowed;
+};
+
+const ALLOWED_CORS_ORIGINS = resolveAllowedCorsOrigins();
+
+const buildCorsHeaders = (origin: string | null) => ({
+  ...BASE_CORS_HEADERS,
+  "Access-Control-Allow-Origin": origin && ALLOWED_CORS_ORIGINS.has(origin)
+    ? origin
+    : DEFAULT_CORS_ORIGIN,
+  "Vary": "Origin",
+});
+
+// Seul bucket autorisé : les previews watermarkées.
+// Les masters, contrats et avatars ne sont JAMAIS touchés.
+const ALLOWED_BUCKETS = ["beats-watermarked"] as const;
+
 const LIST_PAGE_SIZE = 100;
 const REMOVE_BATCH_SIZE = 1000;
 
@@ -27,21 +49,6 @@ type BucketResult = {
   deleted: number;
   error?: string;
 };
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders,
-  });
-}
-
-function getRequiredEnv(name: string): string {
-  const value = Deno.env.get(name)?.trim();
-  if (!value) {
-    throw new Error(`Missing ${name}`);
-  }
-  return value;
-}
 
 function joinPath(prefix: string, name: string): string {
   return prefix ? `${prefix}/${name}` : name;
@@ -70,36 +77,25 @@ async function listAllFilePaths(
 
       if (error) {
         throw new Error(
-          `Failed to list "${bucket}"${
-            prefix ? ` at "${prefix}"` : ""
-          }: ${error.message}`,
+          `Failed to list "${bucket}"${prefix ? ` at "${prefix}"` : ""}: ${error.message}`,
         );
       }
 
-      if (!data || data.length === 0) {
-        break;
-      }
+      if (!data || data.length === 0) break;
 
       for (const entry of data) {
         const name = entry.name?.trim();
-        if (!name) {
-          continue;
-        }
+        if (!name) continue;
 
         const fullPath = joinPath(prefix, name);
-
         if (entry.id === null) {
           prefixes.push(fullPath);
           continue;
         }
-
         filePaths.push(fullPath);
       }
 
-      if (data.length < LIST_PAGE_SIZE) {
-        break;
-      }
-
+      if (data.length < LIST_PAGE_SIZE) break;
       offset += LIST_PAGE_SIZE;
     }
   }
@@ -119,9 +115,7 @@ async function emptyBucket(
     const { error } = await supabaseAdmin.storage.from(bucket).remove(batch);
 
     if (error) {
-      throw new Error(
-        `Failed to remove files from "${bucket}": ${error.message}`,
-      );
+      throw new Error(`Failed to remove files from "${bucket}": ${error.message}`);
     }
 
     deleted += batch.length;
@@ -131,66 +125,50 @@ async function emptyBucket(
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get("origin");
+  const corsHeaders = buildCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return json({ ok: false, error: "Method not allowed" }, 405);
+    return new Response(JSON.stringify({ ok: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
-  try {
-    const supabaseUrl = getRequiredEnv("SUPABASE_URL");
-    const serviceRoleKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  // Auth admin obligatoire
+  const authResult = await requireAdminUser(req, corsHeaders);
+  if ("error" in authResult) return authResult.error;
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+  const { supabaseAdmin, user } = authResult;
 
-    const results: Record<string, BucketResult> = {};
-    let hasErrors = false;
+  console.log("[empty-storage-buckets] requested by admin", { userId: user.id });
 
-    for (const bucket of BUCKETS) {
-      if (PROTECTED_BUCKETS.has(bucket)) {
-        continue;
-      }
+  const results: Record<string, BucketResult> = {};
+  let hasErrors = false;
 
-      try {
-        const result = await emptyBucket(supabaseAdmin, bucket);
-        results[bucket] = result;
-        console.log("[empty-storage-buckets] bucket emptied", {
-          bucket,
-          deleted: result.deleted,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        results[bucket] = {
-          deleted: 0,
-          error: message,
-        };
-        hasErrors = true;
-        console.error("[empty-storage-buckets] bucket failed", {
-          bucket,
-          error: message,
-        });
-      }
+  for (const bucket of ALLOWED_BUCKETS) {
+    try {
+      const result = await emptyBucket(supabaseAdmin, bucket);
+      results[bucket] = result;
+      console.log("[empty-storage-buckets] bucket emptied", {
+        bucket,
+        deleted: result.deleted,
+        adminId: user.id,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results[bucket] = { deleted: 0, error: message };
+      hasErrors = true;
+      console.error("[empty-storage-buckets] bucket failed", { bucket, error: message });
     }
-
-    console.log("[empty-storage-buckets] completed", {
-      ok: !hasErrors,
-      results,
-    });
-
-    return json({
-      ok: !hasErrors,
-      results,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[empty-storage-buckets] fatal", { error: message });
-    return json({ ok: false, error: message }, 500);
   }
+
+  return new Response(JSON.stringify({ ok: !hasErrors, results }), {
+    status: hasErrors ? 500 : 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 });
