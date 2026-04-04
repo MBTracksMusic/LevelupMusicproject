@@ -7,7 +7,8 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { trackJoinBattle } from '../lib/analytics';
-import { useAuth } from '../lib/auth/hooks';
+import { useAuth, usePermissions } from '../lib/auth/hooks';
+import { FoundingTrialExpiredPaywall } from '../components/producers/FoundingTrialExpiredPaywall';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import type { BattleStatus } from '../lib/supabase/types';
@@ -267,6 +268,7 @@ function toOfficialCampaignErrorMessage(message: string) {
 export function ProducerBattlesPage() {
   const { t } = useTranslation();
   const { profile } = useAuth();
+  const { foundingTrialExpired } = usePermissions();
 
   const [producers, setProducers] = useState<ProducerOption[]>([]);
   const [myProducts, setMyProducts] = useState<ProductOption[]>([]);
@@ -858,6 +860,10 @@ export function ProducerBattlesPage() {
     : null;
   const canUseMatchmaking = canCreateBattle;
   const shouldShowPlansCta = Boolean(quotaStatus) && quotaStatus.tier !== 'elite' && !canCreateBattle;
+
+  if (foundingTrialExpired) {
+    return <FoundingTrialExpiredPaywall />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">

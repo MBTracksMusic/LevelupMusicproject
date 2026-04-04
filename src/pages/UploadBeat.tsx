@@ -15,7 +15,8 @@ import toast from 'react-hot-toast';
 import { trackUploadBeat } from '../lib/analytics';
 import { useAudioPlayer } from '../context/AudioPlayerContext';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
-import { useAuth } from '../lib/auth/hooks';
+import { useAuth, usePermissions } from '../lib/auth/hooks';
+import { FoundingTrialExpiredPaywall } from '../components/producers/FoundingTrialExpiredPaywall';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '../lib/supabase/types';
 import { Button } from '../components/ui/Button';
@@ -289,6 +290,7 @@ export function UploadBeatPage() {
   const { currentTrack, isPlaying, playTrack } = useAudioPlayer();
   const { t } = useTranslation();
   const { profile } = useAuth();
+  const { foundingTrialExpired } = usePermissions();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -483,7 +485,8 @@ export function UploadBeatPage() {
     };
   }, [editProductId, profile?.id, t]);
 
-  const isProducerActive = profile?.is_producer_active ?? false;
+  // can_access_producer_features couvre Stripe actif ET founding trial actif (calculé en DB)
+  const isProducerActive = profile?.can_access_producer_features ?? false;
   const hasValidationErrors = !!errors.audio || !!errors.image;
   const isSourceLoading = isVersionSourceLoading || isEditProductLoading;
   const requiresAudioFile = !isEditMode;
@@ -985,6 +988,11 @@ export function UploadBeatPage() {
       </div>
     );
   };
+
+  // Founding trial expiré : afficher le paywall (la lecture reste accessible)
+  if (foundingTrialExpired) {
+    return <FoundingTrialExpiredPaywall />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white pt-24 pb-16 px-4">

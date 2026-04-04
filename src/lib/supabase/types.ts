@@ -64,6 +64,17 @@ export interface UserProfile {
   deleted_at?: string | null;
   delete_reason?: string | null;
   deleted_label?: string | null;
+  // Founding Producer trial fields (computed by my_user_profile view)
+  is_founding_producer?: boolean;
+  founding_trial_start?: string | null;
+  founding_trial_end?: string | null;
+  founding_trial_active?: boolean;
+  founding_trial_expired?: boolean;
+  can_access_producer_features?: boolean;
+  // Campaign system (migration 222)
+  producer_campaign_type?: string | null;
+  producer_campaign_label?: string | null;
+  campaign_trial_duration?: string | null;
   xp?: number;
   level?: number;
   rank_tier?: ReputationRankTier | null;

@@ -104,8 +104,15 @@ export function usePermissions() {
 
   return useMemo(() => {
     const role = profile?.role ?? 'visitor';
-    const isProducerActive = isProducerSafe(profile);
     const isConfirmed = isConfirmedProfile(profile);
+
+    // Source de vérité unique : calculée par la vue my_user_profile (DB).
+    // Couvre Stripe actif ET founding trial actif.
+    // Ne jamais recalculer cette logique côté JS.
+    const canAccessProducerFeatures = profile?.can_access_producer_features === true;
+
+    // Trial founding expiré sans Stripe : afficher le paywall dans les pages producteur.
+    const foundingTrialExpired = profile?.founding_trial_expired === true;
 
     return {
       canViewPreview: true,
@@ -115,10 +122,11 @@ export function usePermissions() {
       canPurchaseKit: true,
       canVote: isConfirmed,
       canComment: !!user,
-      canSell: isProducerActive,
-      canCreateBattle: isProducerActive,
+      canSell: canAccessProducerFeatures,
+      canCreateBattle: canAccessProducerFeatures,
       canModerate: role === 'admin',
       canManageUsers: role === 'admin',
+      foundingTrialExpired,
     };
   }, [profile, user]);
 }

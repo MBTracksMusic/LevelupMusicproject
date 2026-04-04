@@ -275,6 +275,31 @@ serveWithErrorHandling("producer-checkout", async (req: Request) => {
       });
     }
 
+    // Guard founding trial : bloquer le checkout si le trial est encore actif.
+    // Le calcul de "3 mois" est délégué à Postgres via RPC (interval '3 months').
+    // Zéro logique de date côté JS.
+    const { data: foundingTrialActive, error: foundingTrialError } = await supabaseAdmin
+      .rpc("is_founding_trial_active", { p_user_id: user.id });
+
+    if (foundingTrialError) {
+      console.error("DB_ERROR", {
+        function: "producer-checkout",
+        stage: "check_founding_trial",
+        message: foundingTrialError.message,
+      });
+      return new Response(JSON.stringify({ error: "Unable to verify founding trial status" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (foundingTrialActive === true) {
+      return new Response(JSON.stringify({ error: "founding_trial_active" }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: existingUserSubscription, error: existingUserSubscriptionError } = await supabaseAdmin
       .from("user_subscriptions")
       .select("subscription_status, current_period_end")

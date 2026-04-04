@@ -80,7 +80,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const fetchPromise = (async () => {
       const { data, error } = await supabase
         .from('my_user_profile')
-        .select('id, user_id, username, full_name, avatar_url, role, producer_tier, is_producer_active, is_deleted, deleted_at, delete_reason, deleted_label, total_purchases, confirmed_at, producer_verified_at, battle_refusal_count, battles_participated, battles_completed, engagement_score, language, bio, website_url, social_links, created_at, updated_at')
+        .select('id, user_id, username, full_name, avatar_url, role, producer_tier, is_producer_active, is_deleted, deleted_at, delete_reason, deleted_label, total_purchases, confirmed_at, producer_verified_at, battle_refusal_count, battles_participated, battles_completed, engagement_score, language, bio, website_url, social_links, created_at, updated_at, is_founding_producer, founding_trial_start, founding_trial_end, founding_trial_active, founding_trial_expired, can_access_producer_features, producer_campaign_type, producer_campaign_label, campaign_trial_duration')
         .maybeSingle();
 
       if (error) {
@@ -97,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
 
-      const row = data as Record<string, unknown>;
+      const row = data as unknown as Record<string, unknown>;
       const resolvedLanguage = resolveInitialLanguage(row.language);
       const hasDeletedFlag = row.is_deleted === true;
       const hasDeletedTimestamp = typeof row.deleted_at === 'string';
@@ -168,6 +168,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           deleted_label: typeof row.deleted_label === 'string' ? row.deleted_label : null,
           created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
           updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
+          // Founding Producer trial (computed by my_user_profile view)
+          is_founding_producer: row.is_founding_producer === true,
+          founding_trial_start: typeof row.founding_trial_start === 'string' ? row.founding_trial_start : null,
+          founding_trial_end: typeof row.founding_trial_end === 'string' ? row.founding_trial_end : null,
+          founding_trial_active: row.founding_trial_active === true,
+          founding_trial_expired: row.founding_trial_expired === true,
+          can_access_producer_features: row.can_access_producer_features === true,
+          // Campaign system
+          producer_campaign_type: typeof row.producer_campaign_type === 'string' ? row.producer_campaign_type : null,
+          producer_campaign_label: typeof row.producer_campaign_label === 'string' ? row.producer_campaign_label : null,
+          campaign_trial_duration: typeof row.campaign_trial_duration === 'string' ? row.campaign_trial_duration : null,
         } satisfies UserProfile,
       });
 
