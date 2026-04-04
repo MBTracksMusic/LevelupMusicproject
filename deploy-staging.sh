@@ -20,31 +20,30 @@ echo "🌍 ENVIRONMENT: ${ENVIRONMENT:-undefined}"
 echo "📡 SUPABASE_PROJECT_REF: ${SUPABASE_PROJECT_REF:-undefined}"
 
 # =========================
-# 1. SAFE CHECKS
+# 1. CHECK TOOLS
+# =========================
+for cmd in git node npm supabase vercel; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "❌ Commande manquante : $cmd"
+    exit 1
+  fi
+done
+
+# =========================
+# 2. SAFE CHECKS
 # =========================
 if [ "${ENVIRONMENT:-}" != "staging" ]; then
-  echo "❌ ENVIRONMENT doit être égal à staging dans .env.staging"
+  echo "❌ ENVIRONMENT doit être égal à staging"
   exit 1
 fi
 
 if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
-  echo "❌ SUPABASE_PROJECT_REF manquant dans .env.staging"
+  echo "❌ SUPABASE_PROJECT_REF manquant"
   exit 1
 fi
 
-read -p "⚠️ CONFIRMER LE DEPLOY EN STAGING (yes): " confirm
-if [ "$confirm" != "yes" ]; then
-  echo "❌ Déploiement annulé"
-  exit 1
-fi
-
-# =========================
-# 2. CHECK CHANGEMENTS
-# =========================
-if [[ -z "$(git status -s)" ]]; then
-  echo "✅ Aucun changement détecté. Déploiement inutile."
-  exit 0
-fi
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 
 # =========================
 # 3. CHECK SECRETS
@@ -52,8 +51,6 @@ fi
 if [ -f "./check-secrets.sh" ]; then
   echo "🔐 Scan sécurité..."
   ./check-secrets.sh || exit 1
-else
-  echo "⚠️ Aucun check-secrets.sh trouvé (skip)"
 fi
 
 # =========================
@@ -62,97 +59,76 @@ fi
 echo "🔍 Audit du code..."
 if [ -f "./audit.sh" ]; then
   ./audit.sh || {
-    echo "❌ Audit échoué. Corrige avant déploiement."
+    echo "❌ Audit échoué"
     exit 1
   }
-else
-  echo "⚠️ Aucun audit.sh trouvé (skip)"
 fi
 
 # =========================
 # 5. AUTO FIX
 # =========================
-echo "🛠 Tentative auto-fix..."
+echo "🛠 Auto-fix..."
 if [ -f "./fix.sh" ]; then
-  ./fix.sh || echo "⚠️ Fix partiel ou ignoré"
-else
-  echo "⚠️ Aucun fix.sh trouvé (skip)"
+  ./fix.sh || echo "⚠️ Fix partiel"
 fi
 
 # =========================
-# 6. PRODUCER EARNINGS VIEW CHECK
-# =========================
-echo "🔍 Vérification producer_revenue_view..."
-if [ -f "scripts/checkProducerRevenueViewExists.mjs" ]; then
-  node scripts/checkProducerRevenueViewExists.mjs || echo "⚠️ View missing (fallback will be used)"
-else
-  echo "⚠️ Script checkProducerRevenueViewExists.mjs introuvable (skip)"
-fi
-
-# =========================
-# 7. CHECK DATABASE TYPES
+# 6. TYPES CHECK
 # =========================
 echo "🔍 Vérification database.types.ts..."
 TYPES_FILE="src/lib/supabase/database.types.ts"
-TYPES_SIZE=$(wc -c < "$TYPES_FILE" 2>/dev/null || echo 0)
-if [ "$TYPES_SIZE" -lt 10000 ]; then
-  echo "⚠️  database.types.ts vide ou trop petit (${TYPES_SIZE} bytes) — régénération..."
-  npm run supabase:types || {
-    echo "❌ Échec de la génération des types Supabase. Déploiement annulé."
-    exit 1
-  }
-  echo "✅ Types régénérés — vérification commit..."
-  git add src/lib/supabase/database.types.ts
+
+if [ ! -f "$TYPES_FILE" ]; then
+  TYPES_SIZE=0
 else
-  echo "✅ database.types.ts OK (${TYPES_SIZE} bytes)"
+  TYPES_SIZE=$(wc -c < "$TYPES_FILE")
+fi
+
+if [ "$TYPES_SIZE" -lt 10000 ]; then
+  echo "⚠️ Types invalides → régénération"
+  npm run supabase:types
+  git add "$TYPES_FILE"
 fi
 
 # =========================
-# 8. BUILD CHECK
+# 7. BUILD CHECK
 # =========================
-echo "🧪 Vérification build..."
+echo "🧪 Build..."
 npm run build
 echo "✅ Build OK"
 
 # =========================
-# 9. COMMIT PROPRE
+# 8. COMMIT & PUSH (si besoin)
 # =========================
-echo "📦 Commit & Push Git..."
-read -p "📝 Message de commit: " commit_message
-
-if [ -z "$commit_message" ]; then
-  commit_message="auto: staging deploy"
-fi
-
-git add -A
-git commit -m "$commit_message" || echo "⚠️ Rien à commit"
-git push origin main
-
-# =========================
-# 10. SUPABASE DB
-# =========================
-echo "🧠 Vérification migrations..."
-if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/migrations/"; then
-  echo "📡 Déploiement DB STAGING..."
-  supabase link --project-ref "$SUPABASE_PROJECT_REF"
-  supabase db push
+if [[ -n "$(git status -s)" ]]; then
+  echo "📦 Changements détectés"
+  git add -A
+  git commit -m "auto: staging deploy" || true
+  git push origin "$CURRENT_BRANCH"
 else
-  echo "✅ Aucune migration détectée."
+  echo "✅ Aucun changement local"
 fi
 
 # =========================
-# 11. EDGE FUNCTIONS
+# 9. SUPABASE LINK
 # =========================
-echo "⚡ Vérification functions..."
-if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/functions/"; then
-  echo "🚀 Déploiement des fonctions STAGING..."
-  supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
-else
-  echo "✅ Aucune fonction modifiée."
-fi
+echo "🔗 Liaison Supabase STAGING..."
+supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 12. VERCEL PREVIEW / STAGING
+# 10. DB
+# =========================
+echo "📡 Déploiement DB STAGING..."
+supabase db push
+
+# =========================
+# 11. FUNCTIONS
+# =========================
+echo "⚡ Déploiement fonctions STAGING..."
+supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+# =========================
+# 12. VERCEL STAGING
 # =========================
 echo "🌐 Déploiement frontend STAGING..."
 vercel

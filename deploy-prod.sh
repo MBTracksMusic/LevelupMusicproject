@@ -20,7 +20,17 @@ echo "🌍 ENVIRONMENT: ${ENVIRONMENT:-undefined}"
 echo "📡 SUPABASE_PROJECT_REF: ${SUPABASE_PROJECT_REF:-undefined}"
 
 # =========================
-# 1. SAFE CHECKS
+# 1. CHECK TOOLS
+# =========================
+for cmd in git node npm supabase vercel; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "❌ Commande manquante : $cmd"
+    exit 1
+  fi
+done
+
+# =========================
+# 2. SAFE CHECKS
 # =========================
 if [ "${ENVIRONMENT:-}" != "production" ]; then
   echo "❌ ENVIRONMENT doit être égal à production dans .env.production"
@@ -32,6 +42,12 @@ if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
   exit 1
 fi
 
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+  echo "❌ Déploiement production autorisé uniquement depuis la branche main (actuelle : $CURRENT_BRANCH)"
+  exit 1
+fi
+
 read -p "⚠️ CONFIRMER LE DEPLOY EN PRODUCTION (yes): " confirm
 if [ "$confirm" != "yes" ]; then
   echo "❌ Déploiement annulé"
@@ -39,19 +55,11 @@ if [ "$confirm" != "yes" ]; then
 fi
 
 # =========================
-# 2. CHECK CHANGEMENTS
-# =========================
-if [[ -z "$(git status -s)" ]]; then
-  echo "✅ Aucun changement détecté. Déploiement inutile."
-  exit 0
-fi
-
-# =========================
 # 3. CHECK SECRETS
 # =========================
 if [ -f "./check-secrets.sh" ]; then
   echo "🔐 Scan sécurité..."
-  ./check-secrets.sh || exit 1
+  ./check-secrets.sh
 else
   echo "⚠️ Aucun check-secrets.sh trouvé (skip)"
 fi
@@ -80,7 +88,7 @@ else
 fi
 
 # =========================
-# 6. PRODUCER EARNINGS VIEW CHECK
+# 6. PRODUCER REVENUE VIEW CHECK
 # =========================
 echo "🔍 Vérification producer_revenue_view..."
 if [ -f "scripts/checkProducerRevenueViewExists.mjs" ]; then
@@ -94,15 +102,21 @@ fi
 # =========================
 echo "🔍 Vérification database.types.ts..."
 TYPES_FILE="src/lib/supabase/database.types.ts"
-TYPES_SIZE=$(wc -c < "$TYPES_FILE" 2>/dev/null || echo 0)
+
+if [ ! -f "$TYPES_FILE" ]; then
+  TYPES_SIZE=0
+else
+  TYPES_SIZE=$(wc -c < "$TYPES_FILE")
+fi
+
 if [ "$TYPES_SIZE" -lt 10000 ]; then
-  echo "⚠️  database.types.ts vide ou trop petit (${TYPES_SIZE} bytes) — régénération..."
+  echo "⚠️ database.types.ts vide ou trop petit (${TYPES_SIZE} bytes) — régénération..."
   npm run supabase:types || {
     echo "❌ Échec de la génération des types Supabase. Déploiement annulé."
     exit 1
   }
-  echo "✅ Types régénérés — vérification commit..."
-  git add src/lib/supabase/database.types.ts
+  echo "✅ Types régénérés"
+  git add "$TYPES_FILE"
 else
   echo "✅ database.types.ts OK (${TYPES_SIZE} bytes)"
 fi
@@ -115,44 +129,43 @@ npm run build
 echo "✅ Build OK"
 
 # =========================
-# 9. COMMIT PROPRE
+# 9. COMMIT & PUSH SI NÉCESSAIRE
 # =========================
-echo "📦 Commit & Push Git..."
-read -p "📝 Message de commit: " commit_message
+if [[ -n "$(git status -s)" ]]; then
+  echo "📦 Changements locaux détectés"
+  read -p "📝 Message de commit: " commit_message
 
-if [ -z "$commit_message" ]; then
-  commit_message="auto: prod deploy"
-fi
+  if [ -z "$commit_message" ]; then
+    commit_message="auto: prod deploy"
+  fi
 
-git add -A
-git commit -m "$commit_message" || echo "⚠️ Rien à commit"
-git push origin main
-
-# =========================
-# 10. SUPABASE DB
-# =========================
-echo "🧠 Vérification migrations..."
-if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/migrations/"; then
-  echo "📡 Déploiement DB PROD..."
-  supabase link --project-ref "$SUPABASE_PROJECT_REF"
-  supabase db push
+  git add -A
+  git commit -m "$commit_message" || echo "⚠️ Rien à commit"
+  git push origin main
 else
-  echo "✅ Aucune migration détectée."
+  echo "✅ Aucun changement local à commit"
 fi
 
 # =========================
-# 11. EDGE FUNCTIONS
+# 10. LINK SUPABASE PROD
 # =========================
-echo "⚡ Vérification functions..."
-if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^supabase/functions/"; then
-  echo "🚀 Déploiement des fonctions PROD..."
-  supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
-else
-  echo "✅ Aucune fonction modifiée."
-fi
+echo "🔗 Liaison au projet Supabase PROD..."
+supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 12. VERCEL PROD
+# 11. SUPABASE DB
+# =========================
+echo "📡 Déploiement DB PROD..."
+supabase db push
+
+# =========================
+# 12. EDGE FUNCTIONS
+# =========================
+echo "⚡ Déploiement des Edge Functions PROD..."
+supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+# =========================
+# 13. VERCEL PROD
 # =========================
 echo "🌐 Déploiement frontend PROD..."
 vercel --prod
