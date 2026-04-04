@@ -127,7 +127,7 @@ async function invokeRpc<TData>(
   functionName: string,
   args: Record<string, unknown>,
 ): Promise<RpcCallResult<TData>> {
-  const rpc = client.rpc as unknown as (
+  const rpc = client.rpc.bind(client) as unknown as (
     fn: string,
     params?: Record<string, unknown>,
   ) => Promise<RpcCallResult<TData>>;
