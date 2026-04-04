@@ -1,6 +1,6 @@
 import type { UserProfile } from '../supabase/types';
 
-export type ProducerAccessProfile = Pick<UserProfile, 'role' | 'is_producer_active'> & {
+export type ProducerAccessProfile = Pick<UserProfile, 'role' | 'is_producer_active' | 'can_access_producer_features'> & {
   stripe_account_charges_enabled?: boolean | null;
 };
 
@@ -9,7 +9,7 @@ export function isProducer(profile: Pick<ProducerAccessProfile, 'role'> | null |
 }
 
 export function isProducerSafe(profile: ProducerAccessProfile | null | undefined): boolean {
-  return profile?.is_producer_active === true;
+  return profile?.can_access_producer_features === true || profile?.is_producer_active === true;
 }
 
 export function isStripeReady(
