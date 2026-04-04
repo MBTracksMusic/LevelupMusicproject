@@ -6,6 +6,8 @@ import {
 } from "../_shared/auth.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
+const FUNCTION_VERSION = "2026-04-04-admin-assign-refresh-1";
+
 const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
@@ -212,6 +214,7 @@ serveWithErrorHandling("admin-assign-campaign", async (req: Request): Promise<Re
         }
 
         console.error("[admin-assign-campaign] failed to resolve user by id", {
+          functionVersion: FUNCTION_VERSION,
           code: userError.code,
           message: userError.message,
           userId,
@@ -240,6 +243,7 @@ serveWithErrorHandling("admin-assign-campaign", async (req: Request): Promise<Re
         }
 
         console.error("[admin-assign-campaign] failed to resolve user by email", {
+          functionVersion: FUNCTION_VERSION,
           code: userError.code,
           message: userError.message,
           email,
@@ -315,6 +319,7 @@ serveWithErrorHandling("admin-assign-campaign", async (req: Request): Promise<Re
       }
 
       console.error("[admin-assign-campaign] RPC error", {
+        functionVersion: FUNCTION_VERSION,
         code: rpcError.code,
         message,
         userId: resolvedUser.id,
@@ -340,7 +345,10 @@ serveWithErrorHandling("admin-assign-campaign", async (req: Request): Promise<Re
       headers: jsonHeaders,
     });
   } catch (error) {
-    console.error("[admin-assign-campaign] unexpected error", error);
+    console.error("[admin-assign-campaign] unexpected error", {
+      functionVersion: FUNCTION_VERSION,
+      error,
+    });
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: jsonHeaders,
