@@ -146,10 +146,12 @@ export function AdminSettingsPage() {
   const { t } = useTranslation();
   const {
     showHomepageStats: storedShowHomepageStats,
+    showUserPremiumCredits: storedShowUserPremiumCredits,
     pricingVisibility: storedPricingVisibility,
     isLoading: isPublicSettingsLoading,
     error: publicSettingsError,
     updateHomepageStatsVisibility,
+    updateUserPremiumCreditsVisibility,
     updatePricingPlansVisibility,
   } = useMaintenanceModeContext();
   const [socialForm, setSocialForm] = useState<SocialLinksForm>(EMPTY_FORM);
@@ -157,6 +159,8 @@ export function AdminSettingsPage() {
   const [isSocialSaving, setIsSocialSaving] = useState(false);
   const [showHomepageStatsInput, setShowHomepageStatsInput] = useState(storedShowHomepageStats);
   const [isHomepageStatsSaving, setIsHomepageStatsSaving] = useState(false);
+  const [showUserPremiumCreditsInput, setShowUserPremiumCreditsInput] = useState(storedShowUserPremiumCredits);
+  const [isUserPremiumCreditsSaving, setIsUserPremiumCreditsSaving] = useState(false);
   const [pricingVisibilityInput, setPricingVisibilityInput] = useState<PricingVisibility>(storedPricingVisibility);
   const [isPricingPlansSaving, setIsPricingPlansSaving] = useState(false);
 
@@ -184,6 +188,12 @@ export function AdminSettingsPage() {
       setShowHomepageStatsInput(storedShowHomepageStats);
     }
   }, [isHomepageStatsSaving, storedShowHomepageStats]);
+
+  useEffect(() => {
+    if (!isUserPremiumCreditsSaving) {
+      setShowUserPremiumCreditsInput(storedShowUserPremiumCredits);
+    }
+  }, [isUserPremiumCreditsSaving, storedShowUserPremiumCredits]);
 
   useEffect(() => {
     if (!isPricingPlansSaving) {
@@ -376,6 +386,22 @@ export function AdminSettingsPage() {
     }
   };
 
+  const handleUserPremiumCreditsSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isUserPremiumCreditsSaving || isPublicSettingsLoading) return;
+
+    setIsUserPremiumCreditsSaving(true);
+    try {
+      await updateUserPremiumCreditsVisibility(showUserPremiumCreditsInput);
+      toast.success(t('admin.settingsPage.pricingPlansSaveSuccess'));
+    } catch (error) {
+      console.error('admin user premium credits visibility save error', error);
+      toast.error(t('admin.settingsPage.pricingPlansSaveError'));
+    } finally {
+      setIsUserPremiumCreditsSaving(false);
+    }
+  };
+
   const handlePricingPlansSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isPricingPlansSaving || isPublicSettingsLoading) return;
@@ -558,6 +584,21 @@ export function AdminSettingsPage() {
       ],
       onSubmit: handleHomepageStatsSave,
       isSaving: isHomepageStatsSaving,
+    },
+    {
+      key: 'user-premium-credits',
+      title: t('admin.settingsPage.pricingPlanUserPremiumLabel'),
+      subtitle: t('admin.settingsPage.pricingPlansSubtitle'),
+      toggles: [
+        {
+          key: 'user-premium-credits-toggle',
+          label: 'Affichage des crédits',
+          checked: showUserPremiumCreditsInput,
+          onChange: setShowUserPremiumCreditsInput,
+        },
+      ],
+      onSubmit: handleUserPremiumCreditsSave,
+      isSaving: isUserPremiumCreditsSaving,
     },
     {
       key: 'pricing-plans',

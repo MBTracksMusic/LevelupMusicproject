@@ -5552,6 +5552,7 @@ export type Database = {
           show_homepage_stats: boolean
           show_producer_elite_plan: boolean
           show_producer_plan: boolean
+          show_user_premium_credits: boolean
           show_user_premium_plan: boolean
           updated_at: string
         }
@@ -5564,6 +5565,7 @@ export type Database = {
           show_homepage_stats?: boolean
           show_producer_elite_plan?: boolean
           show_producer_plan?: boolean
+          show_user_premium_credits?: boolean
           show_user_premium_plan?: boolean
           updated_at?: string
         }
@@ -5576,6 +5578,7 @@ export type Database = {
           show_homepage_stats?: boolean
           show_producer_elite_plan?: boolean
           show_producer_plan?: boolean
+          show_user_premium_credits?: boolean
           show_user_premium_plan?: boolean
           updated_at?: string
         }

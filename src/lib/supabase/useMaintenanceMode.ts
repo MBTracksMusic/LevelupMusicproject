@@ -21,6 +21,7 @@ type SettingsRowShape = Pick<
   | 'show_homepage_stats'
   | 'show_free_plan'
   | 'show_user_premium_plan'
+  | 'show_user_premium_credits'
   | 'show_producer_plan'
   | 'show_producer_elite_plan'
   | 'updated_at'
@@ -41,6 +42,7 @@ const SETTINGS_SELECT = [
   'show_homepage_stats',
   'show_free_plan',
   'show_user_premium_plan',
+  'show_user_premium_credits',
   'show_producer_plan',
   'show_producer_elite_plan',
   'updated_at',
@@ -59,6 +61,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
     && typeof candidate.show_homepage_stats === 'boolean'
     && typeof candidate.show_free_plan === 'boolean'
     && typeof candidate.show_user_premium_plan === 'boolean'
+    && typeof candidate.show_user_premium_credits === 'boolean'
     && typeof candidate.show_producer_plan === 'boolean'
     && typeof candidate.show_producer_elite_plan === 'boolean'
     && typeof candidate.updated_at === 'string'
@@ -68,6 +71,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
 export function useMaintenanceMode() {
   const [maintenance, setMaintenance] = useState(false);
   const [showHomepageStats, setShowHomepageStats] = useState(false);
+  const [showUserPremiumCredits, setShowUserPremiumCredits] = useState(true);
   const [pricingVisibility, setPricingVisibility] = useState<PricingVisibility>(DEFAULT_PRICING_VISIBILITY);
   const [launchDate, setLaunchDate] = useState<string | null>(null);
   const [launchVideoUrl, setLaunchVideoUrl] = useState<string | null>(null);
@@ -80,6 +84,7 @@ export function useMaintenanceMode() {
     if (!row) {
       setMaintenance(false);
       setShowHomepageStats(false);
+      setShowUserPremiumCredits(true);
       setPricingVisibility(DEFAULT_PRICING_VISIBILITY);
       setLaunchDate(null);
       setLaunchVideoUrl(null);
@@ -90,6 +95,7 @@ export function useMaintenanceMode() {
 
     setMaintenance(row.maintenance_mode);
     setShowHomepageStats(row.show_homepage_stats);
+    setShowUserPremiumCredits(row.show_user_premium_credits);
     setPricingVisibility({
       free: row.show_free_plan,
       userPremium: row.show_user_premium_plan,
@@ -178,6 +184,10 @@ export function useMaintenanceMode() {
     return updateSettings({ show_homepage_stats: nextValue });
   }, [updateSettings]);
 
+  const updateUserPremiumCreditsVisibility = useCallback(async (nextValue: boolean) => {
+    return updateSettings({ show_user_premium_credits: nextValue });
+  }, [updateSettings]);
+
   const updatePricingPlansVisibility = useCallback(async (nextValue: PricingVisibility) => {
     return updateSettings({
       show_free_plan: nextValue.free,
@@ -195,6 +205,7 @@ export function useMaintenanceMode() {
   return {
     maintenance,
     showHomepageStats,
+    showUserPremiumCredits,
     pricingVisibility,
     showFreePlan,
     showUserPremiumPlan,
@@ -210,6 +221,7 @@ export function useMaintenanceMode() {
     updateSettings,
     updateMaintenanceMode,
     updateHomepageStatsVisibility,
+    updateUserPremiumCreditsVisibility,
     updatePricingPlansVisibility,
   };
 }

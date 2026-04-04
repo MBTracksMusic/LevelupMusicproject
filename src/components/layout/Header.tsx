@@ -31,6 +31,7 @@ import { BRAND } from '../../config/branding';
 import beatelionIcon from '../../assets/beatelion-icon.svg';
 import { CreditBadge } from '../credits/CreditBadge';
 import { isProducerSafe } from '../../lib/auth/producer';
+import { useMaintenanceModeContext } from '../../lib/supabase/MaintenanceModeContext';
 
 export function Header() {
   const { t, language, updateLanguage, languages } = useTranslation();
@@ -45,6 +46,7 @@ export function Header() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
 
+  const { showUserPremiumCredits } = useMaintenanceModeContext();
   const cartItemCount = items.length;
   const canAccessProducer = isProducerSafe(profile) || profile?.role === 'admin';
 
@@ -272,7 +274,7 @@ export function Header() {
 
             {user && (
               <>
-                <CreditBadge />
+                {showUserPremiumCredits && <CreditBadge />}
                 <Link
                   to="/wishlist"
                   className="p-2 text-zinc-400 hover:text-white transition-colors"
