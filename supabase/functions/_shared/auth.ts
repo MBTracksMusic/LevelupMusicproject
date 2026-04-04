@@ -52,11 +52,15 @@ export function createAdminClient(): SupabaseAdmin {
 
 export function createUserClient(token: string): SupabaseAdmin {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseUrl || !anonKey) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
-  return createClient(supabaseUrl, anonKey, {
+
+  // RLS is enforced from the Authorization header, not the apikey header.
+  // Using the service role key as apikey while overriding Authorization with
+  // the caller JWT preserves auth.uid() / policies for PostgREST requests.
+  return createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: {
       headers: {

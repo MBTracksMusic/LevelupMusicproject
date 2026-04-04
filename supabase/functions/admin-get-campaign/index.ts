@@ -1,9 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import {
-  createUserClient,
-  extractBearerToken,
-  requireAdminUser,
-} from "../_shared/auth.ts";
+import { requireAdminUser } from "../_shared/auth.ts";
 import { serveWithErrorHandling } from "../_shared/error-handler.ts";
 
 const BASE_CORS_HEADERS = {
@@ -81,12 +77,11 @@ const asNonEmptyString = (value: unknown) => {
 };
 
 type CampaignProducerRow = {
-  user_id?: string | null;
-  username?: string | null;
-  email?: string | null;
-  trial_start?: string | null;
-  trial_end?: string | null;
-  trial_active?: boolean | null;
+  id: string;
+  username: string | null;
+  full_name: string | null;
+  email: string | null;
+  founding_trial_start: string | null;
 };
 
 type CampaignRow = {
@@ -97,28 +92,94 @@ type CampaignRow = {
   trial_duration: string | null;
 };
 
-type RpcErrorShape = {
-  code?: string;
-  message?: string | null;
+type CampaignProducerResponse = {
+  user_id: string;
+  username: string | null;
+  full_name: string | null;
+  email: string | null;
+  founding_trial_start: string | null;
+  founding_trial_end: string | null;
+  founding_trial_active: boolean;
 };
 
-type RpcCallResult<TData> = {
-  data: TData | null;
-  error: RpcErrorShape | null;
+type IntervalParts = {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
 };
 
-async function invokeRpc<TData>(
-  client: ReturnType<typeof createUserClient>,
-  functionName: string,
-  args: Record<string, unknown>,
-): Promise<RpcCallResult<TData>> {
-  const rpc = client.rpc as unknown as (
-    fn: string,
-    params?: Record<string, unknown>,
-  ) => Promise<RpcCallResult<TData>>;
+const EMPTY_INTERVAL: IntervalParts = {
+  years: 0,
+  months: 0,
+  days: 0,
+  hours: 0,
+  minutes: 0,
+  seconds: 0,
+};
 
-  return rpc(functionName, args);
-}
+const parseInterval = (value: string | null): IntervalParts => {
+  if (!value) return EMPTY_INTERVAL;
+
+  const result: IntervalParts = { ...EMPTY_INTERVAL };
+  const normalized = value.trim().toLowerCase();
+  const tokenRe = /(-?\d+(?:\.\d+)?)\s*(years?|year|yrs?|yr|y|mons?|months?|mon|days?|day|hours?|hour|hrs?|hr|h|minutes?|minute|mins?|min|m(?!on)|seconds?|second|secs?|sec|s)\b/g;
+
+  for (const match of normalized.matchAll(tokenRe)) {
+    const amount = Number(match[1]);
+    const unit = match[2];
+    if (!Number.isFinite(amount)) continue;
+
+    if (unit.startsWith("y")) result.years += amount;
+    else if (unit.startsWith("mon")) result.months += amount;
+    else if (unit.startsWith("day")) result.days += amount;
+    else if (unit === "h" || unit.startsWith("hr") || unit.startsWith("hour")) result.hours += amount;
+    else if (unit === "m" || unit.startsWith("min")) result.minutes += amount;
+    else if (unit === "s" || unit.startsWith("sec")) result.seconds += amount;
+  }
+
+  const timeMatch = normalized.match(/(-?\d{1,2}):(\d{2}):(\d{2})/);
+  if (timeMatch) {
+    const sign = timeMatch[1].startsWith("-") ? -1 : 1;
+    const hours = Math.abs(Number(timeMatch[1]));
+    const minutes = Number(timeMatch[2]);
+    const seconds = Number(timeMatch[3]);
+
+    if (Number.isFinite(hours)) result.hours += sign * hours;
+    if (Number.isFinite(minutes)) result.minutes += sign * minutes;
+    if (Number.isFinite(seconds)) result.seconds += sign * seconds;
+  }
+
+  return result;
+};
+
+const addInterval = (isoDate: string | null, interval: string | null): string | null => {
+  if (!isoDate) return null;
+
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parsed = parseInterval(interval);
+  const next = new Date(date);
+
+  if (parsed.years !== 0) next.setUTCFullYear(next.getUTCFullYear() + parsed.years);
+  if (parsed.months !== 0) next.setUTCMonth(next.getUTCMonth() + parsed.months);
+  if (parsed.days !== 0) next.setUTCDate(next.getUTCDate() + parsed.days);
+  if (parsed.hours !== 0) next.setUTCHours(next.getUTCHours() + parsed.hours);
+  if (parsed.minutes !== 0) next.setUTCMinutes(next.getUTCMinutes() + parsed.minutes);
+  if (parsed.seconds !== 0) next.setUTCSeconds(next.getUTCSeconds() + parsed.seconds);
+
+  return next.toISOString();
+};
+
+const isTrialActive = (trialEnd: string | null) => {
+  if (!trialEnd) return false;
+  const trialEndDate = new Date(trialEnd);
+  if (Number.isNaN(trialEndDate.getTime())) return false;
+  return Date.now() < trialEndDate.getTime();
+};
 
 serveWithErrorHandling("admin-get-campaign", async (req: Request): Promise<Response> => {
   const requestOrigin = resolveRequestOrigin(req);
@@ -142,15 +203,7 @@ serveWithErrorHandling("admin-get-campaign", async (req: Request): Promise<Respo
       return authContext.error;
     }
 
-    const token = extractBearerToken(req);
-    if (!token) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: jsonHeaders,
-      });
-    }
-
-    const supabaseUser = createUserClient(token);
+    const { supabaseAdmin } = authContext;
 
     const payload = await req.json().catch(() => null) as Record<string, unknown> | null;
     if (!payload || Array.isArray(payload)) {
@@ -169,7 +222,7 @@ serveWithErrorHandling("admin-get-campaign", async (req: Request): Promise<Respo
     }
 
     // Fetch campaign config (slots info)
-    const { data: campaignData, error: campaignError } = await supabaseUser
+    const { data: campaignData, error: campaignError } = await supabaseAdmin
       .from("producer_campaigns")
       .select("type, label, max_slots, is_active, trial_duration")
       .eq("type", campaignType)
@@ -194,44 +247,40 @@ serveWithErrorHandling("admin-get-campaign", async (req: Request): Promise<Respo
       });
     }
 
-    // Fetch producers via safe RPC (admin-checked inside)
-    const { data: producersData, error: rpcError } = await invokeRpc<CampaignProducerRow[]>(
-      supabaseUser,
-      "admin_list_campaign_producers_safe",
-      { p_campaign_type: campaignType },
-    );
-    const producers = producersData as CampaignProducerRow[] | null;
+    const { data: producersData, error: producersError } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, username, full_name, email, founding_trial_start")
+      .eq("producer_campaign_type", campaignType)
+      .order("founding_trial_start", { ascending: true });
+    const producers = (producersData ?? null) as CampaignProducerRow[] | null;
 
-    if (rpcError) {
-      if (rpcError.code === "42501") {
-        return new Response(JSON.stringify({ error: "Forbidden", message: rpcError.message }), {
-          status: 403,
-          headers: jsonHeaders,
-        });
-      }
-
-      console.error("[admin-get-campaign] RPC error", {
-        code: rpcError.code,
-        message: rpcError.message,
+    if (producersError) {
+      console.error("[admin-get-campaign]", {
         campaignType,
+        message: producersError.message,
+        code: producersError.code,
       });
-      return new Response(JSON.stringify({ error: "rpc_error", message: rpcError.message }), {
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
         status: 500,
         headers: jsonHeaders,
       });
     }
 
-    const normalizedProducers = Array.isArray(producers)
-      ? producers.map((row) => {
-          const producer = row as CampaignProducerRow;
+    const normalizedProducers: CampaignProducerResponse[] = Array.isArray(producers)
+      ? producers.map((producer) => {
+          const foundingTrialEnd = addInterval(
+            producer.founding_trial_start,
+            campaignRow.trial_duration,
+          );
+
           return {
-            user_id: producer.user_id ?? null,
-            username: producer.username ?? null,
-            full_name: null,
-            email: producer.email ?? null,
-            founding_trial_start: producer.trial_start ?? null,
-            founding_trial_end: producer.trial_end ?? null,
-            founding_trial_active: producer.trial_active === true,
+            user_id: producer.id,
+            username: producer.username,
+            full_name: producer.full_name,
+            email: producer.email,
+            founding_trial_start: producer.founding_trial_start,
+            founding_trial_end: foundingTrialEnd,
+            founding_trial_active: isTrialActive(foundingTrialEnd),
           };
         })
       : [];
@@ -259,7 +308,7 @@ serveWithErrorHandling("admin-get-campaign", async (req: Request): Promise<Respo
       },
     );
   } catch (error) {
-    console.error("[admin-get-campaign] unexpected error", error);
+    console.error("[admin-get-campaign]", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: jsonHeaders,
