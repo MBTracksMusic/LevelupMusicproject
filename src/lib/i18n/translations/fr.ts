@@ -1539,6 +1539,8 @@ export const fr = {
       instagramPlaceholder: 'https://instagram.com/...',
       youtubeLabel: 'YouTube URL',
       youtubePlaceholder: 'https://youtube.com/@...',
+      tiktokLabel: 'TikTok URL',
+      tiktokPlaceholder: 'https://tiktok.com/@...',
       homepageStatsTitle: 'Statistiques homepage',
       homepageStatsSubtitle: 'Activez ou masquez le bloc de statistiques affiche sur la page d accueil.',
       homepageStatsLabel: 'Afficher les statistiques de la homepage',

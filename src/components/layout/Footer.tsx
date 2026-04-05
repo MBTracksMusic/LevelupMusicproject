@@ -5,18 +5,28 @@ import { useTranslation } from '../../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import beatelionIcon from '../../assets/beatelion-icon.svg';
 
+function TikTokIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.18 8.18 0 0 0 4.78 1.52V6.76a4.85 4.85 0 0 1-1.01-.07z" />
+    </svg>
+  );
+}
+
 const SOCIAL_SETTINGS_KEY = 'social_links';
 
 interface SocialLinks {
   twitter: string | null;
   instagram: string | null;
   youtube: string | null;
+  tiktok: string | null;
 }
 
 const EMPTY_SOCIAL_LINKS: SocialLinks = {
   twitter: null,
   instagram: null,
   youtube: null,
+  tiktok: null,
 };
 
 const URL_PROTOCOL_REGEX = /^[a-z][a-z\d+.-]*:/i;
@@ -73,6 +83,7 @@ export function Footer() {
         twitter: sanitizeUrl(parsed.twitter),
         instagram: sanitizeUrl(parsed.instagram),
         youtube: sanitizeUrl(parsed.youtube),
+        tiktok: sanitizeUrl(parsed.tiktok),
       });
     };
 
@@ -87,7 +98,8 @@ export function Footer() {
     { key: 'twitter', href: socialLinks.twitter, Icon: Twitter },
     { key: 'instagram', href: socialLinks.instagram, Icon: Instagram },
     { key: 'youtube', href: socialLinks.youtube, Icon: Youtube },
-  ] as const;
+    { key: 'tiktok', href: socialLinks.tiktok, Icon: TikTokIcon },
+  ];
 
   return (
     <footer className="bg-zinc-950 border-t border-zinc-800 pb-24">

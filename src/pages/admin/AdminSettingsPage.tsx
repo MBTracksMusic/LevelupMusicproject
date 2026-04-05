@@ -20,6 +20,7 @@ interface SocialLinksForm {
   twitter: string;
   instagram: string;
   youtube: string;
+  tiktok: string;
 }
 
 interface SiteAudioSettingsRow {
@@ -65,6 +66,7 @@ const EMPTY_FORM: SocialLinksForm = {
   twitter: '',
   instagram: '',
   youtube: '',
+  tiktok: '',
 };
 
 const EMPTY_WATERMARK_FORM: WatermarkSettingsForm = {
@@ -231,6 +233,7 @@ export function AdminSettingsPage() {
         twitter: sanitizeUrl(parsed.twitter) ?? '',
         instagram: sanitizeUrl(parsed.instagram) ?? '',
         youtube: sanitizeUrl(parsed.youtube) ?? '',
+        tiktok: sanitizeUrl(parsed.tiktok) ?? '',
       });
       setIsSocialLoading(false);
     };
@@ -333,9 +336,10 @@ export function AdminSettingsPage() {
       twitter: socialForm.twitter.trim(),
       instagram: socialForm.instagram.trim(),
       youtube: socialForm.youtube.trim(),
+      tiktok: socialForm.tiktok.trim(),
     };
 
-    if (!isAllowedUrl(rawForm.twitter) || !isAllowedUrl(rawForm.instagram) || !isAllowedUrl(rawForm.youtube)) {
+    if (!isAllowedUrl(rawForm.twitter) || !isAllowedUrl(rawForm.instagram) || !isAllowedUrl(rawForm.youtube) || !isAllowedUrl(rawForm.tiktok)) {
       toast.error(t('admin.settingsPage.urlsHttpOnly'));
       return;
     }
@@ -344,6 +348,7 @@ export function AdminSettingsPage() {
       twitter: sanitizeUrl(rawForm.twitter) ?? '',
       instagram: sanitizeUrl(rawForm.instagram) ?? '',
       youtube: sanitizeUrl(rawForm.youtube) ?? '',
+      tiktok: sanitizeUrl(rawForm.tiktok) ?? '',
     };
 
     setIsSocialSaving(true);
@@ -829,6 +834,14 @@ export function AdminSettingsPage() {
             value={socialForm.youtube}
             onChange={(event) => setSocialForm((prev) => ({ ...prev, youtube: event.target.value }))}
             placeholder={t('admin.settingsPage.youtubePlaceholder')}
+            disabled={isSocialLoading || isSocialSaving}
+          />
+          <Input
+            type="url"
+            label={t('admin.settingsPage.tiktokLabel')}
+            value={socialForm.tiktok}
+            onChange={(event) => setSocialForm((prev) => ({ ...prev, tiktok: event.target.value }))}
+            placeholder={t('admin.settingsPage.tiktokPlaceholder')}
             disabled={isSocialLoading || isSocialSaving}
           />
 

@@ -1540,6 +1540,8 @@ export const en: TranslationSchema = {
       instagramPlaceholder: 'https://instagram.com/...',
       youtubeLabel: 'YouTube URL',
       youtubePlaceholder: 'https://youtube.com/@...',
+      tiktokLabel: 'TikTok URL',
+      tiktokPlaceholder: 'https://tiktok.com/@...',
       homepageStatsTitle: 'Homepage stats',
       homepageStatsSubtitle: 'Enable or hide the homepage statistics pills while the platform is in early stage.',
       homepageStatsLabel: 'Show homepage statistics',

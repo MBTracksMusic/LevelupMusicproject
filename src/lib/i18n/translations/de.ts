@@ -1538,6 +1538,8 @@ export const de: TranslationSchema = {
       instagramPlaceholder: 'https://instagram.com/...',
       youtubeLabel: 'YouTube-URL',
       youtubePlaceholder: 'https://youtube.com/@...',
+      tiktokLabel: 'TikTok-URL',
+      tiktokPlaceholder: 'https://tiktok.com/@...',
       homepageStatsTitle: 'Homepage-Statistiken',
       homepageStatsSubtitle: 'Blende die Statistik-Pills auf der Startseite ein oder aus.',
       homepageStatsLabel: 'Homepage-Statistiken anzeigen',
