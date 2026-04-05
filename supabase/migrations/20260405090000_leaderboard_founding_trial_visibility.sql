@@ -610,4 +610,73 @@ COMMENT ON FUNCTION public.reset_elo_for_new_season() IS
   'Aborts with an exception if archive produces 0 rows but producers exist. '
   'Admin or service_role only.';
 
+
+-- ===========================================================================
+-- 8. get_public_home_top_producers()
+--    Original: migration 157.
+--    Change: restrict to role = 'producer' only (admins excluded from homepage).
+--    Also excludes users without a subscription or active founding trial,
+--    consistent with the rest of the leaderboard system.
+-- ===========================================================================
+
+CREATE OR REPLACE FUNCTION public.get_public_home_top_producers(p_limit integer DEFAULT 10)
+RETURNS TABLE (
+  user_id      uuid,
+  raw_username text,
+  username     text,
+  avatar_url   text,
+  wins         integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  WITH wins_by_user AS (
+    SELECT
+      b.winner_id AS user_id,
+      COUNT(*)::integer AS wins
+    FROM public.battles b
+    WHERE b.status = 'completed'
+      AND b.winner_id IS NOT NULL
+    GROUP BY b.winner_id
+  )
+  SELECT
+    up.id AS user_id,
+    up.username AS raw_username,
+    public.get_public_profile_label(up) AS username,
+    CASE
+      WHEN COALESCE(up.is_deleted, false) = true OR up.deleted_at IS NOT NULL THEN NULL
+      ELSE up.avatar_url
+    END AS avatar_url,
+    w.wins
+  FROM wins_by_user w
+  JOIN public.user_profiles up ON up.id = w.user_id
+  LEFT JOIN public.producer_campaigns pc
+    ON pc.type = up.producer_campaign_type
+  WHERE up.role = 'producer'
+    AND NULLIF(btrim(COALESCE(up.username, '')), '') IS NOT NULL
+    AND (
+      up.is_producer_active = true
+      OR (
+        up.producer_campaign_type IS NOT NULL
+        AND up.founding_trial_start IS NOT NULL
+        AND pc.is_active = true
+        AND now() < up.founding_trial_start + pc.trial_duration
+      )
+    )
+  ORDER BY w.wins DESC, up.updated_at DESC, up.id ASC
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 10), 1), 30);
+$$;
+
+COMMENT ON FUNCTION public.get_public_home_top_producers(integer)
+IS 'Public-safe top producers for homepage (wins from completed battles). Admins excluded. Requires active subscription or founding trial.';
+
+REVOKE ALL ON FUNCTION public.get_public_home_top_producers(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_public_home_top_producers(integer) FROM anon;
+REVOKE ALL ON FUNCTION public.get_public_home_top_producers(integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.get_public_home_top_producers(integer) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_public_home_top_producers(integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_public_home_top_producers(integer) TO service_role;
+
 COMMIT;
