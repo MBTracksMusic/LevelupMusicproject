@@ -213,18 +213,23 @@ function WaitlistCard() {
   const [rows, setRows] = useState<WaitlistRow[]>([]);
   const [tab, setTab] = useState<WaitlistTab>('pending');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
 
   const load = async () => {
     setIsLoading(true);
+    setLoadError(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from('waitlist')
-      .select('id, email, status, source, created_at, accepted_at, user_id, notes')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast.error('Erreur chargement waitlist.');
+      const msg = (error as { message?: string; code?: string }).message
+        ?? JSON.stringify(error);
+      const code = (error as { code?: string }).code ?? '';
+      setLoadError(`[${code}] ${msg}`);
       console.error('[AdminLaunch] waitlist load error', error);
     } else {
       setRows((data as unknown as WaitlistRow[]) ?? []);
@@ -308,9 +313,14 @@ function WaitlistCard() {
 
       {/* Table */}
       <div className="mt-4 overflow-x-auto">
+        {loadError && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400 font-mono break-all">
+            <span className="font-semibold">Erreur DB :</span> {loadError}
+          </div>
+        )}
         {isLoading ? (
           <p className="py-8 text-center text-sm text-zinc-500">Chargement...</p>
-        ) : filtered.length === 0 ? (
+        ) : loadError ? null : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-500">
             Aucune entrée {tab === 'pending' ? 'en attente' : tab === 'accepted' ? 'acceptée' : 'refusée'}.
           </p>
