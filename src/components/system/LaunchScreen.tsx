@@ -357,8 +357,20 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           </div>
         )}
 
+        {/* Accès VIP */}
+        <div className="mt-10 flex flex-col items-center gap-2">
+          <p className="text-xs text-zinc-600">Tu as déjà un accès ?</p>
+          <a
+            href="/login"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900/60 px-4 py-1.5 text-xs font-medium text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+            Accès VIP — Se connecter
+          </a>
+        </div>
+
         {/* Footer */}
-        <p className="mt-12 text-xs text-zinc-700">
+        <p className="mt-8 text-xs text-zinc-700">
           © {new Date().getFullYear()} Beatelion — Plateforme réservée aux producteurs.
         </p>
       </div>
