@@ -278,6 +278,7 @@ export function initializeAuth() {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        setLoading(true);
         await fetchProfile();
       } else {
         useAuthStore.setState({ profile: null });

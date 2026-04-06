@@ -55,7 +55,7 @@ const FALLBACK_MESSAGES: Record<'public' | 'waitlist_pending', LaunchMessages> =
  * keeping the happy-path latency near zero.
  */
 export function useLaunchAccess() {
-  const { user, profile, isInitialized } = useAuth();
+  const { user, profile, isInitialized, isLoading: isAuthLoading } = useAuth();
   const {
     siteAccessMode,
     launchMessagePublic,
@@ -70,8 +70,8 @@ export function useLaunchAccess() {
   const [isRpcLoading, setIsRpcLoading] = useState(false);
 
   const resolveAccess = useCallback(async () => {
-    // Wait for both settings and auth to be ready
-    if (isSettingsLoading || !isInitialized) {
+    // Wait for both settings and auth (including profile fetch) to be ready
+    if (isSettingsLoading || !isInitialized || isAuthLoading) {
       setAccessLevel('loading');
       return;
     }
@@ -100,10 +100,11 @@ export function useLaunchAccess() {
     // Authenticated user in private/controlled mode → call RPC
     setIsRpcLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_my_launch_access');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('get_my_launch_access');
       if (error) throw error;
 
-      const result = data as RpcRow;
+      const result = data as unknown as RpcRow;
       setAccessLevel(result.access_level);
       setPhase(result.phase);
     } catch (err) {
@@ -114,7 +115,7 @@ export function useLaunchAccess() {
     } finally {
       setIsRpcLoading(false);
     }
-  }, [isSettingsLoading, isInitialized, isAdmin, siteAccessMode, user]);
+  }, [isSettingsLoading, isInitialized, isAuthLoading, isAdmin, siteAccessMode, user]);
 
   useEffect(() => {
     void resolveAccess();

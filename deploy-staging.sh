@@ -167,12 +167,12 @@ echo "⚡ Déploiement fonctions STAGING..."
 supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 11. VERCEL STAGING SAFE
+# 11. VERCEL DEPLOY
 # =========================
-echo "🌐 Déploiement frontend STAGING..."
+echo "🌐 Déploiement frontend..."
 
-DEPLOY_URL=$(vercel --target=preview --confirm)
+DEPLOY_URL=$(vercel --prod --yes)
 
-echo "🌐 URL STAGING : $DEPLOY_URL"
+echo "🌐 URL : $DEPLOY_URL"
 
-echo "🎉 DEPLOY STAGING OK"
+echo "🎉 DEPLOY OK"
