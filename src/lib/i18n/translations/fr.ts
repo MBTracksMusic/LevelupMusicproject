@@ -158,7 +158,7 @@ export const fr = {
   },
   home: {
     heroTitle: 'La plateforme dédiée à la créativité des beatmakers',
-    heroSubtitle: 'Publiez vos beats, participez aux battles et decouvrez des productions originales pretes a etre utilisees dans vos projets musicaux.',
+    heroSubtitle: 'Publiez vos beats, participez aux battles et decouvrez des productions originales pretes a être utilisees dans vos projets musicaux.',
     searchPlaceholder: 'Rechercher des beats, producteurs, genres...',
     featuredBeats: 'Beats en vedette',
     newReleases: 'Nouveautes',
