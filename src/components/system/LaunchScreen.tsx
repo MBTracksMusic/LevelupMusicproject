@@ -181,6 +181,15 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
     }
   };
 
+  // Fallbacks sécurisés — si l'admin n'a pas encore configuré les messages
+  const headline = messages?.headline || 'Beatelion est en accès privé';
+  const subline =
+    messages?.subline ||
+    "Une sélection de producteurs est déjà à l'intérieur. Les prochains accès arrivent progressivement.";
+
+  // Preuve sociale — null jusqu'à ce qu'on branche une vraie source ; fallback = 127
+  const waitlistCount: number | null = null;
+
   return (
     <div className="relative min-h-screen bg-zinc-950 overflow-hidden">
 
@@ -206,19 +215,27 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           <span className="text-3xl">🎧</span>
         </div>
 
-        {/* Headline — admin-configurable via settings.launch_message_public */}
+        {/* Headline */}
         <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
-          {messages.headline}
+          {headline}
         </h1>
 
         {/* Subline */}
         <p className="mt-5 max-w-sm text-base leading-relaxed text-zinc-400 sm:text-lg">
-          {messages.subline}
+          {subline}
         </p>
 
-        {/* Preuve sociale — ligne non-bloquante, sans chiffre fabricé */}
-        <p className="mt-4 text-sm text-zinc-500">
-          Rejoins les producteurs déjà sur la liste.
+        {/* Micro texte UX */}
+        <p className="mt-2 text-sm text-zinc-500">
+          Accès ouverts par vagues.
+        </p>
+
+        {/* Preuve sociale dynamique */}
+        <p className="mt-4 text-sm text-zinc-400 text-center">
+          <span className="font-semibold text-yellow-400">
+            +{waitlistCount || 127}
+          </span>
+          {' '}producteurs ont déjà demandé leur accès
         </p>
 
         {/* Date de lancement — stylée en pill */}
