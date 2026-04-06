@@ -10,7 +10,7 @@ const isConfirmedProfile = (profile: Pick<UserProfile, 'role' | 'is_confirmed'> 
 };
 
 export function useAuth() {
-  const { user, session, profile, isLoading, isInitialized, signOut, fetchProfile } = useAuthStore();
+  const { user, session, profile, isLoading, isInitialized, isProfileLoading, signOut, fetchProfile } = useAuthStore();
 
   return {
     user,
@@ -18,6 +18,7 @@ export function useAuth() {
     profile,
     isLoading,
     isInitialized,
+    isProfileLoading,
     isAuthenticated: !!user,
     signOut,
     refreshProfile: fetchProfile,

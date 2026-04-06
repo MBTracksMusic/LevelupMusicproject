@@ -55,7 +55,7 @@ const FALLBACK_MESSAGES: Record<'public' | 'waitlist_pending', LaunchMessages> =
  * keeping the happy-path latency near zero.
  */
 export function useLaunchAccess() {
-  const { user, profile, isInitialized, isLoading: isAuthLoading } = useAuth();
+  const { user, profile, isInitialized, isProfileLoading } = useAuth();
   const {
     siteAccessMode,
     launchMessagePublic,
@@ -71,7 +71,7 @@ export function useLaunchAccess() {
 
   const resolveAccess = useCallback(async () => {
     // Wait for both settings and auth (including profile fetch) to be ready
-    if (isSettingsLoading || !isInitialized || isAuthLoading) {
+    if (isSettingsLoading || !isInitialized || isProfileLoading) {
       setAccessLevel('loading');
       return;
     }
@@ -115,7 +115,7 @@ export function useLaunchAccess() {
     } finally {
       setIsRpcLoading(false);
     }
-  }, [isSettingsLoading, isInitialized, isAuthLoading, isAdmin, siteAccessMode, user]);
+  }, [isSettingsLoading, isInitialized, isProfileLoading, isAdmin, siteAccessMode, user]);
 
   useEffect(() => {
     void resolveAccess();
