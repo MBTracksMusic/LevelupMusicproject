@@ -10,15 +10,17 @@ import { useTranslation } from './lib/i18n';
 import { LogoLoader } from './components/ui/LogoLoader';
 import { AnalyticsTracker } from './components/system/AnalyticsTracker';
 import { CookieBanner } from './components/system/CookieBanner';
-import { MaintenanceScreen } from './components/system/MaintenanceScreen';
+import { LaunchScreen } from './components/system/LaunchScreen';
+import { WaitlistPendingScreen } from './components/system/WaitlistPendingScreen';
 import { MaintenanceModeProvider } from './lib/supabase/MaintenanceModeContext';
 import { useMaintenanceMode } from './lib/supabase/useMaintenanceMode';
-import { parseMaintenanceWhitelist } from './lib/maintenance/whitelist';
+import { useLaunchAccess } from './lib/supabase/useLaunchAccess';
 import { initAnalytics, setAnalyticsUserId } from './lib/analytics';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { GlobalAudioPlayer } from './components/player/GlobalAudioPlayer';
 
-const MAINTENANCE_BYPASS_PATHS = new Set([
+/** Auth routes that must always be reachable, regardless of launch phase */
+const LAUNCH_BYPASS_PATHS = new Set([
   '/login',
   '/register',
   '/forgot-password',
@@ -71,6 +73,7 @@ const AdminNewsPage = lazyNamed(() => import('./pages/admin/AdminNews'), 'AdminN
 const AdminBattlesWrapper = lazyNamed(() => import('./pages/admin/AdminBattlesWrapper'), 'AdminBattlesWrapper');
 const AdminPilotagePage = lazyNamed(() => import('./pages/admin/AdminPilotage'), 'AdminPilotagePage');
 const AdminSettingsPage = lazyNamed(() => import('./pages/admin/AdminSettingsPage'), 'AdminSettingsPage');
+const AdminLaunchPage = lazyNamed(() => import('./pages/admin/AdminLaunchPage'), 'AdminLaunchPage');
 const AdminForumPage = lazyNamed(() => import('./pages/admin/AdminForum'), 'AdminForumPage');
 const AdminForumCategoriesPage = lazyNamed(
   () => import('./pages/admin/AdminForumCategories'),
@@ -287,6 +290,7 @@ function AppContent() {
             <Route path="reputation" element={<AdminReputationPage />} />
             <Route path="revenue" element={<AdminRevenuePage />} />
             <Route path="payouts" element={<AdminPayouts />} />
+            <Route path="launch" element={<AdminLaunchPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
@@ -307,30 +311,16 @@ function NotFound() {
   );
 }
 
-function AppShell({
-  maintenance,
-  launchDate,
-  launchVideoUrl,
-  isMaintenanceLoading,
-}: {
-  maintenance: boolean;
-  launchDate: string | null;
-  launchVideoUrl: string | null;
-  isMaintenanceLoading: boolean;
-}) {
-  const { user, profile, isInitialized } = useAuth();
+function AppShell() {
   const location = useLocation();
-  const isAdmin = profile?.role === 'admin';
-  const canBypassMaintenance = MAINTENANCE_BYPASS_PATHS.has(location.pathname);
+  const { accessLevel, messages, isLoading } = useLaunchAccess();
 
-  // Check whitelist for maintenance mode bypass
-  const whitelistedEmails = parseMaintenanceWhitelist(
-    import.meta.env.VITE_MAINTENANCE_WHITELIST,
-  );
-  const userEmail = user?.email?.toLowerCase() || null;
-  const isWhitelisted = userEmail !== null && whitelistedEmails.includes(userEmail);
+  // Auth paths are always reachable regardless of launch phase
+  if (LAUNCH_BYPASS_PATHS.has(location.pathname)) {
+    return <AppContent />;
+  }
 
-  if (isMaintenanceLoading || (maintenance && !isAdmin && !isWhitelisted && !canBypassMaintenance && !isInitialized)) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <LogoLoader label="Initializing Beatelion..." iconClassName="h-14 w-14" />
@@ -338,13 +328,16 @@ function AppShell({
     );
   }
 
-  if (maintenance && !isAdmin && !isWhitelisted && !canBypassMaintenance) {
-    return (
-      <MaintenanceScreen launchDate={launchDate} launchVideoUrl={launchVideoUrl} />
-    );
+  if (accessLevel === 'full') {
+    return <AppContent />;
   }
 
-  return <AppContent />;
+  if (accessLevel === 'waitlist_pending') {
+    return <WaitlistPendingScreen messages={messages} />;
+  }
+
+  // 'public' → launch/teaser page
+  return <LaunchScreen messages={messages} />;
 }
 
 function App() {
@@ -358,24 +351,13 @@ function App() {
   }, []);
 
   const maintenanceMode = useMaintenanceMode();
-  const {
-    maintenance,
-    launchDate,
-    launchVideoUrl,
-    isLoading: isMaintenanceLoading,
-  } = maintenanceMode;
 
   return (
     <AudioPlayerProvider>
       <MaintenanceModeProvider value={maintenanceMode}>
         <BrowserRouter>
           <AnalyticsTracker />
-          <AppShell
-            maintenance={maintenance}
-            launchDate={launchDate}
-            launchVideoUrl={launchVideoUrl}
-            isMaintenanceLoading={isMaintenanceLoading}
-          />
+          <AppShell />
           <GlobalAudioPlayer />
           <CookieBanner />
           <Toaster

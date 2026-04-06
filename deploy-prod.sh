@@ -2,12 +2,12 @@
 
 set -euo pipefail
 
-echo "🚀 Déploiement PRODUCTION"
+echo "🚀 DÉPLOIEMENT PRODUCTION"
 
 # =========================
 # CONFIG
 # =========================
-EXPECTED_VERCEL_PROJECT="beatelion-production"
+EXPECTED_VERCEL_PROJECT="beatelion"
 
 # =========================
 # 0. LOAD ENV
@@ -35,10 +35,10 @@ for cmd in git node npm supabase vercel jq; do
 done
 
 # =========================
-# 2. SAFE CHECKS
+# 2. SAFE CHECKS (PROD ONLY)
 # =========================
 if [ "${ENVIRONMENT:-}" != "production" ]; then
-  echo "❌ ENVIRONMENT doit être égal à production"
+  echo "❌ Mauvais environnement (attendu: production)"
   exit 1
 fi
 
@@ -47,84 +47,124 @@ if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
   exit 1
 fi
 
+# 🔴 Sécurité : bloquer les clés Stripe de test en production
+# (ignore les placeholders de type sk_test_xxx — vraies clés gérées dans Supabase secrets)
+STRIPE_KEY="${STRIPE_SECRET_KEY:-}"
+if [[ "$STRIPE_KEY" == sk_test* ]] && [[ "$STRIPE_KEY" != *_xxx* ]] && [[ "$STRIPE_KEY" != "sk_test_xxx" ]]; then
+  echo "❌ Stripe TEST détecté en production — utilise sk_live_*"
+  exit 1
+fi
+
+# =========================
+# 3. GIT FLOW (PROD DEPUIS MAIN)
+# =========================
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [ "$CURRENT_BRANCH" != "main" ]; then
-  echo "❌ Déploiement autorisé uniquement depuis main"
+echo "🌿 Branche actuelle : $CURRENT_BRANCH"
+
+# Auto-commit si repo non clean
+if [[ -n "$(git status -s)" ]]; then
+  echo "📝 Changements non commités détectés — commit automatique..."
+  git add -A
+  git commit -m "auto: prod deploy"
+fi
+
+# Si on est sur staging → merge staging → main
+if [[ "$CURRENT_BRANCH" == "staging" ]]; then
+  echo "⚠️ Merge staging → main"
+
+  read -p "Confirmer merge staging → main ? (y/n): " confirm
+  if [[ "$confirm" != "y" ]]; then
+    echo "❌ Annulé"
+    exit 1
+  fi
+
+  git fetch origin
+
+  echo "🔄 Checkout main"
+  git checkout main
+  git pull origin main
+
+  echo "🔀 Merge staging"
+  git merge staging --no-ff
+
+  echo "🚀 Push main"
+  git push origin main
+
+elif [[ "$CURRENT_BRANCH" != "main" ]]; then
+  echo "❌ Déploiement prod uniquement depuis main ou staging (actuel: $CURRENT_BRANCH)"
+  echo "   → Merge d'abord vers staging, teste, puis relance depuis staging"
   exit 1
 fi
 
-# =========================
-# 3. VERCEL LINK FORCE
-# =========================
-echo "🔗 Vérification projet Vercel..."
-
-if [ ! -f ".vercel/project.json" ]; then
-  echo "⚠️ Aucun projet Vercel lié → linking..."
-  vercel link --project "$EXPECTED_VERCEL_PROJECT"
-fi
-
-CURRENT_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
-
-echo "👉 Projet actuel : $CURRENT_PROJECT_NAME"
-
-if [ "$CURRENT_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
-  echo "⚠️ Mauvais projet détecté → re-link..."
-  vercel link --project "$EXPECTED_VERCEL_PROJECT"
-fi
-
-# Vérification finale
-FINAL_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
-
-if [ "$FINAL_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
-  echo "❌ Impossible de lier au bon projet Vercel"
-  exit 1
-fi
-
-echo "✅ Projet Vercel OK : $FINAL_PROJECT_NAME"
+echo "📦 Branche finale : $(git rev-parse --abbrev-ref HEAD)"
 
 # =========================
-# 4. CONFIRMATION
+# 4. CONFIRMATION FINALE
 # =========================
-read -p "⚠️ CONFIRMER DEPLOY PROD (yes): " confirm
-if [ "$confirm" != "yes" ]; then
+echo ""
+echo "⚠️  DÉPLOIEMENT EN PRODUCTION ⚠️"
+echo "   Supabase : $SUPABASE_PROJECT_REF"
+echo "   Vercel   : $EXPECTED_VERCEL_PROJECT"
+echo ""
+read -p "Confirmer le déploiement en PRODUCTION ? (y/n): " confirm_prod
+if [[ "$confirm_prod" != "y" ]]; then
   echo "❌ Annulé"
   exit 1
 fi
 
 # =========================
-# 5. CHECK SECRETS
+# 5. VERCEL LINK (PROD)
 # =========================
-if [ -f "./check-secrets.sh" ]; then
-  echo "🔐 Scan sécurité..."
-  ./check-secrets.sh
+echo "🔗 Vérification Vercel production..."
+
+if [ ! -f ".vercel/project.json" ]; then
+  vercel link --project "$EXPECTED_VERCEL_PROJECT"
 fi
 
-# =========================
-# 6. AUDIT
-# =========================
-if [ -f "./audit.sh" ]; then
-  ./audit.sh || exit 1
+CURRENT_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
+
+if [ "$CURRENT_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
+  vercel link --project "$EXPECTED_VERCEL_PROJECT"
 fi
 
-# =========================
-# 7. BUILD
-# =========================
-echo "🧪 Build..."
-npm run build
+echo "✅ Vercel OK"
 
 # =========================
-# 8. COMMIT SI BESOIN
+# 6. CHECK / AUDIT
 # =========================
-if [[ -n "$(git status -s)" ]]; then
-  git add -A
-  git commit -m "auto: prod deploy" || true
+echo "🔐 Scan sécurité..."
+[ -f "./check-secrets.sh" ] && ./check-secrets.sh
+
+echo "🔍 Audit..."
+[ -f "./audit.sh" ] && ./audit.sh
+
+echo "🛠 Auto-fix..."
+[ -f "./fix.sh" ] && ./fix.sh || true
+
+# =========================
+# 7. TYPES CHECK
+# =========================
+TYPES_FILE="src/lib/supabase/database.types.ts"
+
+if [ ! -f "$TYPES_FILE" ] || [ "$(wc -c < "$TYPES_FILE")" -lt 10000 ]; then
+  echo "⚠️ Regénération types"
+  npm run supabase:types
+  git add "$TYPES_FILE"
+  git commit -m "chore: regenerate types" || true
   git push origin main
 fi
 
 # =========================
-# 9. SUPABASE
+# 8. BUILD
 # =========================
-echo "🔗 Supabase link..."
+echo "🧪 Build..."
+npm run build
+echo "✅ Build OK"
+
+# =========================
+# 9. SUPABASE (PRODUCTION)
+# =========================
+echo "🔗 Supabase production..."
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
 echo "📡 DB push..."
@@ -134,9 +174,17 @@ echo "⚡ Functions deploy..."
 supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 10. VERCEL DEPLOY
+# 10. VERCEL DEPLOY (PRODUCTION)
 # =========================
-echo "🌐 Deploy Vercel PROD..."
-vercel --prod
+echo "🌐 Déploiement production..."
 
+DEPLOY_URL=$(vercel --prod --yes)
+
+echo "🌐 URL : $DEPLOY_URL"
+
+# =========================
+# DONE
+# =========================
+echo ""
 echo "🎉 DEPLOY PRODUCTION OK"
+echo "🌐 $DEPLOY_URL"

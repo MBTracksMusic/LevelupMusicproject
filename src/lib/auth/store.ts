@@ -11,6 +11,8 @@ interface AuthState {
   profile: UserProfile | null;
   isLoading: boolean;
   isInitialized: boolean;
+  /** True while fetchProfile() is running after an auth state change (login/token change). */
+  isProfileLoading: boolean;
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
   setProfile: (profile: UserProfile | null) => void;
@@ -33,6 +35,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profile: null,
   isLoading: true,
   isInitialized: false,
+  isProfileLoading: false,
 
   setUser: (user) => set({ user }),
   setSession: (session) => set({ session }),
@@ -275,12 +278,21 @@ export function initializeAuth() {
         return;
       }
 
+      const prevUserId = currentState.user?.id ?? null;
+      const nextUserId = session?.user?.id ?? null;
+      const userChanged = prevUserId !== nextUserId;
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        // Only block useLaunchAccess when a DIFFERENT user logs in.
+        // Token refreshes (same user, new token) must NOT trigger isProfileLoading
+        // — that causes a dashboard ↔ login flicker every hour.
+        if (userChanged) useAuthStore.setState({ isProfileLoading: true });
         await fetchProfile();
+        if (userChanged) useAuthStore.setState({ isProfileLoading: false });
       } else {
-        useAuthStore.setState({ profile: null });
+        useAuthStore.setState({ profile: null, isProfileLoading: false });
         syncI18nLanguage();
       }
 

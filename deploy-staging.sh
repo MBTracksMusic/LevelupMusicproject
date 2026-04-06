@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-echo "🚀 Déploiement STAGING"
+echo "🚀 DÉPLOIEMENT STAGING (ENV ISOLÉ)"
 
 # =========================
 # CONFIG
@@ -35,10 +35,10 @@ for cmd in git node npm supabase vercel jq; do
 done
 
 # =========================
-# 2. SAFE CHECKS
+# 2. SAFE CHECKS (STAGING ONLY)
 # =========================
 if [ "${ENVIRONMENT:-}" != "staging" ]; then
-  echo "❌ ENVIRONMENT doit être égal à staging"
+  echo "❌ Mauvais environnement (attendu: staging)"
   exit 1
 fi
 
@@ -47,117 +47,126 @@ if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
   exit 1
 fi
 
+# 🔴 Sécurité : éviter erreur prod
+if [[ "${STRIPE_SECRET_KEY:-}" == sk_live* ]]; then
+  echo "❌ Stripe LIVE détecté en staging"
+  exit 1
+fi
+
+# =========================
+# 3. GIT FLOW (AUTO MERGE → STAGING)
+# =========================
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 
+if [[ "$CURRENT_BRANCH" == "main" ]]; then
+  echo "❌ Interdit depuis main"
+  exit 1
+fi
+
+# Vérifie repo clean
+if [[ -n "$(git status -s)" ]]; then
+  echo "❌ Repo non clean — commit avant"
+  exit 1
+fi
+
+# Si on n'est pas sur staging → merge auto
+if [[ "$CURRENT_BRANCH" != "staging" ]]; then
+  echo "⚠️ Merge $CURRENT_BRANCH → staging"
+
+  read -p "Confirmer merge vers staging ? (y/n): " confirm
+  if [[ "$confirm" != "y" ]]; then
+    echo "❌ Annulé"
+    exit 1
+  fi
+
+  git fetch origin
+
+  echo "🔄 Checkout staging"
+  git checkout staging
+  git pull origin staging
+
+  echo "🔀 Merge"
+  git merge "$CURRENT_BRANCH" --no-ff
+
+  echo "🚀 Push staging"
+  git push origin staging
+fi
+
+echo "📦 Branche finale : $(git rev-parse --abbrev-ref HEAD)"
+
 # =========================
-# 3. VERCEL LINK FORCE
+# 4. VERCEL LINK (STAGING)
 # =========================
-echo "🔗 Vérification projet Vercel STAGING..."
+echo "🔗 Vérification Vercel staging..."
 
 if [ ! -f ".vercel/project.json" ]; then
-  echo "⚠️ Aucun projet Vercel lié → linking..."
   vercel link --project "$EXPECTED_VERCEL_PROJECT"
 fi
 
 CURRENT_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
 
-echo "👉 Projet actuel : $CURRENT_PROJECT_NAME"
-
 if [ "$CURRENT_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
-  echo "⚠️ Mauvais projet détecté → re-link staging..."
   vercel link --project "$EXPECTED_VERCEL_PROJECT"
 fi
 
-FINAL_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
-
-if [ "$FINAL_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
-  echo "❌ Impossible de lier au bon projet Vercel STAGING"
-  exit 1
-fi
-
-echo "✅ Projet Vercel OK : $FINAL_PROJECT_NAME"
+echo "✅ Vercel OK"
 
 # =========================
-# 4. CHECK SECRETS
+# 5. CHECK / AUDIT
 # =========================
-if [ -f "./check-secrets.sh" ]; then
-  echo "🔐 Scan sécurité..."
-  ./check-secrets.sh || exit 1
-fi
+echo "🔐 Scan sécurité..."
+[ -f "./check-secrets.sh" ] && ./check-secrets.sh
 
-# =========================
-# 5. AUDIT CODE
-# =========================
-echo "🔍 Audit du code..."
-if [ -f "./audit.sh" ]; then
-  ./audit.sh || {
-    echo "❌ Audit échoué"
-    exit 1
-  }
-fi
+echo "🔍 Audit..."
+[ -f "./audit.sh" ] && ./audit.sh
 
-# =========================
-# 6. AUTO FIX
-# =========================
 echo "🛠 Auto-fix..."
-if [ -f "./fix.sh" ]; then
-  ./fix.sh || echo "⚠️ Fix partiel"
-fi
+[ -f "./fix.sh" ] && ./fix.sh || true
 
 # =========================
-# 7. TYPES CHECK
+# 6. TYPES CHECK
 # =========================
-echo "🔍 Vérification database.types.ts..."
 TYPES_FILE="src/lib/supabase/database.types.ts"
 
-if [ ! -f "$TYPES_FILE" ]; then
-  TYPES_SIZE=0
-else
-  TYPES_SIZE=$(wc -c < "$TYPES_FILE")
-fi
-
-if [ "$TYPES_SIZE" -lt 10000 ]; then
-  echo "⚠️ Types invalides → régénération"
+if [ ! -f "$TYPES_FILE" ] || [ "$(wc -c < "$TYPES_FILE")" -lt 10000 ]; then
+  echo "⚠️ Regénération types"
   npm run supabase:types
   git add "$TYPES_FILE"
+  git commit -m "chore: regenerate types" || true
+  git push origin staging
 fi
 
 # =========================
-# 8. BUILD CHECK
+# 7. BUILD
 # =========================
 echo "🧪 Build..."
 npm run build
 echo "✅ Build OK"
 
 # =========================
-# 9. COMMIT & PUSH
+# 8. SUPABASE (STAGING)
 # =========================
-if [[ -n "$(git status -s)" ]]; then
-  echo "📦 Changements détectés"
-  git add -A
-  git commit -m "auto: staging deploy" || true
-  git push origin "$CURRENT_BRANCH"
-else
-  echo "✅ Aucun changement local"
-fi
-
-# =========================
-# 10. SUPABASE
-# =========================
-echo "🔗 Liaison Supabase STAGING..."
+echo "🔗 Supabase staging..."
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-echo "📡 Déploiement DB STAGING..."
+echo "📡 DB push..."
 supabase db push
 
-echo "⚡ Déploiement fonctions STAGING..."
+echo "⚡ Functions deploy..."
 supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 11. VERCEL STAGING
+# 9. VERCEL DEPLOY (STAGING PROD-LIKE)
 # =========================
-echo "🌐 Déploiement frontend STAGING..."
-vercel
+echo "🌐 Déploiement staging (prod-like)..."
 
+DEPLOY_URL=$(vercel --prod --yes)
+
+echo "🌐 URL : $DEPLOY_URL"
+
+# =========================
+# DONE
+# =========================
 echo "🎉 DEPLOY STAGING OK"
+echo "⚠️ ENV ISOLÉ — PAS DE PRODUCTION"

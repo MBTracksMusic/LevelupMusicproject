@@ -3,8 +3,8 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from './client';
 import type { Database } from './database.types';
 
-type SettingsRow = Database['public']['Tables']['settings']['Row'];
 type SettingsUpdate = Database['public']['Tables']['settings']['Update'];
+
 export interface PricingVisibility {
   free: boolean;
   userPremium: boolean;
@@ -12,20 +12,31 @@ export interface PricingVisibility {
   producerElite: boolean;
 }
 
-type SettingsRowShape = Pick<
-  SettingsRow,
-  | 'id'
-  | 'launch_date'
-  | 'launch_video_url'
-  | 'maintenance_mode'
-  | 'show_homepage_stats'
-  | 'show_free_plan'
-  | 'show_user_premium_plan'
-  | 'show_user_premium_credits'
-  | 'show_producer_plan'
-  | 'show_producer_elite_plan'
-  | 'updated_at'
->;
+export type SiteAccessMode = 'private' | 'controlled' | 'public';
+
+/**
+ * Explicit interface for the settings row shape read by this hook.
+ * Defined as a standalone interface (not a Pick<>) so new columns added
+ * via migration are accessible before database.types.ts is regenerated.
+ */
+interface SettingsRowShape {
+  id: string;
+  launch_date: string | null;
+  launch_video_url: string | null;
+  maintenance_mode: boolean;
+  site_access_mode: SiteAccessMode;
+  launch_message_public: string | null;
+  launch_message_waitlist_pending: string | null;
+  launch_message_whitelist: string | null;
+  waitlist_count_display: number;
+  show_homepage_stats: boolean;
+  show_free_plan: boolean;
+  show_user_premium_plan: boolean;
+  show_user_premium_credits: boolean;
+  show_producer_plan: boolean;
+  show_producer_elite_plan: boolean;
+  updated_at: string;
+}
 
 const DEFAULT_PRICING_VISIBILITY: PricingVisibility = {
   free: true,
@@ -39,6 +50,11 @@ const SETTINGS_SELECT = [
   'launch_date',
   'launch_video_url',
   'maintenance_mode',
+  'site_access_mode',
+  'launch_message_public',
+  'launch_message_waitlist_pending',
+  'launch_message_whitelist',
+  'waitlist_count_display',
   'show_homepage_stats',
   'show_free_plan',
   'show_user_premium_plan',
@@ -47,29 +63,43 @@ const SETTINGS_SELECT = [
   'show_producer_elite_plan',
   'updated_at',
 ].join(', ');
+
 const SETTINGS_CHANNEL = 'public:settings:maintenance-mode';
+
+const isSiteAccessMode = (value: unknown): value is SiteAccessMode =>
+  value === 'private' || value === 'controlled' || value === 'public';
 
 function isSettingsRow(value: unknown): value is SettingsRowShape {
   if (!value || typeof value !== 'object') return false;
 
-  const candidate = value as Record<string, unknown>;
+  const c = value as Record<string, unknown>;
   return (
-    typeof candidate.id === 'string'
-    && (typeof candidate.launch_date === 'string' || candidate.launch_date === null)
-    && (typeof candidate.launch_video_url === 'string' || candidate.launch_video_url === null)
-    && typeof candidate.maintenance_mode === 'boolean'
-    && typeof candidate.show_homepage_stats === 'boolean'
-    && typeof candidate.show_free_plan === 'boolean'
-    && typeof candidate.show_user_premium_plan === 'boolean'
-    && typeof candidate.show_user_premium_credits === 'boolean'
-    && typeof candidate.show_producer_plan === 'boolean'
-    && typeof candidate.show_producer_elite_plan === 'boolean'
-    && typeof candidate.updated_at === 'string'
+    typeof c.id === 'string'
+    && (typeof c.launch_date === 'string' || c.launch_date === null)
+    && (typeof c.launch_video_url === 'string' || c.launch_video_url === null)
+    && typeof c.maintenance_mode === 'boolean'
+    && isSiteAccessMode(c.site_access_mode)
+    && (typeof c.launch_message_public === 'string' || c.launch_message_public === null)
+    && (typeof c.launch_message_waitlist_pending === 'string' || c.launch_message_waitlist_pending === null)
+    && (typeof c.launch_message_whitelist === 'string' || c.launch_message_whitelist === null)
+    && typeof c.waitlist_count_display === 'number'
+    && typeof c.show_homepage_stats === 'boolean'
+    && typeof c.show_free_plan === 'boolean'
+    && typeof c.show_user_premium_plan === 'boolean'
+    && typeof c.show_user_premium_credits === 'boolean'
+    && typeof c.show_producer_plan === 'boolean'
+    && typeof c.show_producer_elite_plan === 'boolean'
+    && typeof c.updated_at === 'string'
   );
 }
 
 export function useMaintenanceMode() {
   const [maintenance, setMaintenance] = useState(false);
+  const [siteAccessMode, setSiteAccessMode] = useState<SiteAccessMode>('private');
+  const [launchMessagePublic, setLaunchMessagePublic] = useState<string | null>(null);
+  const [launchMessageWaitlistPending, setLaunchMessageWaitlistPending] = useState<string | null>(null);
+  const [launchMessageWhitelist, setLaunchMessageWhitelist] = useState<string | null>(null);
+  const [waitlistCountDisplay, setWaitlistCountDisplay] = useState<number>(0);
   const [showHomepageStats, setShowHomepageStats] = useState(false);
   const [showUserPremiumCredits, setShowUserPremiumCredits] = useState(true);
   const [pricingVisibility, setPricingVisibility] = useState<PricingVisibility>(DEFAULT_PRICING_VISIBILITY);
@@ -83,6 +113,11 @@ export function useMaintenanceMode() {
   const applySettingsRow = useCallback((row: SettingsRowShape | null) => {
     if (!row) {
       setMaintenance(false);
+      setSiteAccessMode('private');
+      setLaunchMessagePublic(null);
+      setLaunchMessageWaitlistPending(null);
+      setLaunchMessageWhitelist(null);
+      setWaitlistCountDisplay(0);
       setShowHomepageStats(false);
       setShowUserPremiumCredits(true);
       setPricingVisibility(DEFAULT_PRICING_VISIBILITY);
@@ -94,6 +129,11 @@ export function useMaintenanceMode() {
     }
 
     setMaintenance(row.maintenance_mode);
+    setSiteAccessMode(row.site_access_mode ?? 'private');
+    setLaunchMessagePublic(row.launch_message_public ?? null);
+    setLaunchMessageWaitlistPending(row.launch_message_waitlist_pending ?? null);
+    setLaunchMessageWhitelist(row.launch_message_whitelist ?? null);
+    setWaitlistCountDisplay(row.waitlist_count_display ?? 0);
     setShowHomepageStats(row.show_homepage_stats);
     setShowUserPremiumCredits(row.show_user_premium_credits);
     setPricingVisibility({
@@ -124,7 +164,8 @@ export function useMaintenanceMode() {
       return null;
     }
 
-    applySettingsRow(data ?? null);
+    // Cast needed until database.types.ts is regenerated after migration
+    applySettingsRow((data as unknown as SettingsRowShape) ?? null);
     setIsLoading(false);
     return data ?? null;
   }, [applySettingsRow]);
@@ -172,7 +213,8 @@ export function useMaintenanceMode() {
       throw updateError;
     }
 
-    applySettingsRow(data);
+    // Cast needed until database.types.ts is regenerated after migration
+    applySettingsRow(data as unknown as SettingsRowShape);
     return data;
   }, [applySettingsRow, settingsId]);
 
@@ -204,6 +246,11 @@ export function useMaintenanceMode() {
 
   return {
     maintenance,
+    siteAccessMode,
+    launchMessagePublic,
+    launchMessageWaitlistPending,
+    launchMessageWhitelist,
+    waitlistCountDisplay,
     showHomepageStats,
     showUserPremiumCredits,
     pricingVisibility,
