@@ -28,6 +28,7 @@ interface SettingsRowShape {
   launch_message_public: string | null;
   launch_message_waitlist_pending: string | null;
   launch_message_whitelist: string | null;
+  waitlist_count_display: number;
   show_homepage_stats: boolean;
   show_free_plan: boolean;
   show_user_premium_plan: boolean;
@@ -53,6 +54,7 @@ const SETTINGS_SELECT = [
   'launch_message_public',
   'launch_message_waitlist_pending',
   'launch_message_whitelist',
+  'waitlist_count_display',
   'show_homepage_stats',
   'show_free_plan',
   'show_user_premium_plan',
@@ -80,6 +82,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
     && (typeof c.launch_message_public === 'string' || c.launch_message_public === null)
     && (typeof c.launch_message_waitlist_pending === 'string' || c.launch_message_waitlist_pending === null)
     && (typeof c.launch_message_whitelist === 'string' || c.launch_message_whitelist === null)
+    && typeof c.waitlist_count_display === 'number'
     && typeof c.show_homepage_stats === 'boolean'
     && typeof c.show_free_plan === 'boolean'
     && typeof c.show_user_premium_plan === 'boolean'
@@ -96,6 +99,7 @@ export function useMaintenanceMode() {
   const [launchMessagePublic, setLaunchMessagePublic] = useState<string | null>(null);
   const [launchMessageWaitlistPending, setLaunchMessageWaitlistPending] = useState<string | null>(null);
   const [launchMessageWhitelist, setLaunchMessageWhitelist] = useState<string | null>(null);
+  const [waitlistCountDisplay, setWaitlistCountDisplay] = useState<number>(0);
   const [showHomepageStats, setShowHomepageStats] = useState(false);
   const [showUserPremiumCredits, setShowUserPremiumCredits] = useState(true);
   const [pricingVisibility, setPricingVisibility] = useState<PricingVisibility>(DEFAULT_PRICING_VISIBILITY);
@@ -113,6 +117,7 @@ export function useMaintenanceMode() {
       setLaunchMessagePublic(null);
       setLaunchMessageWaitlistPending(null);
       setLaunchMessageWhitelist(null);
+      setWaitlistCountDisplay(0);
       setShowHomepageStats(false);
       setShowUserPremiumCredits(true);
       setPricingVisibility(DEFAULT_PRICING_VISIBILITY);
@@ -128,6 +133,7 @@ export function useMaintenanceMode() {
     setLaunchMessagePublic(row.launch_message_public ?? null);
     setLaunchMessageWaitlistPending(row.launch_message_waitlist_pending ?? null);
     setLaunchMessageWhitelist(row.launch_message_whitelist ?? null);
+    setWaitlistCountDisplay(row.waitlist_count_display ?? 0);
     setShowHomepageStats(row.show_homepage_stats);
     setShowUserPremiumCredits(row.show_user_premium_credits);
     setPricingVisibility({
@@ -244,6 +250,7 @@ export function useMaintenanceMode() {
     launchMessagePublic,
     launchMessageWaitlistPending,
     launchMessageWhitelist,
+    waitlistCountDisplay,
     showHomepageStats,
     showUserPremiumCredits,
     pricingVisibility,

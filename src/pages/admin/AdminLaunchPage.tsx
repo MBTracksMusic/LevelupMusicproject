@@ -56,6 +56,7 @@ function LaunchPhaseCard() {
     launchMessagePublic,
     launchMessageWaitlistPending,
     launchMessageWhitelist,
+    waitlistCountDisplay,
     isLoading: isSettingsLoading,
     updateSettings,
   } = useMaintenanceModeContext();
@@ -64,6 +65,7 @@ function LaunchPhaseCard() {
   const [msgPublic, setMsgPublic] = useState(launchMessagePublic ?? '');
   const [msgPending, setMsgPending] = useState(launchMessageWaitlistPending ?? '');
   const [msgWhitelist, setMsgWhitelist] = useState(launchMessageWhitelist ?? '');
+  const [countDisplay, setCountDisplay] = useState(String(waitlistCountDisplay ?? 0));
   const [isSaving, setIsSaving] = useState(false);
 
   // Sync when Realtime pushes an update
@@ -71,10 +73,13 @@ function LaunchPhaseCard() {
   useEffect(() => { setMsgPublic(launchMessagePublic ?? ''); }, [launchMessagePublic]);
   useEffect(() => { setMsgPending(launchMessageWaitlistPending ?? ''); }, [launchMessageWaitlistPending]);
   useEffect(() => { setMsgWhitelist(launchMessageWhitelist ?? ''); }, [launchMessageWhitelist]);
+  useEffect(() => { setCountDisplay(String(waitlistCountDisplay ?? 0)); }, [waitlistCountDisplay]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving || isSettingsLoading) return;
+
+    const parsedCount = Math.max(0, Math.floor(Number(countDisplay) || 0));
 
     setIsSaving(true);
     try {
@@ -83,6 +88,7 @@ function LaunchPhaseCard() {
         launch_message_public: msgPublic.trim() || null,
         launch_message_waitlist_pending: msgPending.trim() || null,
         launch_message_whitelist: msgWhitelist.trim() || null,
+        waitlist_count_display: parsedCount,
       } as Parameters<typeof updateSettings>[0]);
       toast.success('Paramètres de lancement sauvegardés.');
     } catch (err) {
@@ -173,6 +179,26 @@ function LaunchPhaseCard() {
           </div>
         </div>
 
+        {/* Social proof counter */}
+        <div className="border-t border-zinc-800 pt-5">
+          <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+            Compteur social (page de lancement)
+          </label>
+          <p className="mb-2 text-xs text-zinc-500">
+            Affiché sous la forme &ldquo;+X producteurs ont demandé leur accès&rdquo;. Mets&nbsp;<strong className="text-zinc-400">0</strong> pour masquer.
+          </p>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            title="Compteur social affiché sur la page de lancement"
+            value={countDisplay}
+            onChange={(e) => setCountDisplay(e.target.value)}
+            disabled={isSaving}
+            className="h-10 w-40 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
+          />
+        </div>
+
         <Button type="submit" isLoading={isSaving} disabled={isSettingsLoading || isSaving}>
           Sauvegarder
         </Button>
@@ -187,20 +213,26 @@ function WaitlistCard() {
   const [rows, setRows] = useState<WaitlistRow[]>([]);
   const [tab, setTab] = useState<WaitlistTab>('pending');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
 
   const load = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    setLoadError(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('waitlist')
-      .select('id, email, status, source, created_at, accepted_at, user_id, notes')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
-      toast.error('Erreur chargement waitlist.');
+      const msg = (error as { message?: string; code?: string }).message
+        ?? JSON.stringify(error);
+      const code = (error as { code?: string }).code ?? '';
+      setLoadError(`[${code}] ${msg}`);
       console.error('[AdminLaunch] waitlist load error', error);
     } else {
-      setRows((data as WaitlistRow[]) ?? []);
+      setRows((data as unknown as WaitlistRow[]) ?? []);
     }
     setIsLoading(false);
   };
@@ -214,7 +246,8 @@ function WaitlistCard() {
         ? { status, accepted_at: new Date().toISOString() }
         : { status };
 
-    const { error } = await supabase.from('waitlist').update(patch).eq('id', id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from('waitlist').update(patch).eq('id', id);
 
     if (error) {
       toast.error('Erreur lors de la mise à jour.');
@@ -280,9 +313,14 @@ function WaitlistCard() {
 
       {/* Table */}
       <div className="mt-4 overflow-x-auto">
+        {loadError && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400 font-mono break-all">
+            <span className="font-semibold">Erreur DB :</span> {loadError}
+          </div>
+        )}
         {isLoading ? (
           <p className="py-8 text-center text-sm text-zinc-500">Chargement...</p>
-        ) : filtered.length === 0 ? (
+        ) : loadError ? null : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-500">
             Aucune entrée {tab === 'pending' ? 'en attente' : tab === 'accepted' ? 'acceptée' : 'refusée'}.
           </p>
@@ -357,7 +395,8 @@ function WhitelistCard() {
 
   const load = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('access_whitelist')
       .select('id, email, user_id, granted_at, note, is_active')
       .order('granted_at', { ascending: false });
@@ -366,7 +405,7 @@ function WhitelistCard() {
       toast.error('Erreur chargement whitelist.');
       console.error('[AdminLaunch] whitelist load error', error);
     } else {
-      setRows((data as WhitelistRow[]) ?? []);
+      setRows((data as unknown as WhitelistRow[]) ?? []);
     }
     setIsLoading(false);
   };
@@ -382,7 +421,8 @@ function WhitelistCard() {
     }
     setIsAdding(true);
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('access_whitelist')
       .insert({ email, note: newNote.trim() || null })
       .select('id, email, user_id, granted_at, note, is_active')
@@ -396,7 +436,7 @@ function WhitelistCard() {
         console.error('[AdminLaunch] whitelist insert error', error);
       }
     } else {
-      setRows((prev) => [data as WhitelistRow, ...prev]);
+      setRows((prev) => [data as unknown as WhitelistRow, ...prev]);
       setNewEmail('');
       setNewNote('');
       toast.success('Email ajouté à la whitelist.');
@@ -406,7 +446,8 @@ function WhitelistCard() {
 
   const toggleActive = async (row: WhitelistRow) => {
     setTogglingId(row.id);
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('access_whitelist')
       .update({ is_active: !row.is_active })
       .eq('id', row.id);

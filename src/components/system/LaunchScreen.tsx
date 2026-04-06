@@ -58,7 +58,7 @@ function getEmbedUrl(url: string): string | null {
 }
 
 export function LaunchScreen({ messages }: LaunchScreenProps) {
-  const { launchDate, launchVideoUrl } = useMaintenanceModeContext();
+  const { launchDate, launchVideoUrl, waitlistCountDisplay } = useMaintenanceModeContext();
 
   const targetTime = useMemo(() => {
     if (!launchDate) return null;
@@ -187,8 +187,6 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
     messages?.subline?.trim() ||
     "Une sélection de producteurs est déjà à l'intérieur. Les prochains accès arrivent progressivement.";
 
-  // Preuve sociale — null jusqu'à ce qu'on branche une vraie source ; fallback = 127
-  const waitlistCount: number | null = null;
 
   return (
     <div className="relative min-h-screen bg-zinc-950 overflow-hidden">
@@ -240,13 +238,15 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           Accès ouverts par vagues.
         </p>
 
-        {/* Preuve sociale dynamique */}
-        <p className="mt-4 text-sm text-zinc-400 text-center">
-          <span className="font-semibold text-yellow-400">
-            +{waitlistCount || 127}
-          </span>
-          {' '}producteurs ont déjà demandé leur accès
-        </p>
+        {/* Preuve sociale — affichée uniquement si l'admin a renseigné un nombre > 0 */}
+        {waitlistCountDisplay > 0 && (
+          <p className="mt-4 text-sm text-zinc-400 text-center">
+            <span className="font-semibold text-yellow-400">
+              +{waitlistCountDisplay}
+            </span>
+            {' '}producteurs ont déjà demandé leur accès
+          </p>
+        )}
 
         {/* Date de lancement — stylée en pill */}
         {formattedDate && (
@@ -357,8 +357,20 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           </div>
         )}
 
+        {/* Accès VIP */}
+        <div className="mt-10 flex flex-col items-center gap-2">
+          <p className="text-xs text-zinc-600">Tu as déjà un accès ?</p>
+          <a
+            href="/login"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-900/60 px-4 py-1.5 text-xs font-medium text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-yellow-400" />
+            Accès VIP — Se connecter
+          </a>
+        </div>
+
         {/* Footer */}
-        <p className="mt-12 text-xs text-zinc-700">
+        <p className="mt-8 text-xs text-zinc-700">
           © {new Date().getFullYear()} Beatelion — Plateforme réservée aux producteurs.
         </p>
       </div>
