@@ -10,10 +10,12 @@ import {
   sendEmailWithResend,
 } from "../_shared/email.ts";
 import { extractIpAddress, verifyHcaptchaToken } from "../_shared/hcaptcha.ts";
+import { getAuthUserIfPresent } from "../_shared/auth.ts";
 
 type JoinWaitlistBody = {
   email?: unknown;
   captchaToken?: unknown;
+  source?: unknown;
 };
 
 type JoinWaitlistResponse =
@@ -105,9 +107,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ error: "server_error" }, 500, corsHeaders);
     }
 
+    // Resolve caller identity if they are authenticated (optional — anon is fine)
+    const authResult = await getAuthUserIfPresent(req, corsHeaders, { rejectInvalidToken: false });
+    if ("error" in authResult) {
+      return authResult.error;
+    }
+    const callerId = authResult.user?.id ?? null;
+
     const body = await req.json().catch(() => null) as JoinWaitlistBody | null;
     const email = asNonEmptyString(body?.email)?.toLowerCase() ?? null;
     const captchaToken = asNonEmptyString(body?.captchaToken);
+    const source = asNonEmptyString(body?.source) ?? "maintenance_page";
 
     if (!email || !email.includes("@") || !EMAIL_REGEX.test(email)) {
       return jsonResponse({ error: "invalid_email" }, 400, corsHeaders);
@@ -150,13 +160,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { error: insertError } = await adminClient
       .from("waitlist")
-      .insert({ email });
+      .insert({ email, user_id: callerId, source });
 
     if (insertError) {
       if (insertError.code === "23505") {
         console.log("[join-waitlist] email already registered", {
           email: email.substring(0, 3) + '***',
         });
+        // Link user_id if the existing entry doesn't have one yet
+        if (callerId) {
+          await adminClient
+            .from("waitlist")
+            .update({ user_id: callerId })
+            .eq("email", email)
+            .is("user_id", null);
+        }
         return jsonResponse({ message: "already_registered" }, 200, corsHeaders);
       }
 

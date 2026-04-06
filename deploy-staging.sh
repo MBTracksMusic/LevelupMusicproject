@@ -50,6 +50,12 @@ fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 
+if [ "$CURRENT_BRANCH" = "main" ]; then
+  echo "❌ Staging interdit depuis 'main'"
+  echo "👉 Crée une branche : git checkout -b staging"
+  exit 1
+fi
+
 # =========================
 # 3. VERCEL LINK FORCE
 # =========================
@@ -65,7 +71,7 @@ CURRENT_PROJECT_NAME=$(jq -r '.projectName' .vercel/project.json)
 echo "👉 Projet actuel : $CURRENT_PROJECT_NAME"
 
 if [ "$CURRENT_PROJECT_NAME" != "$EXPECTED_VERCEL_PROJECT" ]; then
-  echo "⚠️ Mauvais projet détecté → re-link staging..."
+  echo "⚠️ Mauvais projet → re-link staging..."
   vercel link --project "$EXPECTED_VERCEL_PROJECT"
 fi
 
@@ -131,12 +137,18 @@ npm run build
 echo "✅ Build OK"
 
 # =========================
-# 9. COMMIT & PUSH
+# 9. COMMIT & PUSH SAFE
 # =========================
 if [[ -n "$(git status -s)" ]]; then
   echo "📦 Changements détectés"
   git add -A
   git commit -m "auto: staging deploy" || true
+
+  if [ "$CURRENT_BRANCH" = "main" ]; then
+    echo "❌ Push interdit sur main via script"
+    exit 1
+  fi
+
   git push origin "$CURRENT_BRANCH"
 else
   echo "✅ Aucun changement local"
@@ -155,9 +167,12 @@ echo "⚡ Déploiement fonctions STAGING..."
 supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
 
 # =========================
-# 11. VERCEL STAGING
+# 11. VERCEL STAGING SAFE
 # =========================
 echo "🌐 Déploiement frontend STAGING..."
-vercel
+
+DEPLOY_URL=$(vercel --target=preview --confirm)
+
+echo "🌐 URL STAGING : $DEPLOY_URL"
 
 echo "🎉 DEPLOY STAGING OK"
