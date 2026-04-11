@@ -21,6 +21,7 @@ import { HomeNewsVideos } from '../components/home/HomeNewsVideos';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
+import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 import { useWishlistStore } from '../lib/stores/wishlist';
 import { fetchCatalogProducts } from '../lib/supabase/catalog';
 import { useMaintenanceModeContext } from '../lib/supabase/MaintenanceModeContext';
@@ -36,6 +37,8 @@ interface HomeStatsPayload {
 export function HomePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { isActive: hasPremiumAccess, subscription: userSubStatus } = useUserSubscriptionStatus(user?.id);
+  const isUserPremium = hasPremiumAccess && userSubStatus?.plan_code === 'user_monthly';
   const { showHomepageStats } = useMaintenanceModeContext();
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   // TODO(levelup): reactiver cette section quand les categories Exclusifs/Kits reviennent.
@@ -221,6 +224,7 @@ export function HomePage() {
                 <ProductCard
                   key={product.id}
                   product={product}
+                  isUserPremium={isUserPremium}
                   isWishlisted={wishlistProductIds.includes(product.id)}
                   onWishlistToggle={handleWishlistToggle}
                 />

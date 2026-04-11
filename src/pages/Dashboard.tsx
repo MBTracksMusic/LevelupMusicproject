@@ -174,6 +174,7 @@ export function DashboardPage() {
   const { showUserPremiumCredits, showUserPremiumPlan } = useMaintenanceModeContext();
   const { balance: creditBalance, isLoading: isCreditBalanceLoading, error: creditBalanceError } = useCreditBalance(user?.id);
   const { subscription: userSubscription, isActive: hasActiveUserSubscription } = useUserSubscriptionStatus(user?.id);
+  const isUserPremium = hasActiveUserSubscription && userSubscription?.plan_code === 'user_monthly';
   const normalizedCreditBalance = typeof creditBalance === 'number'
     ? Math.max(0, Math.min(creditBalance, MAX_CREDITS))
     : 0;
@@ -1049,6 +1050,7 @@ export function DashboardPage() {
                 <ProductCard
                   key={product.id}
                   product={product}
+                  isUserPremium={isUserPremium}
                   isWishlisted={true}
                   onWishlistToggle={handleRecentWishlistToggle}
                 />
