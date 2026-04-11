@@ -226,10 +226,9 @@ export function AdminForumPage() {
     if (!window.confirm(t('admin.forum.hardDeleteConfirm'))) return;
     setActionKey(`post:${postId}:hardDelete`);
 
-    const { error } = await supabase
-      .from(FORUM_POSTS_TABLE)
-      .delete()
-      .eq('id', postId as any);
+    const { error } = await supabase.rpc('forum_admin_hard_delete_post' as any, {
+      p_post_id: postId,
+    });
 
     if (error) {
       console.error('Error hard deleting forum post', error);
