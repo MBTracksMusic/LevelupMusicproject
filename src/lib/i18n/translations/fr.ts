@@ -1363,6 +1363,8 @@ export const fr = {
       hardDelete: 'Supprimer',
       hardDeleteConfirm: 'Supprimer définitivement ce post ? Cette action est irréversible.',
       postHardDeleted: 'Post supprimé définitivement.',
+      topicHardDeleteConfirm: 'Supprimer définitivement ce topic et tous ses posts ? Cette action est irréversible.',
+      topicHardDeleted: 'Topic supprimé définitivement.',
       restore: 'Restore',
       latestTopics: 'Derniers topics',
       noTopic: 'Aucun topic.',

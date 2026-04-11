@@ -222,6 +222,26 @@ export function AdminForumPage() {
     await loadForumModeration(topicPage, postPage);
   };
 
+  const runTopicHardDelete = async (topicId: string) => {
+    if (!window.confirm(t('admin.forum.topicHardDeleteConfirm'))) return;
+    setActionKey(`topic:${topicId}:hardDelete`);
+
+    const { error } = await supabase.rpc('forum_admin_hard_delete_topic' as any, {
+      p_topic_id: topicId,
+    });
+
+    if (error) {
+      console.error('Error hard deleting forum topic', error);
+      toast.error(t('admin.forum.topicActionError'));
+      setActionKey(null);
+      return;
+    }
+
+    toast.success(t('admin.forum.topicHardDeleted'));
+    setActionKey(null);
+    await loadForumModeration(topicPage, postPage);
+  };
+
   const runPostHardDelete = async (postId: string) => {
     if (!window.confirm(t('admin.forum.hardDeleteConfirm'))) return;
     setActionKey(`post:${postId}:hardDelete`);
@@ -470,6 +490,15 @@ export function AdminForumPage() {
                         onClick={() => void runTopicDeleteState(topic, !topic.is_deleted)}
                       >
                         {topic.is_deleted ? t('admin.forum.restore') : t('admin.forum.hide')}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        isLoading={actionKey === `topic:${topic.id}:hardDelete`}
+                        disabled={!canAct}
+                        onClick={() => void runTopicHardDelete(topic.id)}
+                      >
+                        {t('admin.forum.hardDelete')}
                       </Button>
                     </div>
                   </div>

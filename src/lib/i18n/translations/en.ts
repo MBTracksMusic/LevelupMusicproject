@@ -1364,6 +1364,8 @@ export const en: TranslationSchema = {
       hardDelete: 'Delete',
       hardDeleteConfirm: 'Permanently delete this post? This action cannot be undone.',
       postHardDeleted: 'Post permanently deleted.',
+      topicHardDeleteConfirm: 'Permanently delete this topic and all its posts? This action cannot be undone.',
+      topicHardDeleted: 'Topic permanently deleted.',
       restore: 'Restore',
       latestTopics: 'Latest topics',
       noTopic: 'No topic.',
