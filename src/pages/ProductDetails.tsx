@@ -557,39 +557,43 @@ export function ProductDetailsPage() {
               </div>
             </div>
 
-            <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-              <p className={`text-sm font-medium ${isCreditEligible ? 'text-emerald-300' : 'text-zinc-200'}`}>
-                {isCreditEligible
-                  ? t('productDetails.creditEligibleStatus')
-                  : t('productDetails.creditUnavailableStatus')}
-              </p>
-              <p className="mt-2 text-xs text-zinc-500">{creditEligibilityMessage}</p>
-            </div>
+            {isUserPremium && (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+                <p className={`text-sm font-medium ${isCreditEligible ? 'text-emerald-300' : 'text-zinc-200'}`}>
+                  {isCreditEligible
+                    ? t('productDetails.creditEligibleStatus')
+                    : t('productDetails.creditUnavailableStatus')}
+                </p>
+                <p className="mt-2 text-xs text-zinc-500">{creditEligibilityMessage}</p>
+              </div>
+            )}
 
             {!hasPreview && (
               <p className="mb-6 text-sm text-zinc-500">{t('audio.previewUnavailable')}</p>
             )}
 
-            <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-zinc-400">{t('productDetails.availableCredits')}</p>
-                <p className="text-lg font-semibold text-white">
-                  {isAuthenticated
-                    ? isCreditBalanceLoading
-                      ? t('common.loading')
-                      : typeof creditBalance === 'number'
-                        ? creditBalance
-                        : '—'
-                    : '—'}
-                </p>
+            {isUserPremium && (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-zinc-400">{t('productDetails.availableCredits')}</p>
+                  <p className="text-lg font-semibold text-white">
+                    {isAuthenticated
+                      ? isCreditBalanceLoading
+                        ? t('common.loading')
+                        : typeof creditBalance === 'number'
+                          ? creditBalance
+                          : '—'
+                      : '—'}
+                  </p>
+                </div>
+                {isAuthenticated && creditBalanceError && (
+                  <p className="mt-2 text-xs text-zinc-500">{t('productDetails.creditBalanceError')}</p>
+                )}
+                {!isAuthenticated && (
+                  <p className="mt-2 text-xs text-zinc-500">{t('productDetails.creditPurchaseLogin')}</p>
+                )}
               </div>
-              {isAuthenticated && creditBalanceError && (
-                <p className="mt-2 text-xs text-zinc-500">{t('productDetails.creditBalanceError')}</p>
-              )}
-              {!isAuthenticated && (
-                <p className="mt-2 text-xs text-zinc-500">{t('productDetails.creditPurchaseLogin')}</p>
-              )}
-            </div>
+            )}
 
             {hasPurchasedProduct && (
               <p className="mb-4 text-sm font-medium text-emerald-400">
