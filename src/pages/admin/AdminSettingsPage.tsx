@@ -15,6 +15,7 @@ import { formatDateTime } from '../../lib/utils/format';
 
 const SOCIAL_SETTINGS_KEY = 'social_links';
 const SITE_AUDIO_SETTINGS_TABLE = 'site_audio_settings' as const;
+const AI_AUTO_EXEC_KEY = 'ai_auto_execution';
 
 interface SocialLinksForm {
   twitter: string;
@@ -40,6 +41,29 @@ interface WatermarkSettingsForm {
   min_interval_sec: string;
   max_interval_sec: string;
 }
+
+interface AiAutoExecutionSettings {
+  enabled: boolean;
+  confidence_threshold: number;
+  auto_validate: boolean;
+  auto_cancel: boolean;
+}
+
+interface AiAutoExecRunResult {
+  ok: boolean;
+  reason?: string;
+  executed: number;
+  failed: number;
+  skipped: number;
+  threshold?: number;
+}
+
+const DEFAULT_AI_AUTO_EXEC: AiAutoExecutionSettings = {
+  enabled: false,
+  confidence_threshold: 0.85,
+  auto_validate: true,
+  auto_cancel: false,
+};
 
 interface ReprocessStats {
   enqueued: number;
@@ -175,6 +199,12 @@ export function AdminSettingsPage() {
   const [selectedWatermarkFile, setSelectedWatermarkFile] = useState<File | null>(null);
   const [reprocessStats, setReprocessStats] = useState<ReprocessStats | null>(null);
   const [watermarkPreviewUrl, setWatermarkPreviewUrl] = useState<string | null>(null);
+
+  const [aiAutoExecSettings, setAiAutoExecSettings] = useState<AiAutoExecutionSettings>(DEFAULT_AI_AUTO_EXEC);
+  const [isAiAutoExecLoading, setIsAiAutoExecLoading] = useState(true);
+  const [isAiAutoExecSaving, setIsAiAutoExecSaving] = useState(false);
+  const [isAiAutoExecRunning, setIsAiAutoExecRunning] = useState(false);
+  const [aiAutoExecRunResult, setAiAutoExecRunResult] = useState<AiAutoExecRunResult | null>(null);
   const isWatermarkPreviewActive = (currentTrack?.id?.startsWith('admin-watermark-preview-') ?? false) && isPlaying;
 
   const currentWatermarkPath = siteAudioSettings?.watermark_audio_path ?? null;
@@ -266,7 +296,34 @@ export function AdminSettingsPage() {
       setIsWatermarkLoading(false);
     };
 
-    void Promise.all([loadSocialLinks(), loadSiteAudioSettings()]);
+    const loadAiAutoExecSettings = async () => {
+      setIsAiAutoExecLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', AI_AUTO_EXEC_KEY)
+        .maybeSingle();
+
+      if (error) {
+        console.error('admin ai_auto_execution load error', error);
+        setIsAiAutoExecLoading(false);
+        return;
+      }
+
+      const payload = data?.value;
+      if (payload && typeof payload === 'object') {
+        const p = payload as Record<string, unknown>;
+        setAiAutoExecSettings({
+          enabled: Boolean(p.enabled),
+          confidence_threshold: typeof p.confidence_threshold === 'number' ? p.confidence_threshold : 0.85,
+          auto_validate: typeof p.auto_validate === 'boolean' ? p.auto_validate : true,
+          auto_cancel: typeof p.auto_cancel === 'boolean' ? p.auto_cancel : false,
+        });
+      }
+      setIsAiAutoExecLoading(false);
+    };
+
+    void Promise.all([loadSocialLinks(), loadSiteAudioSettings(), loadAiAutoExecSettings()]);
   }, [t]);
 
   const handlePlayWatermarkPreview = () => {
@@ -574,6 +631,67 @@ export function AdminSettingsPage() {
     setIsEnqueueingReprocess(false);
   };
 
+  const handleAiAutoExecSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsAiAutoExecSaving(true);
+
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert(
+        {
+          key: AI_AUTO_EXEC_KEY,
+          value: {
+            enabled: aiAutoExecSettings.enabled,
+            confidence_threshold: aiAutoExecSettings.confidence_threshold,
+            auto_validate: aiAutoExecSettings.auto_validate,
+            auto_cancel: aiAutoExecSettings.auto_cancel,
+          } as unknown as Json,
+        },
+        { onConflict: 'key' }
+      );
+
+    if (error) {
+      console.error('admin ai_auto_execution save error', error);
+      toast.error('Erreur lors de la sauvegarde des paramètres IA.');
+    } else {
+      toast.success('Paramètres d\'auto-exécution IA sauvegardés.');
+    }
+
+    setIsAiAutoExecSaving(false);
+  };
+
+  const handleAiAutoExecRunNow = async () => {
+    setIsAiAutoExecRunning(true);
+    setAiAutoExecRunResult(null);
+
+    const { data, error } = await supabase.rpc(
+      'agent_auto_execute_ai_battle_actions' as any,
+      { p_limit: 50 }
+    );
+
+    if (error) {
+      console.error('agent_auto_execute_ai_battle_actions failed:', error);
+      toast.error(`Erreur : ${error.message}`);
+      setIsAiAutoExecRunning(false);
+      return;
+    }
+
+    const result = (data ?? {}) as AiAutoExecRunResult;
+    setAiAutoExecRunResult(result);
+
+    if (!result.ok) {
+      toast.error(result.reason ?? 'Échec de l\'auto-exécution.');
+    } else if (result.reason === 'auto_execution_disabled') {
+      toast.error('L\'auto-exécution est désactivée dans les paramètres.');
+    } else {
+      toast.success(
+        `Terminé — exécutés : ${result.executed}, échoués : ${result.failed}, ignorés : ${result.skipped}`
+      );
+    }
+
+    setIsAiAutoExecRunning(false);
+  };
+
   const visibilityToggleCards: VisibilityToggleCardConfig[] = [
     {
       key: 'homepage-stats',
@@ -851,6 +969,105 @@ export function AdminSettingsPage() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card className="p-6 border-zinc-800">
+        <h2 className="text-xl font-semibold text-white">Auto-exécution IA</h2>
+        <p className="text-zinc-400 text-sm mt-1">
+          Quand activée, l'IA exécute automatiquement les actions proposées dont le score de confiance
+          dépasse le seuil. Le cron appelle{' '}
+          <code className="text-xs text-rose-400">agent-auto-execute-ai-actions</code>. Le bouton
+          ci-dessous permet de lancer une passe manuellement.
+        </p>
+
+        <form onSubmit={(e) => void handleAiAutoExecSave(e)} className="mt-6 space-y-4">
+          <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              checked={aiAutoExecSettings.enabled}
+              onChange={(e) => setAiAutoExecSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
+              disabled={isAiAutoExecLoading || isAiAutoExecSaving}
+              className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
+            />
+            Activer l'auto-exécution
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+                Seuil de confiance (0–1)
+              </label>
+              <Input
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={String(aiAutoExecSettings.confidence_threshold)}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  if (Number.isFinite(v)) {
+                    setAiAutoExecSettings((prev) => ({ ...prev, confidence_threshold: v }));
+                  }
+                }}
+                disabled={isAiAutoExecLoading || isAiAutoExecSaving}
+              />
+            </div>
+
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200 self-end">
+              <input
+                type="checkbox"
+                checked={aiAutoExecSettings.auto_validate}
+                onChange={(e) => setAiAutoExecSettings((prev) => ({ ...prev, auto_validate: e.target.checked }))}
+                disabled={isAiAutoExecLoading || isAiAutoExecSaving}
+                className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
+              />
+              Auto-valider les battles
+            </label>
+
+            <label className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-200 self-end">
+              <input
+                type="checkbox"
+                checked={aiAutoExecSettings.auto_cancel}
+                onChange={(e) => setAiAutoExecSettings((prev) => ({ ...prev, auto_cancel: e.target.checked }))}
+                disabled={isAiAutoExecLoading || isAiAutoExecSaving}
+                className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-rose-500 focus:ring-rose-500/50"
+              />
+              Auto-annuler les battles
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button type="submit" isLoading={isAiAutoExecLoading || isAiAutoExecSaving}>
+              {t('common.save')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleAiAutoExecRunNow()}
+              isLoading={isAiAutoExecRunning}
+              disabled={isAiAutoExecRunning}
+            >
+              Lancer maintenant
+            </Button>
+          </div>
+        </form>
+
+        {aiAutoExecRunResult && (
+          <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm space-y-1">
+            <p className="text-zinc-400 font-medium">Dernier résultat</p>
+            {aiAutoExecRunResult.reason && (
+              <p className="text-amber-400">{aiAutoExecRunResult.reason}</p>
+            )}
+            <div className="flex gap-6 text-zinc-300">
+              <span>✓ exécutés : <strong>{aiAutoExecRunResult.executed}</strong></span>
+              <span>✗ échoués : <strong>{aiAutoExecRunResult.failed}</strong></span>
+              <span>— ignorés : <strong>{aiAutoExecRunResult.skipped}</strong></span>
+              {aiAutoExecRunResult.threshold !== undefined && (
+                <span className="text-zinc-500">seuil : {aiAutoExecRunResult.threshold}</span>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

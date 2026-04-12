@@ -225,13 +225,18 @@ export function AdminForumPage() {
   const runTopicHardDelete = async (topicId: string) => {
     if (!window.confirm(t('admin.forum.topicHardDeleteConfirm'))) return;
     setActionKey(`topic:${topicId}:hardDelete`);
-    const { error } = await supabase.rpc('forum_admin_hard_delete_topic' as any, { p_topic_id: topicId });
+
+    const { error } = await supabase.rpc('forum_admin_hard_delete_topic' as any, {
+      p_topic_id: topicId,
+    });
+
     if (error) {
       console.error('Error hard deleting forum topic', error);
       toast.error(t('admin.forum.topicActionError'));
       setActionKey(null);
       return;
     }
+
     toast.success(t('admin.forum.topicHardDeleted'));
     setActionKey(null);
     await loadForumModeration(topicPage, postPage);

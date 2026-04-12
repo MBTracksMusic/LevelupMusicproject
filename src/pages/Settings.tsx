@@ -211,7 +211,7 @@ export function SettingsPage() {
         throw new Error(t('settings.avatarPublicUrlError'));
       }
 
-      return publicData.publicUrl;
+      return `${publicData.publicUrl}?v=${Date.now()}`;
     } catch (error) {
       const message = error instanceof Error ? error.message : t('settings.avatarUploadError');
       setAvatarError(message);
