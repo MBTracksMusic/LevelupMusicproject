@@ -73,7 +73,7 @@ if [[ "$CURRENT_BRANCH" == "staging" ]]; then
   echo "⚠️ Merge staging → main"
 
   read -p "Confirmer merge staging → main ? (y/n): " confirm
-  if [[ "$confirm" != "y" ]]; then
+  if [[ "${confirm,,}" != "y" ]]; then
     echo "❌ Annulé"
     exit 1
   fi
@@ -107,7 +107,7 @@ echo "   Supabase : $SUPABASE_PROJECT_REF"
 echo "   Vercel   : $EXPECTED_VERCEL_PROJECT"
 echo ""
 read -p "Confirmer le déploiement en PRODUCTION ? (y/n): " confirm_prod
-if [[ "$confirm_prod" != "y" ]]; then
+if [[ "${confirm_prod,,}" != "y" ]]; then
   echo "❌ Annulé"
   exit 1
 fi
