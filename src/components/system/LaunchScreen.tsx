@@ -187,6 +187,16 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
     messages?.subline?.trim() ||
     "Une sélection de producteurs est déjà à l'intérieur. Les prochains accès arrivent progressivement.";
 
+  // Découpage automatique du titre en lignes visuelles
+  // — respecte les \n si l'admin en met, sinon coupe aux fins de phrases
+  const headlineLines = useMemo(() => {
+    const raw = headline;
+    const lines = raw.includes('\n')
+      ? raw.split('\n')
+      : raw.split(/(?<=[.!?])\s+/);
+    return lines.map((s) => s.trim()).filter(Boolean);
+  }, [headline]);
+
 
   return (
     <div className="relative min-h-screen bg-zinc-950 overflow-hidden">
@@ -208,10 +218,10 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
         />
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 py-24 text-center">
 
         {/* Badge "Accès privé" — amber unifié + pulse */}
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5">
+        <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-xs font-semibold uppercase tracking-widest text-amber-400">
             Accès privé
@@ -219,28 +229,42 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
         </div>
 
         {/* Logo — amber gradient + halo */}
-        <div className="mb-7 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-500/20 ring-1 ring-amber-500/20 shadow-[0_0_32px_rgba(245,158,11,0.18)]">
+        <div className="mb-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-500/20 ring-1 ring-amber-500/20 shadow-[0_0_32px_rgba(245,158,11,0.18)]">
           <span className="text-3xl">🎧</span>
         </div>
 
-        {/* Headline — plus grand, plus gras */}
-        <h1 className="text-balance text-5xl font-black tracking-tight text-white sm:text-6xl leading-[1.1]">
-          {headline}
+        {/* Headline — découpage automatique, taille adaptée à la longueur de chaque ligne */}
+        <h1 className="flex w-full flex-col items-center gap-3">
+          {headlineLines.map((line, i) => (
+            <span
+              key={i}
+              className={[
+                'block text-balance text-center font-black tracking-tight leading-tight',
+                line.length <= 15
+                  ? 'text-4xl text-white sm:text-5xl'
+                  : line.length <= 30
+                    ? 'text-3xl text-white sm:text-4xl'
+                    : 'text-2xl text-zinc-300 sm:text-3xl',
+              ].join(' ')}
+            >
+              {line}
+            </span>
+          ))}
         </h1>
 
         {/* Subline */}
-        <p className="mt-5 max-w-sm text-base leading-relaxed text-zinc-400 sm:text-lg text-pretty">
+        <p className="mt-8 max-w-sm text-base leading-relaxed text-zinc-400 sm:text-lg text-pretty">
           {subline}
         </p>
 
         {/* Micro texte UX */}
-        <p className="mt-2 text-sm text-zinc-600">· Accès ouverts par vagues ·</p>
+        <p className="mt-3 text-sm text-zinc-600">· Accès ouverts par vagues ·</p>
 
         {/* Divider visuel hero → conversion */}
-        <div className="mt-8 flex w-full items-center gap-3">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent to-zinc-800" />
-          <div className="h-1 w-1 rounded-full bg-zinc-700" />
-          <div className="h-px flex-1 bg-gradient-to-l from-transparent to-zinc-800" />
+        <div className="mt-12 flex w-full items-center gap-3">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent to-zinc-700" />
+          <div className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+          <div className="h-px flex-1 bg-gradient-to-l from-transparent to-zinc-700" />
         </div>
 
         {/* Date de lancement — texte inline, accent amber */}
@@ -281,7 +305,7 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
 
         {/* Preuve sociale — juste au-dessus du form pour impact maximal */}
         {waitlistCountDisplay > 0 && (
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/60 px-4 py-2">
+          <div className="mt-10 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/60 px-4 py-2">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             <p className="text-sm text-zinc-400">
               <span className="font-semibold text-white">+{waitlistCountDisplay}</span>
@@ -291,7 +315,7 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
         )}
 
         {/* Formulaire waitlist — carte premium */}
-        <div className="mt-8 w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl shadow-black/60 backdrop-blur ring-1 ring-white/[0.03]">
+        <div className="mt-14 w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl shadow-black/60 backdrop-blur ring-1 ring-white/[0.03]">
 
           {/* En-tête carte */}
           <p className="text-base font-bold text-white">
