@@ -74,8 +74,8 @@ export function trackPage(path: string) {
   });
 }
 
-export function trackSignUp(method = 'email') {
-  trackEvent('sign_up', { method });
+export function trackSignUp(method = 'email', referrer?: string | null) {
+  trackEvent('sign_up', { method, referrer: referrer ?? undefined });
 }
 
 export function trackLogin(method = 'email') {
@@ -316,6 +316,64 @@ export function trackJoinBattle(battleId?: string) {
   });
 }
 
+// --- Referrer ---
+
+const REFERRER_KEY = 'beatelion_referrer';
+
+/** Stocke le referrer dans localStorage une seule fois (le premier gagne).
+ *  Les valeurs vides ou "anon" sont ignorées — seuls les vrais user IDs sont stockés. */
+export function storeReferrer(ref: string): void {
+  if (!ref || ref === 'anon') return;
+  try {
+    if (typeof window !== 'undefined' && !window.localStorage.getItem(REFERRER_KEY)) {
+      window.localStorage.setItem(REFERRER_KEY, ref);
+    }
+  } catch { /* localStorage bloqué (private mode strict, etc.) */ }
+}
+
+/** Retourne le referrer stocké, ou null. */
+export function getReferrer(): string | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage.getItem(REFERRER_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Battle tracking ---
+
+export function trackBattleView(params: {
+  battleId: string;
+  slug: string;
+  referrer: string | null;
+}) {
+  trackEvent('battle_view', {
+    battle_id: params.battleId,
+    slug: params.slug,
+    referrer: params.referrer,
+  });
+}
+
+export function trackBattleShare(params: {
+  battleId: string;
+  method: 'native' | 'clipboard';
+}) {
+  trackEvent('battle_share', {
+    battle_id: params.battleId,
+    method: params.method,
+  });
+}
+
+export function trackBattleVote(params: {
+  battleId: string;
+  referrer: string | null;
+}) {
+  trackEvent('battle_vote_submitted', {
+    battle_id: params.battleId,
+    referrer: params.referrer,
+  });
+}
+
 export async function initAnalytics() {
   if (!canTrack() || consentInitialized) {
     return;
@@ -392,7 +450,12 @@ export function useAnalytics() {
     revokeAnalyticsConsent,
     clearAnalyticsUserId,
     setAnalyticsUserId,
+    getReferrer,
+    storeReferrer,
     trackAddToCart,
+    trackBattleShare,
+    trackBattleVote,
+    trackBattleView,
     trackBeatComplete,
     trackBeatLike,
     trackBeatPause,

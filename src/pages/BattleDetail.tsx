@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Trophy, Users } from 'lucide-react';
+import { ArrowLeft, Check, Clock, Copy, Share2, Trophy, Users } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import type { BattleProductSnapshot, BattleWithRelations, ProductWithRelations } from '../lib/supabase/types';
 import { formatDateTime } from '../lib/utils/format';
+import { useAuth } from '../lib/auth/hooks';
+import { getReferrer, storeReferrer, trackBattleShare, trackBattleVote, trackBattleView } from '../lib/analytics';
 
 type BattleSnapshotSlot = 'producer1' | 'producer2';
 type BattleSnapshotMap = Partial<Record<BattleSnapshotSlot, BattleProductSnapshot>>;
@@ -47,11 +49,13 @@ function getProductUrl(product: Pick<ProductWithRelations, 'slug' | 'product_typ
 export function BattleDetailPage() {
   const { t } = useTranslation();
   const { slug } = useParams<{ slug: string }>();
+  const { user } = useAuth();
   const [battle, setBattle] = useState<BattleWithRelations | null>(null);
   const [battleSnapshots, setBattleSnapshots] = useState<BattleSnapshotMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchBattle = useCallback(async () => {
     if (!slug) {
@@ -236,8 +240,55 @@ export function BattleDetailPage() {
     };
   }, [battle?.id]);
 
+  // Lit le paramètre ?ref= à l'arrivée et le stocke une seule fois
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) storeReferrer(ref);
+  }, []);
+
+  // Met à jour le titre de la page quand la battle est chargée
+  useEffect(() => {
+    if (!battle) return;
+    const prev = document.title;
+    document.title = `${battle.title} – Beatelion`;
+    return () => { document.title = prev; };
+  }, [battle?.title]);
+
+  // Track la vue battle une fois que l'ID est connu
+  useEffect(() => {
+    if (!battle) return;
+    trackBattleView({ battleId: battle.id, slug: battle.slug, referrer: getReferrer() });
+  }, [battle?.id]);
+
+  const handleShare = useCallback(async () => {
+    if (!battle) return;
+    const shareUrl = user?.id
+      ? `${window.location.origin}/battles/${battle.slug}?ref=${user.id}`
+      : `${window.location.origin}/battles/${battle.slug}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: battle.title, url: shareUrl });
+        trackBattleShare({ battleId: battle.id, method: 'native' });
+        return;
+      } catch {
+        // annulé par l'utilisateur ou non supporté — fallback clipboard
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      trackBattleShare({ battleId: battle.id, method: 'clipboard' });
+    } catch {
+      // clipboard non disponible (HTTP sans HTTPS) — aucune action
+    }
+  }, [battle, user?.id]);
+
   // Mise à jour optimiste locale après vote (sans re-fetch)
   const handleVoteSuccess = useCallback((votedForProducerId: string) => {
+    if (battle) {
+      trackBattleVote({ battleId: battle.id, referrer: getReferrer() });
+    }
     setBattle((prev) => {
       if (!prev) return prev;
       return {
@@ -252,7 +303,7 @@ export function BattleDetailPage() {
             : prev.votes_producer2,
       };
     });
-  }, []);
+  }, [battle]);
 
   const totalVotes = useMemo(() => {
     if (!battle) return 0;
@@ -335,7 +386,28 @@ export function BattleDetailPage() {
             <ArrowLeft className="w-4 h-4" />
             {t('battleDetail.backToBattles')}
           </Link>
-          <Badge variant={getStatusVariant(battle.status)}>{t(getStatusLabelKey(battle.status) as 'battleDetail.statusActive' | 'battleDetail.statusPendingAcceptance' | 'battleDetail.statusAwaitingAdmin' | 'battleDetail.statusApproved' | 'battleDetail.statusRejected' | 'battleDetail.statusCompleted' | 'battleDetail.statusCancelled' | 'battleDetail.statusPending')}</Badge>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleShare}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              title={t('battleDetail.shareButton')}
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 text-green-400" />
+                  <span className="text-green-400">{t('battleDetail.linkCopied')}</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-4 h-4 sm:hidden" />
+                  <Copy className="w-4 h-4 hidden sm:block" />
+                  <span className="hidden sm:inline">{t('battleDetail.copyLink')}</span>
+                </>
+              )}
+            </button>
+            <Badge variant={getStatusVariant(battle.status)}>{t(getStatusLabelKey(battle.status) as 'battleDetail.statusActive' | 'battleDetail.statusPendingAcceptance' | 'battleDetail.statusAwaitingAdmin' | 'battleDetail.statusApproved' | 'battleDetail.statusRejected' | 'battleDetail.statusCompleted' | 'battleDetail.statusCancelled' | 'battleDetail.statusPending')}</Badge>
+          </div>
         </div>
 
         <Card className="space-y-5">
