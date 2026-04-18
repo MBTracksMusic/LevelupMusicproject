@@ -3,6 +3,8 @@ import { once } from "node:events";
 import { asFfmpegGainDb, generateWatermarkPositions } from "./watermark.js";
 const MAX_LOG_LINES = 200;
 const MAX_CAPTURE_STDOUT_CHARS = 8_192;
+const MIN_WATERMARK_PITCH = 0.995;
+const MAX_WATERMARK_PITCH = 1.005;
 const keepTail = (lines, chunk) => {
     for (const line of chunk.split(/\r?\n/)) {
         if (!line)
@@ -88,10 +90,11 @@ const runCommand = async (command, args, options = {}) => {
     }
     return { stdout, tail };
 };
-const buildFilterComplex = (delayPositionsMs, gainDb, durationSec) => {
+const buildFilterComplex = (delayPositionsMs, gainDb, durationSec, sampleRate) => {
     const sourceLabels = delayPositionsMs.map((_, index) => `tagsrc${index}`);
     const delayedLabels = delayPositionsMs.map((_, index) => `tagmix${index}`);
     const gainExpr = asFfmpegGainDb(gainDb);
+    const safeSampleRate = Number.isFinite(sampleRate) && sampleRate > 0 ? Math.round(sampleRate) : 44_100;
     let filter = "";
     if (sourceLabels.length === 1) {
         filter += `[1:a]volume=${gainExpr}[${sourceLabels[0]}];`;
@@ -102,7 +105,8 @@ const buildFilterComplex = (delayPositionsMs, gainDb, durationSec) => {
             .join("")};`;
     }
     delayPositionsMs.forEach((delayMs, index) => {
-        filter += `[${sourceLabels[index]}]adelay=${Math.max(0, Math.round(delayMs))}:all=true[${delayedLabels[index]}];`;
+        const pitchFactor = (MIN_WATERMARK_PITCH + Math.random() * (MAX_WATERMARK_PITCH - MIN_WATERMARK_PITCH)).toFixed(6);
+        filter += `[${sourceLabels[index]}]asetrate=${safeSampleRate}*${pitchFactor},aresample=${safeSampleRate},adelay=${Math.max(0, Math.round(delayMs))}:all=true[${delayedLabels[index]}];`;
     });
     filter += `[0:a]${delayedLabels.map((label) => `[${label}]`).join("")}amix=inputs=${1 + delayedLabels.length}:normalize=0:dropout_transition=0,atrim=duration=${durationSec.toFixed(3)}[outa]`;
     return filter;
@@ -140,7 +144,7 @@ export const renderWatermarkedPreview = async (params) => {
     });
     const positionsSec = generateWatermarkPositions(durationSec, params.minIntervalSec, params.maxIntervalSec);
     const positionsMs = positionsSec.map((value) => value * 1000);
-    const filterComplex = buildFilterComplex(positionsMs, params.gainDb, durationSec);
+    const filterComplex = buildFilterComplex(positionsMs, params.gainDb, durationSec, params.audioSampleRate);
     await runCommand(params.ffmpegBin, [
         "-hide_banner",
         "-y",
