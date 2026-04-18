@@ -178,49 +178,37 @@ export function Header() {
                 alt="Beatelion - Beat marketplace"
                 className="h-8 w-auto max-h-8"
               />
-              <span className="text-lg font-bold tracking-wide text-white hidden md:block">
+              <span className="text-lg font-black tracking-widest text-white hidden md:block bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent">
                 {BRAND.name.toUpperCase()}
               </span>
             </Link>
 
-            <nav className="hidden lg:flex items-center gap-1">
+            <nav className="hidden lg:flex items-center gap-0.5">
               {/* TODO(levelup): sections exclusives/kits temporairement desactivees. */}
-              <Link
-                to="/beats"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('nav.beats')}
-              </Link>
-              <Link
-                to="/battles"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('nav.battles')}
-              </Link>
-              <Link
-                to="/producers"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('nav.producers')}
-              </Link>
-              <Link
-                to="/forum"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('forum.title')}
-              </Link>
-              <Link
-                to="/leaderboard"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('leaderboard.title')}
-              </Link>
-              <Link
-                to="/pricing"
-                className="px-3 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                {t('nav.pricing')}
-              </Link>
+              {[
+                { to: '/beats', label: t('nav.beats') },
+                { to: '/battles', label: t('nav.battles') },
+                { to: '/producers', label: t('nav.producers') },
+                { to: '/forum', label: t('forum.title') },
+                { to: '/leaderboard', label: t('leaderboard.title') },
+                { to: '/pricing', label: t('nav.pricing') },
+              ].map(({ to, label }) => {
+                const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`);
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={`relative px-3 py-2 text-[13px] font-medium tracking-wide transition-colors duration-200 group ${
+                      isActive ? 'text-white' : 'text-zinc-400 hover:text-zinc-100'
+                    }`}
+                  >
+                    {label}
+                    <span className={`absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r from-violet-500 to-rose-500 transition-all duration-200 ${
+                      isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'
+                    }`} />
+                  </Link>
+                );
+              })}
             </nav>
           </div>
 
