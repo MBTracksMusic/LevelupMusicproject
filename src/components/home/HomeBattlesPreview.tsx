@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Swords } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Swords } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -55,6 +56,11 @@ export function HomeBattlesPreview() {
   const { t } = useTranslation();
   const [battles, setBattles] = useState<HomeBattleRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -340 : 340, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     let isCancelled = false;
@@ -173,27 +179,51 @@ export function HomeBattlesPreview() {
   }, []);
 
   return (
-    <section className="py-20 bg-zinc-950">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-10">
+    <motion.section
+      className="py-12 md:py-20 bg-zinc-950"
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.6, ease: 'easeOut' }}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1">
               <Swords className="w-5 h-5 text-rose-400" />
               <h2 className="text-3xl font-bold text-white">{t('battles.title')}</h2>
             </div>
-            <p className="text-zinc-400">{t('home.latestBattlesSubtitle')}</p>
+            <p className="text-zinc-400 text-sm">{t('home.latestBattlesSubtitle')}</p>
           </div>
-          <Link to="/battles">
-            <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              {t('home.viewAllBattles')}
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Scroll left"
+              onClick={() => scroll('left')}
+              className="w-11 h-11 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Scroll right"
+              onClick={() => scroll('right')}
+              className="w-11 h-11 rounded-full border border-zinc-700 bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:border-zinc-500 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <Link to="/battles">
+              <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                {t('home.viewAllBattles')}
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, index) => (
-              <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 animate-pulse space-y-3">
+          <div className="flex gap-4 overflow-hidden">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex-shrink-0 w-72 bg-zinc-900 border border-zinc-800 rounded-xl p-5 animate-pulse space-y-3">
                 <div className="h-5 bg-zinc-800 rounded w-2/3" />
                 <div className="h-4 bg-zinc-800 rounded w-1/2" />
                 <div className="h-7 bg-zinc-800 rounded w-24" />
@@ -203,21 +233,32 @@ export function HomeBattlesPreview() {
         ) : battles.length === 0 ? (
           <Card className="text-zinc-400">{t('home.noPublicBattles')}</Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {battles.map((battle) => (
-              <Link key={battle.id} to={`/battles/${battle.slug}`}>
-                <Card variant="interactive" className="h-full space-y-3 hover:border-rose-500/50">
-                  <p className="text-lg font-semibold text-white">{battle.title}</p>
-                  <p className="text-sm text-zinc-400">
-                    {battle.producer1?.username || t('home.producerOne')} {t('battles.vs')} {battle.producer2?.username || t('home.producerTwo')}
-                  </p>
-                  <Badge variant={badgeByStatus[battle.status]}>{t(toStatusLabel(battle.status) as 'home.battleStatusActive' | 'home.battleStatusCompleted')}</Badge>
-                </Card>
+          <div ref={scrollRef} className="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
+            {battles.map((battle, index) => (
+              <Link key={battle.id} to={`/battles/${battle.slug}`} className="flex-shrink-0 w-72">
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: index * 0.08 }}
+                  whileHover={{ y: -4 }}
+                  className="h-full bg-zinc-900/80 border border-zinc-800 hover:border-rose-500/40 rounded-xl p-5 space-y-3 transition-colors duration-200"
+                >
+                  <p className="text-lg font-semibold text-white truncate">{battle.title}</p>
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <span className="truncate max-w-[90px]">{battle.producer1?.username || t('home.producerOne')}</span>
+                    <span className="text-rose-500 font-bold text-xs px-1.5 py-0.5 bg-rose-500/10 rounded">VS</span>
+                    <span className="truncate max-w-[90px]">{battle.producer2?.username || t('home.producerTwo')}</span>
+                  </div>
+                  <Badge variant={badgeByStatus[battle.status]}>
+                    {t(toStatusLabel(battle.status) as 'home.battleStatusActive' | 'home.battleStatusCompleted')}
+                  </Badge>
+                </motion.div>
               </Link>
             ))}
           </div>
         )}
       </div>
-    </section>
+    </motion.section>
   );
 }

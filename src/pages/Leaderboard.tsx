@@ -115,7 +115,7 @@ export function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-24">
-      <div className="max-w-5xl mx-auto px-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">{t('leaderboard.title')}</h1>

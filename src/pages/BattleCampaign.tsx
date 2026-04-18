@@ -161,7 +161,7 @@ export function BattleCampaignPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-10 pb-20">
-      <div className="max-w-4xl mx-auto px-4 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <Card className="overflow-hidden p-0">
           {campaign.cover_image_url ? (
             <img

@@ -72,7 +72,7 @@ export function ForumTopicPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-5xl mx-auto px-4 space-y-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <div className="space-y-4">
           <Link
             to={category ? `/forum/${category.slug}` : '/forum'}

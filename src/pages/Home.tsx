@@ -40,7 +40,7 @@ export function HomePage() {
   const { user } = useAuth();
   const { isActive: hasPremiumAccess, subscription: userSubStatus } = useUserSubscriptionStatus(user?.id);
   const isUserPremium = hasPremiumAccess && userSubStatus?.plan_code === 'user_monthly';
-  const { showHomepageStats } = useMaintenanceModeContext();
+  const { showHomepageStats, showHomepageBadge } = useMaintenanceModeContext();
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   // TODO(levelup): reactiver cette section quand les categories Exclusifs/Kits reviennent.
   const isExclusiveSectionEnabled = false;
@@ -157,24 +157,26 @@ export function HomePage() {
         {/* Subtle grid overlay */}
         <div className="absolute inset-0 opacity-[0.03] hero-grid-overlay" />
 
-        <div className="relative z-10 max-w-5xl mx-auto px-4 text-center">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 mb-8 text-sm font-medium text-violet-300"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>La marketplace de beats #1 en France</span>
-          </motion.div>
+          {showHomepageBadge && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: 'easeOut' }}
+              className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 mb-8 text-sm font-medium text-violet-300"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>La marketplace de beats #1 en France</span>
+            </motion.div>
+          )}
 
           {/* Title */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: [0.21, 0.47, 0.32, 0.98] }}
-            className="text-6xl md:text-8xl font-black leading-[0.92] tracking-tight text-white mb-6"
+            className="text-4xl sm:text-6xl md:text-8xl font-black leading-[0.92] tracking-tight text-white mb-6"
           >
             <span className="block">{t('home.heroTitle').split(' ').slice(0, Math.ceil(t('home.heroTitle').split(' ').length / 2)).join(' ')}</span>
             <span className="block bg-gradient-to-r from-violet-400 via-rose-400 to-orange-400 bg-clip-text text-transparent">
@@ -257,7 +259,7 @@ export function HomePage() {
 
       {isExclusiveSectionEnabled && exclusives.length > 0 && (
         <section className="py-20 bg-gradient-to-b from-zinc-950 to-zinc-900">
-          <div className="max-w-7xl mx-auto px-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between mb-10">
               <div>
                 <div className="flex items-center gap-2 mb-2">
@@ -292,8 +294,8 @@ export function HomePage() {
         </section>
       )}
 
-      <section className="py-20 bg-zinc-950">
-        <div className="max-w-7xl mx-auto px-4">
+      <section className="py-12 md:py-20 bg-zinc-950">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
               {t('home.startSelling')}
@@ -304,9 +306,9 @@ export function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div className="bg-zinc-900 rounded-2xl p-8 border border-zinc-800">
-              <div className="w-14 h-14 rounded-xl bg-rose-500/10 flex items-center justify-center mb-6">
-                <Zap className="w-7 h-7 text-rose-400" />
+            <div className="bg-zinc-900/70 rounded-2xl p-8 border border-zinc-800 hover:border-violet-500/30 transition-colors duration-300">
+              <div className="w-14 h-14 rounded-xl bg-violet-500/10 flex items-center justify-center mb-6">
+                <Zap className="w-7 h-7 text-violet-400" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-3">
                 {t('home.fastPublishingTitle')}
@@ -351,9 +353,9 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="py-20 bg-gradient-to-br from-rose-950/30 via-zinc-950 to-orange-950/20">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+      <section className="py-12 md:py-20 bg-gradient-to-br from-violet-950/40 via-zinc-950 to-orange-950/30">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-violet-300 via-rose-300 to-orange-300 bg-clip-text text-transparent mb-6">
             {t('home.finalCtaTitle')}
           </h2>
           <p className="text-xl text-zinc-400 mb-10">

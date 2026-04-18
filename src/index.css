@@ -74,7 +74,15 @@
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-brand-secondary via-brand-primary to-brand-glow bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-violet-400 via-rose-400 to-orange-400 bg-clip-text text-transparent;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .hero-grid-overlay {

@@ -10,7 +10,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: 'bg-gradient-to-r from-rose-500 to-orange-500 text-white hover:from-rose-600 hover:to-orange-600 shadow-lg shadow-rose-500/25',
+  primary: 'bg-gradient-to-r from-violet-600 via-rose-500 to-orange-500 text-white hover:from-violet-700 hover:via-rose-600 hover:to-orange-600 shadow-lg shadow-violet-500/20',
   secondary: 'bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700',
   outline: 'border border-zinc-600 text-zinc-300 hover:bg-zinc-800 hover:text-white',
   ghost: 'text-zinc-400 hover:text-white hover:bg-zinc-800',

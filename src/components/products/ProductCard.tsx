@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Play, Pause, Heart, ShoppingCart, Star, Lock } from 'lucide-react';
 import { Badge } from '../ui/Badge';
@@ -153,44 +154,66 @@ export function ProductCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1">
-        <div className="relative aspect-square">
+      <motion.div
+        whileHover={{ y: -6 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className={`relative bg-zinc-900/70 backdrop-blur-sm rounded-xl overflow-hidden border transition-all duration-300 ${
+          isCurrentTrack
+            ? 'border-rose-500/60 shadow-lg shadow-rose-500/15'
+            : 'border-zinc-800 hover:border-zinc-600 hover:shadow-xl hover:shadow-black/40'
+        }`}
+      >
+        {/* Glow ring on active track */}
+        {isCurrentTrack && (
+          <div className="absolute inset-0 rounded-xl ring-1 ring-rose-500/30 pointer-events-none z-10" />
+        )}
+
+        <div className="relative aspect-square overflow-hidden">
           {product.cover_image_url ? (
-            <img
+            <motion.img
               src={product.cover_image_url}
               alt={product.title}
               className="w-full h-full object-cover"
+              whileHover={{ scale: 1.06 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+            <div className="w-full h-full bg-gradient-to-br from-violet-950 via-zinc-900 to-zinc-950 flex items-center justify-center">
               <Play className="w-12 h-12 text-zinc-700" />
             </div>
           )}
 
+          {/* Gradient overlay always present at bottom */}
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent" />
+
+          {/* Play overlay */}
           <div
-            className={`absolute inset-0 bg-black/60 flex items-center justify-center transition-opacity duration-200 ${
+            className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity duration-200 ${
               isHovered || isPlayingCurrent ? 'opacity-100' : 'opacity-0'
             }`}
           >
-            <button
+            <motion.button
               onClick={handlePlay}
               disabled={!hasPreview}
-              className="w-14 h-14 rounded-full bg-white flex items-center justify-center hover:scale-110 transition-transform disabled:cursor-not-allowed disabled:opacity-60"
+              whileHover={{ scale: 1.12 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-14 h-14 rounded-full bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center shadow-lg shadow-rose-500/40 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label={
                 hasPreview
-                  ? (isPlayingCurrent ? t('common.pause') : t('common.play'))
+                  ? isPlayingCurrent ? t('common.pause') : t('common.play')
                   : t('products.previewUnavailable')
               }
             >
               {isPlayingCurrent ? (
-                <Pause className="w-6 h-6 text-zinc-900" fill="currentColor" />
+                <Pause className="w-6 h-6 text-white" fill="currentColor" />
               ) : (
-                <Play className="w-6 h-6 text-zinc-900 ml-1" fill="currentColor" />
+                <Play className="w-6 h-6 text-white ml-1" fill="currentColor" />
               )}
-            </button>
+            </motion.button>
           </div>
 
-          <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+          {/* Top-left badges */}
+          <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
             {product.is_exclusive && (
               <Badge variant="premium">
                 <Star className="w-3 h-3" />
@@ -210,22 +233,26 @@ export function ProductCard({
             )}
           </div>
 
+          {/* Wishlist button */}
           {isAuthenticated && (
-            <button
+            <motion.button
               onClick={handleWishlist}
-              className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
+              className={`absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
                 isWishlisted
-                  ? 'bg-rose-500 text-white'
-                  : 'bg-black/50 text-white hover:bg-black/70'
+                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/40'
+                  : 'bg-black/50 backdrop-blur-sm text-white hover:bg-black/70'
               }`}
             >
               <Heart
                 className="w-4 h-4"
                 fill={isWishlisted ? 'currentColor' : 'none'}
               />
-            </button>
+            </motion.button>
           )}
 
+          {/* Exclusive lock banner */}
           {product.is_exclusive && !canAccessExclusive && (
             <div className="absolute bottom-3 left-3 right-3">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur-sm rounded-lg text-xs text-zinc-300">
@@ -236,26 +263,25 @@ export function ProductCard({
           )}
         </div>
 
+        {/* Card body */}
         <div className="p-4">
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-white truncate group-hover:text-rose-400 transition-colors">
-                {product.title}
-              </h3>
-              <p className="text-sm text-zinc-400 truncate">
-                {product.producer?.username || t('home.unknownProducer')}
-              </p>
-            </div>
+          <div className="mb-2">
+            <h3 className="font-semibold text-white truncate group-hover:text-rose-400 transition-colors duration-200">
+              {product.title}
+            </h3>
+            <p className="text-sm text-zinc-400 truncate">
+              {product.producer?.username || t('home.unknownProducer')}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-zinc-500 mb-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500 mb-3 flex-wrap">
             {getGenreName() && (
-              <span className="px-2 py-0.5 bg-zinc-800 rounded-full">
+              <span className="px-2 py-0.5 bg-zinc-800 rounded-full border border-zinc-700/50">
                 {getGenreName()}
               </span>
             )}
-            {product.bpm && <span>{product.bpm} {t('products.bpm')}</span>}
-            {product.key_signature && <span>{product.key_signature}</span>}
+            {product.bpm && <span className="text-zinc-600">{product.bpm} {t('products.bpm')}</span>}
+            {product.key_signature && <span className="text-zinc-600">{product.key_signature}</span>}
           </div>
 
           {!hasPreview && (
@@ -277,11 +303,9 @@ export function ProductCard({
           )}
 
           <div className="flex items-center justify-between">
-            <div>
-              <span className="text-lg font-bold text-white">
-                {formatPrice(product.price)}
-              </span>
-            </div>
+            <span className="text-lg font-bold bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent">
+              {formatPrice(product.price)}
+            </span>
             {!product.is_sold && (
               <Button
                 size="sm"
@@ -300,7 +324,7 @@ export function ProductCard({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </Link>
   );
 }

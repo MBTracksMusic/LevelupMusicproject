@@ -396,7 +396,7 @@ export function ProducerPublicProfilePage() {
   if (isProfileLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-4xl mx-auto px-4">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-8 animate-pulse">
             <div className="w-20 h-20 rounded-full bg-zinc-800 mb-4" />
             <div className="h-6 bg-zinc-800 rounded w-48 mb-3" />
@@ -410,7 +410,7 @@ export function ProducerPublicProfilePage() {
   if (profileError || !producer) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-4xl mx-auto px-4 text-center py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center py-20">
           <h1 className="text-3xl font-bold text-white mb-3">{t('producerProfile.notFoundTitle')}</h1>
           <p className="text-zinc-400 mb-6">{profileError || t('producerProfile.unavailableProfile')}</p>
           <Link to="/producers" className="text-rose-400 hover:text-rose-300">
@@ -424,7 +424,7 @@ export function ProducerPublicProfilePage() {
   if (isDeletedProfile) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-4xl mx-auto px-4 text-center py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center py-20">
           <h1 className="text-3xl font-bold text-white mb-3">Ce compte a été supprimé</h1>
           <p className="text-zinc-400 mb-6">Ce profil a ete anonymise et n'est plus actif.</p>
           <Link to="/producers" className="text-rose-400 hover:text-rose-300">
@@ -437,7 +437,7 @@ export function ProducerPublicProfilePage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-6 pb-20">
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <Link to="/producers" className="inline-block text-zinc-400 hover:text-white mb-4">
           {t('producerProfile.backToProducers')}
         </Link>

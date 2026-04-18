@@ -460,7 +460,7 @@ export function ProductDetailsPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="h-8 w-48 bg-zinc-800 rounded mb-6 animate-pulse" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="aspect-square bg-zinc-800 rounded-2xl animate-pulse" />
@@ -478,7 +478,7 @@ export function ProductDetailsPage() {
   if (!product || error) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-5xl mx-auto px-4 text-center py-20">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center py-20">
           <h1 className="text-3xl font-bold text-white mb-3">{t('productDetails.notFoundTitle')}</h1>
           <p className="text-zinc-400 mb-6">{error || t('productDetails.notFoundDescription')}</p>
           <Link to="/beats" className="inline-flex items-center gap-2 text-rose-400 hover:text-rose-300">
@@ -496,7 +496,7 @@ export function ProductDetailsPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <Link
           to={routePrefix === 'exclusives' ? '/exclusives' : routePrefix === 'kits' ? '/kits' : '/beats'}
           className="inline-flex items-center gap-2 text-zinc-400 hover:text-white mb-6"

@@ -664,7 +664,7 @@ export function PricingPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-white mb-4">{t('pricing.title')}</h1>
           <p className="text-xl text-zinc-400 max-w-2xl mx-auto">

@@ -237,7 +237,7 @@ export function MyMessagesPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-5xl mx-auto px-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold text-white inline-flex items-center gap-2">
             <MessageSquareText className="w-6 h-6 text-rose-400" />

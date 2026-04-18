@@ -10,8 +10,8 @@ export function HomeWeeklyTopProducers() {
   const { entries, isLoading } = useWeeklyLeaderboard(5);
 
   return (
-    <section className="py-20 bg-zinc-950">
-      <div className="max-w-7xl mx-auto px-4">
+    <section className="py-12 md:py-20 bg-zinc-950">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-10">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -35,28 +35,38 @@ export function HomeWeeklyTopProducers() {
           <Card className="text-zinc-400">{t('home.noWeeklyTopProducers')}</Card>
         ) : (
           <div className="space-y-3">
-            {entries.map((entry, index) => (
-              <Card key={entry.user_id} className="border-zinc-800 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white">
-                      {entry.rank_position || index + 1}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-white">{entry.username || t('leaderboard.memberFallback')}</p>
-                      <p className="text-xs text-zinc-500">
-                        {t('leaderboard.weeklyRecord', {
-                          wins: entry.weekly_wins,
-                          losses: entry.weekly_losses,
-                          winRate: entry.weekly_winrate,
-                        })}
-                      </p>
+            {entries.map((entry, index) => {
+              const card = (
+                <Card className={`border-zinc-800 p-4 transition-colors duration-200 ${entry.username ? 'hover:border-violet-500/40 cursor-pointer' : ''}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-sm font-semibold text-white">
+                        {entry.rank_position || index + 1}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-white">{entry.username || t('leaderboard.memberFallback')}</p>
+                        <p className="text-xs text-zinc-500">
+                          {t('leaderboard.weeklyRecord', {
+                            wins: entry.weekly_wins,
+                            losses: entry.weekly_losses,
+                            winRate: entry.weekly_winrate,
+                          })}
+                        </p>
+                      </div>
                     </div>
+                    {index === 0 && <Trophy className="h-4 w-4 text-amber-300" />}
                   </div>
-                  {index === 0 && <Trophy className="h-4 w-4 text-amber-300" />}
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+
+              return entry.username ? (
+                <Link key={entry.user_id} to={`/producers/${entry.username}`}>
+                  {card}
+                </Link>
+              ) : (
+                <div key={entry.user_id}>{card}</div>
+              );
+            })}
           </div>
         )}
       </div>

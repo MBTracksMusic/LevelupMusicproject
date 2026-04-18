@@ -30,6 +30,7 @@ interface SettingsRowShape {
   launch_message_whitelist: string | null;
   waitlist_count_display: number;
   show_homepage_stats: boolean;
+  show_homepage_badge: boolean;
   show_free_plan: boolean;
   show_user_premium_plan: boolean;
   show_user_premium_credits: boolean;
@@ -56,6 +57,7 @@ const SETTINGS_SELECT = [
   'launch_message_whitelist',
   'waitlist_count_display',
   'show_homepage_stats',
+  'show_homepage_badge',
   'show_free_plan',
   'show_user_premium_plan',
   'show_user_premium_credits',
@@ -84,6 +86,7 @@ function isSettingsRow(value: unknown): value is SettingsRowShape {
     && (typeof c.launch_message_whitelist === 'string' || c.launch_message_whitelist === null)
     && typeof c.waitlist_count_display === 'number'
     && typeof c.show_homepage_stats === 'boolean'
+    && typeof c.show_homepage_badge === 'boolean'
     && typeof c.show_free_plan === 'boolean'
     && typeof c.show_user_premium_plan === 'boolean'
     && typeof c.show_user_premium_credits === 'boolean'
@@ -101,6 +104,7 @@ export function useMaintenanceMode() {
   const [launchMessageWhitelist, setLaunchMessageWhitelist] = useState<string | null>(null);
   const [waitlistCountDisplay, setWaitlistCountDisplay] = useState<number>(0);
   const [showHomepageStats, setShowHomepageStats] = useState(false);
+  const [showHomepageBadge, setShowHomepageBadge] = useState(true);
   const [showUserPremiumCredits, setShowUserPremiumCredits] = useState(true);
   const [pricingVisibility, setPricingVisibility] = useState<PricingVisibility>(DEFAULT_PRICING_VISIBILITY);
   const [launchDate, setLaunchDate] = useState<string | null>(null);
@@ -119,6 +123,7 @@ export function useMaintenanceMode() {
       setLaunchMessageWhitelist(null);
       setWaitlistCountDisplay(0);
       setShowHomepageStats(false);
+      setShowHomepageBadge(true);
       setShowUserPremiumCredits(true);
       setPricingVisibility(DEFAULT_PRICING_VISIBILITY);
       setLaunchDate(null);
@@ -135,6 +140,7 @@ export function useMaintenanceMode() {
     setLaunchMessageWhitelist(row.launch_message_whitelist ?? null);
     setWaitlistCountDisplay(row.waitlist_count_display ?? 0);
     setShowHomepageStats(row.show_homepage_stats);
+    setShowHomepageBadge(row.show_homepage_badge);
     setShowUserPremiumCredits(row.show_user_premium_credits);
     setPricingVisibility({
       free: row.show_free_plan,
@@ -226,6 +232,10 @@ export function useMaintenanceMode() {
     return updateSettings({ show_homepage_stats: nextValue });
   }, [updateSettings]);
 
+  const updateHomepageBadgeVisibility = useCallback(async (nextValue: boolean) => {
+    return updateSettings({ show_homepage_badge: nextValue } as Parameters<typeof updateSettings>[0]);
+  }, [updateSettings]);
+
   const updateUserPremiumCreditsVisibility = useCallback(async (nextValue: boolean) => {
     return updateSettings({ show_user_premium_credits: nextValue });
   }, [updateSettings]);
@@ -252,6 +262,7 @@ export function useMaintenanceMode() {
     launchMessageWhitelist,
     waitlistCountDisplay,
     showHomepageStats,
+    showHomepageBadge,
     showUserPremiumCredits,
     pricingVisibility,
     showFreePlan,
@@ -268,6 +279,7 @@ export function useMaintenanceMode() {
     updateSettings,
     updateMaintenanceMode,
     updateHomepageStatsVisibility,
+    updateHomepageBadgeVisibility,
     updateUserPremiumCreditsVisibility,
     updatePricingPlansVisibility,
   };

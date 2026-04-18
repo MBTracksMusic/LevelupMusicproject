@@ -5,7 +5,7 @@ export function ProducerGuide() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-4xl mx-auto px-4 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <div className="space-y-3">
           <h1 className="text-3xl font-bold text-white">{t('support.producerGuide.title')}</h1>
           <p className="text-zinc-400">{t('support.producerGuide.subtitle')}</p>

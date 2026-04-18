@@ -172,11 +172,13 @@ export function AdminSettingsPage() {
   const { t } = useTranslation();
   const {
     showHomepageStats: storedShowHomepageStats,
+    showHomepageBadge: storedShowHomepageBadge,
     showUserPremiumCredits: storedShowUserPremiumCredits,
     pricingVisibility: storedPricingVisibility,
     isLoading: isPublicSettingsLoading,
     error: publicSettingsError,
     updateHomepageStatsVisibility,
+    updateHomepageBadgeVisibility,
     updateUserPremiumCreditsVisibility,
     updatePricingPlansVisibility,
   } = useMaintenanceModeContext();
@@ -185,6 +187,8 @@ export function AdminSettingsPage() {
   const [isSocialSaving, setIsSocialSaving] = useState(false);
   const [showHomepageStatsInput, setShowHomepageStatsInput] = useState(storedShowHomepageStats);
   const [isHomepageStatsSaving, setIsHomepageStatsSaving] = useState(false);
+  const [showHomepageBadgeInput, setShowHomepageBadgeInput] = useState(storedShowHomepageBadge);
+  const [isHomepageBadgeSaving, setIsHomepageBadgeSaving] = useState(false);
   const [showUserPremiumCreditsInput, setShowUserPremiumCreditsInput] = useState(storedShowUserPremiumCredits);
   const [isUserPremiumCreditsSaving, setIsUserPremiumCreditsSaving] = useState(false);
   const [pricingVisibilityInput, setPricingVisibilityInput] = useState<PricingVisibility>(storedPricingVisibility);
@@ -220,6 +224,12 @@ export function AdminSettingsPage() {
       setShowHomepageStatsInput(storedShowHomepageStats);
     }
   }, [isHomepageStatsSaving, storedShowHomepageStats]);
+
+  useEffect(() => {
+    if (!isHomepageBadgeSaving) {
+      setShowHomepageBadgeInput(storedShowHomepageBadge);
+    }
+  }, [isHomepageBadgeSaving, storedShowHomepageBadge]);
 
   useEffect(() => {
     if (!isUserPremiumCreditsSaving) {
@@ -445,6 +455,22 @@ export function AdminSettingsPage() {
       toast.error(t('admin.settingsPage.homepageStatsSaveError'));
     } finally {
       setIsHomepageStatsSaving(false);
+    }
+  };
+
+  const handleHomepageBadgeSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isHomepageBadgeSaving || isPublicSettingsLoading) return;
+
+    setIsHomepageBadgeSaving(true);
+    try {
+      await updateHomepageBadgeVisibility(showHomepageBadgeInput);
+      toast.success(t('admin.settingsPage.homepageStatsSaveSuccess'));
+    } catch (error) {
+      console.error('admin homepage badge settings save error', error);
+      toast.error(t('admin.settingsPage.homepageStatsSaveError'));
+    } finally {
+      setIsHomepageBadgeSaving(false);
     }
   };
 
@@ -707,6 +733,21 @@ export function AdminSettingsPage() {
       ],
       onSubmit: handleHomepageStatsSave,
       isSaving: isHomepageStatsSaving,
+    },
+    {
+      key: 'homepage-badge',
+      title: 'Badge hero homepage',
+      subtitle: 'Affiche ou masque le badge "La marketplace de beats #1 en France" dans le hero.',
+      toggles: [
+        {
+          key: 'homepage-badge-toggle',
+          label: 'Afficher le badge hero',
+          checked: showHomepageBadgeInput,
+          onChange: setShowHomepageBadgeInput,
+        },
+      ],
+      onSubmit: handleHomepageBadgeSave,
+      isSaving: isHomepageBadgeSaving,
     },
     {
       key: 'user-premium-credits',

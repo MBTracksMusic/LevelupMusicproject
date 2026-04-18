@@ -9,6 +9,8 @@ export default {
           glow: '#FF8A3D',
           secondary: '#FF4D4D',
           bg: '#0B0B0F',
+          violet: '#7C3AED',
+          fuchsia: '#C026D3',
         },
       },
       fontFamily: {

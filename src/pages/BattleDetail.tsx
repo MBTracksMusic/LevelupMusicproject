@@ -326,7 +326,7 @@ export function BattleDetailPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-5xl mx-auto px-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 animate-pulse">
             <div className="h-6 bg-zinc-800 rounded w-1/3 mb-4" />
             <div className="h-4 bg-zinc-800 rounded w-2/3 mb-8" />
@@ -340,7 +340,7 @@ export function BattleDetailPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-5xl mx-auto px-4 space-y-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
             {t('battleDetail.backToBattles')}
@@ -356,7 +356,7 @@ export function BattleDetailPage() {
   if (!battle) {
     return (
       <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-        <div className="max-w-5xl mx-auto px-4 space-y-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
             {t('battleDetail.backToBattles')}
@@ -380,7 +380,7 @@ export function BattleDetailPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
-      <div className="max-w-5xl mx-auto px-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
