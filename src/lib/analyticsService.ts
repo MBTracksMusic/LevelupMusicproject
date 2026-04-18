@@ -120,7 +120,8 @@ async function fetchPurchasesForRange(dateRange: AnalyticsDateRange): Promise<Pu
     .from('purchases')
     .select('amount, created_at, product_id, status')
     .eq('status', 'completed')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(5000);
 
   const previousPeriodStart = getPreviousPeriodStart(dateRange);
 
@@ -330,13 +331,15 @@ export async function getProductPerformance(dateRange: AnalyticsDateRange) {
   let playEventsQuery = supabase
     .from('play_events')
     .select('product_id, played_at')
-    .order('played_at', { ascending: false });
+    .order('played_at', { ascending: false })
+    .limit(20000);
 
   let purchasesQuery = supabase
     .from('purchases')
     .select('product_id, created_at, status')
     .eq('status', 'completed')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(5000);
 
   if (periodStart) {
     playEventsQuery = playEventsQuery.gte('played_at', periodStart);
