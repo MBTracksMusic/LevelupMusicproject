@@ -77,6 +77,13 @@
     @apply bg-gradient-to-r from-brand-secondary via-brand-primary to-brand-glow bg-clip-text text-transparent;
   }
 
+  .hero-grid-overlay {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 80px 80px;
+  }
+
   .gradient-border {
     @apply relative before:absolute before:inset-0 before:rounded-xl before:p-[1px] before:bg-gradient-to-r before:from-brand-secondary before:via-brand-primary before:to-brand-glow before:-z-10;
   }
