@@ -21,12 +21,12 @@ interface ProducerListItem {
 export function ProducersPage() {
   const PAGE_SIZE = 12;
   const { t } = useTranslation();
-  const [producers, setProducers] = useState<ProducerListItem[]>([]);
+  const [allProducers, setAllProducers] = useState<ProducerListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const totalPages = Math.ceil(allProducers.length / PAGE_SIZE);
+  const producers = allProducers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -46,31 +46,29 @@ export function ProducersPage() {
     const fetchProducers = async () => {
       setIsLoading(true);
       try {
-        const off = (currentPage - 1) * PAGE_SIZE;
-        const { data, error, count } = await supabase
+        const rpcRes = await supabase.rpc('get_public_visible_producer_profiles' as any);
+        if (!rpcRes.error && Array.isArray(rpcRes.data)) {
+          if (!isCancelled) setAllProducers(rpcRes.data as unknown as ProducerListItem[]);
+          return;
+        }
+
+        const { data, error } = await supabase
           .from('public_producer_profiles')
-          .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at', { count: 'exact' })
+          .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at')
           .eq('is_deleted', false)
-          .eq('is_producer_active', true)
-          .order('updated_at', { ascending: false })
-          .range(off, off + PAGE_SIZE - 1);
+          .order('updated_at', { ascending: false });
 
         if (error) throw error;
 
-        if (!isCancelled) {
-          setProducers((data ?? []) as unknown as ProducerListItem[]);
-          setTotalCount(count ?? 0);
-        }
+        const visible = ((data ?? []) as unknown as ProducerListItem[]).filter(
+          (r) => r.is_producer_active === true
+        );
+        if (!isCancelled) setAllProducers(visible);
       } catch (error) {
         console.error('Error fetching producers:', error);
-        if (!isCancelled) {
-          setProducers([]);
-          setTotalCount(0);
-        }
+        if (!isCancelled) setAllProducers([]);
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        if (!isCancelled) setIsLoading(false);
       }
     };
 
@@ -79,7 +77,7 @@ export function ProducersPage() {
     return () => {
       isCancelled = true;
     };
-  }, [currentPage]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
