@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -28,11 +28,14 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
   const { isActive: hasPremiumAccess, subscription: userSubStatus } = useUserSubscriptionStatus(user?.id);
   const isUserPremium = hasPremiumAccess && userSubStatus?.plan_code === 'user_monthly';
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
+  const PAGE_SIZE = 20;
   const [beats, setBeats] = useState<ProductWithRelations[]>([]);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [moods, setMoods] = useState<Mood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const [filters, setFilters] = useState({
     search: '',
@@ -90,17 +93,20 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
     async function fetchBeats() {
       setIsLoading(true);
       try {
-        const nextBeats = await fetchCatalogProducts({
+        const { products, total } = await fetchCatalogProducts({
           mode,
           filters,
-          limit: 50,
+          limit: PAGE_SIZE,
+          offset: (currentPage - 1) * PAGE_SIZE,
           restrictToActiveProducers: false,
           hasPremiumAccess,
         });
-        setBeats(nextBeats);
+        setBeats(products);
+        setTotalCount(total);
       } catch (error) {
         console.error('Error fetching beats:', error);
         setBeats([]);
+        setTotalCount(0);
       } finally {
         setIsLoading(false);
       }
@@ -108,7 +114,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
 
     const debounce = setTimeout(fetchBeats, 300);
     return () => clearTimeout(debounce);
-  }, [filters, hasPremiumAccess, mode, user?.id]);
+  }, [filters, hasPremiumAccess, mode, user?.id, currentPage]);
 
   const clearFilters = () => {
     setFilters({
@@ -121,6 +127,26 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
       priceMax: '',
       sort: 'newest',
     });
+    setCurrentPage(1);
+  };
+
+  const handleFilterChange = useCallback((key: keyof typeof filters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setCurrentPage(1);
+  }, []);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = (current: number, total: number): (number | '...')[] => {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
+    if (current >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    return [1, '...', current - 1, current, current + 1, '...', total];
   };
 
   const hasActiveFilters =
@@ -183,7 +209,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
               type="text"
               placeholder={t('home.searchPlaceholder')}
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
               leftIcon={<Search className="w-5 h-5" />}
             />
           </div>
@@ -191,7 +217,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
           <div className="flex gap-3">
             <Select
               value={filters.sort}
-              onChange={(e) => setFilters({ ...filters, sort: e.target.value })}
+              onChange={(e) => handleFilterChange('sort', e.target.value)}
               options={[
                 { value: 'newest', label: t('products.sortByNewest') },
                 { value: 'popular', label: t('products.sortByPopular') },
@@ -222,7 +248,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
               <Select
                 label={t('products.filterByGenre')}
                 value={filters.genre}
-                onChange={(e) => setFilters({ ...filters, genre: e.target.value })}
+                onChange={(e) => handleFilterChange('genre', e.target.value)}
                 placeholder={t('common.all')}
                 options={[
                   { value: '', label: t('common.all') },
@@ -233,7 +259,7 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
               <Select
                 label={t('products.filterByMood')}
                 value={filters.mood}
-                onChange={(e) => setFilters({ ...filters, mood: e.target.value })}
+                onChange={(e) => handleFilterChange('mood', e.target.value)}
                 placeholder={t('common.all')}
                 options={[
                   { value: '', label: t('common.all') },
@@ -250,13 +276,13 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                     type="number"
                     placeholder={t('common.min')}
                     value={filters.bpmMin}
-                    onChange={(e) => setFilters({ ...filters, bpmMin: e.target.value })}
+                    onChange={(e) => handleFilterChange('bpmMin', e.target.value)}
                   />
                   <Input
                     type="number"
                     placeholder={t('common.max')}
                     value={filters.bpmMax}
-                    onChange={(e) => setFilters({ ...filters, bpmMax: e.target.value })}
+                    onChange={(e) => handleFilterChange('bpmMax', e.target.value)}
                   />
                 </div>
               </div>
@@ -270,13 +296,13 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                     type="number"
                     placeholder={t('common.min')}
                     value={filters.priceMin}
-                    onChange={(e) => setFilters({ ...filters, priceMin: e.target.value })}
+                    onChange={(e) => handleFilterChange('priceMin', e.target.value)}
                   />
                   <Input
                     type="number"
                     placeholder={t('common.max')}
                     value={filters.priceMax}
-                    onChange={(e) => setFilters({ ...filters, priceMax: e.target.value })}
+                    onChange={(e) => handleFilterChange('priceMax', e.target.value)}
                   />
                 </div>
               </div>
@@ -314,6 +340,51 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
                 onWishlistToggle={handleWishlistToggle}
               />
             ))}
+          </div>
+        )}
+
+        {!isLoading && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-10">
+            <button
+              type="button"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Précédent
+            </button>
+
+            <div className="flex items-center gap-1">
+              {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                p === '...' ? (
+                  <span key={`ellipsis-${i}`} className="px-2 text-zinc-500">…</span>
+                ) : (
+                  <button
+                    type="button"
+                    key={p}
+                    onClick={() => goToPage(p as number)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                      p === currentPage
+                        ? 'bg-rose-500 text-white'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Suivant
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useTranslation } from '../lib/i18n';
 
@@ -19,9 +19,26 @@ interface ProducerListItem {
 }
 
 export function ProducersPage() {
+  const PAGE_SIZE = 12;
   const { t } = useTranslation();
   const [producers, setProducers] = useState<ProducerListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = (current: number, total: number): (number | '...')[] => {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
+    if (current >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    return [1, '...', current - 1, current, current + 1, '...', total];
+  };
 
   useEffect(() => {
     let isCancelled = false;
@@ -29,83 +46,26 @@ export function ProducersPage() {
     const fetchProducers = async () => {
       setIsLoading(true);
       try {
-        let data: unknown[] | null = null;
-        let error: unknown = null;
+        const off = (currentPage - 1) * PAGE_SIZE;
+        const { data, error, count } = await supabase
+          .from('public_producer_profiles')
+          .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at', { count: 'exact' })
+          .eq('is_deleted', false)
+          .eq('is_producer_active', true)
+          .order('updated_at', { ascending: false })
+          .range(off, off + PAGE_SIZE - 1);
 
-        const visibleRpcRes = await supabase.rpc('get_public_visible_producer_profiles' as any);
-        if (!visibleRpcRes.error && Array.isArray(visibleRpcRes.data)) {
-          data = visibleRpcRes.data;
-        } else {
-          const softRpcRes = await supabase.rpc('get_public_producer_profiles_soft' as any);
-          if (!softRpcRes.error && Array.isArray(softRpcRes.data)) {
-            data = (softRpcRes.data as Array<Record<string, unknown>>).filter((row) => row.is_deleted !== true);
-          } else {
-            const activeRpcRes = await supabase.rpc('get_public_producer_profiles_v2');
-            if (!activeRpcRes.error && Array.isArray(activeRpcRes.data)) {
-              data = activeRpcRes.data.map((row) => ({
-                ...row,
-                raw_username: row.username,
-                is_deleted: false,
-                is_producer_active: true,
-              }));
-            } else {
-              error = visibleRpcRes.error || softRpcRes.error || activeRpcRes.error;
-            }
-          }
-        }
-
-        if (!data || data.length === 0) {
-          const viewRes = await supabase
-            .from('public_producer_profiles')
-            .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at')
-            .eq('is_deleted', false)
-            .order('updated_at', { ascending: false });
-
-          data = viewRes.data as unknown[] | null;
-          error = viewRes.error ?? error;
-        }
-
-        if (error && (!data || data.length === 0)) {
-          const { data: legacyData, error: legacyError } = await supabase
-            .from('public_producer_profiles')
-            .select('user_id, username, avatar_url, producer_tier, bio, social_links, created_at, updated_at')
-            .order('updated_at', { ascending: false });
-
-          if (legacyError) {
-            throw error;
-          }
-
-          data = (legacyData ?? []).map((row) => ({
-            ...row,
-            raw_username: (row as Record<string, unknown>).username as string | null,
-            is_deleted: false,
-            is_producer_active: false,
-          }));
-        }
-
-        const deduped = new Map<string, Record<string, unknown>>();
-        for (const row of ((data ?? []) as Array<Record<string, unknown>>)) {
-          const userId = typeof row.user_id === 'string' ? row.user_id : null;
-          if (!userId) continue;
-          if (row.is_deleted === true) continue;
-          if (row.is_producer_active !== true) continue;
-          deduped.set(userId, row);
-        }
-
-        const normalized = Array.from(deduped.values())
-          .sort((a, b) => {
-            const aDate = typeof a.updated_at === 'string' ? a.updated_at : '';
-            const bDate = typeof b.updated_at === 'string' ? b.updated_at : '';
-            return bDate.localeCompare(aDate);
-          });
+        if (error) throw error;
 
         if (!isCancelled) {
-          setProducers(normalized as unknown as ProducerListItem[]);
+          setProducers((data ?? []) as unknown as ProducerListItem[]);
+          setTotalCount(count ?? 0);
         }
       } catch (error) {
         console.error('Error fetching producers:', error);
         if (!isCancelled) {
           setProducers([]);
+          setTotalCount(0);
         }
       } finally {
         if (!isCancelled) {
@@ -119,7 +79,7 @@ export function ProducersPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [currentPage]);
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
@@ -147,7 +107,7 @@ export function ProducersPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {producers.map((producer) => {
               const cardContent = (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 transition-all duration-150 hover:border-zinc-600 hover:shadow-xl hover:shadow-black/40 cursor-pointer">
                   <div className="flex items-center gap-4 mb-4">
                     {producer.avatar_url ? (
                       <img
@@ -160,9 +120,16 @@ export function ProducersPage() {
                         <Users className="w-6 h-6 text-zinc-500" />
                       </div>
                     )}
-                    <h2 className="text-lg font-semibold text-white truncate">
-                      {producer.username || t('producersPage.unknownProducer')}
-                    </h2>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-white truncate">
+                        {producer.username || t('producersPage.unknownProducer')}
+                      </h2>
+                      {producer.producer_tier && (
+                        <span className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200 mt-0.5">
+                          {producer.producer_tier}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-zinc-400 line-clamp-3">
                     {producer.bio || t('producersPage.noBio')}
@@ -182,6 +149,51 @@ export function ProducersPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+
+        {!isLoading && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-10">
+            <button
+              type="button"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Précédent
+            </button>
+
+            <div className="flex items-center gap-1">
+              {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                p === '...' ? (
+                  <span key={`ellipsis-${i}`} className="px-2 text-zinc-500">…</span>
+                ) : (
+                  <button
+                    type="button"
+                    key={p}
+                    onClick={() => goToPage(p as number)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                      p === currentPage
+                        ? 'bg-rose-500 text-white'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Suivant
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         )}
       </div>

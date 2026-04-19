@@ -23,8 +23,14 @@ interface FetchCatalogProductsParams {
   mode: CatalogMode;
   filters: CatalogFilters;
   limit?: number;
+  offset?: number;
   restrictToActiveProducers?: boolean;
   hasPremiumAccess?: boolean;
+}
+
+export interface CatalogPage {
+  products: ProductWithRelations[];
+  total: number;
 }
 
 interface FetchCatalogProductBySlugParams {
@@ -273,9 +279,10 @@ const fetchLegacyCatalogProducts = async ({
   mode,
   filters,
   limit,
+  offset,
   restrictToActiveProducers,
   hasPremiumAccess,
-}: FetchCatalogProductsParams): Promise<ProductWithRelations[]> => {
+}: FetchCatalogProductsParams): Promise<CatalogPage> => {
   let query = supabase
     .from('products')
     .select(`
@@ -331,7 +338,9 @@ const fetchLegacyCatalogProducts = async ({
       break;
   }
 
-  const { data, error } = await query.limit(limit ?? 50);
+  const off = offset ?? 0;
+  const lim = limit ?? 50;
+  const { data, error } = await query.range(off, off + lim - 1);
   if (error) {
     throw error;
   }
@@ -341,7 +350,7 @@ const fetchLegacyCatalogProducts = async ({
     ? rows
     : rows.filter((row) => !isEarlyAccessActive(row.early_access_until));
   const visibleProducts = await applyProducerVisibility(earlyAccessFilteredRows, restrictToActiveProducers ?? false);
-  return visibleProducts;
+  return { products: visibleProducts, total: visibleProducts.length };
 };
 
 const fetchLegacyCatalogProductBySlug = async ({
@@ -383,12 +392,13 @@ export async function fetchCatalogProducts({
   mode,
   filters,
   limit = 50,
+  offset = 0,
   restrictToActiveProducers = false,
   hasPremiumAccess = false,
-}: FetchCatalogProductsParams): Promise<ProductWithRelations[]> {
+}: FetchCatalogProductsParams): Promise<CatalogPage> {
   let query = supabase
     .from('public_catalog_products')
-    .select(CATALOG_SELECT_COLUMNS)
+    .select(CATALOG_SELECT_COLUMNS, { count: 'exact' })
     .eq('is_published', true);
 
   if (mode === 'exclusives') {
@@ -449,16 +459,16 @@ export async function fetchCatalogProducts({
     query = query.eq('producer_is_active', true);
   }
 
-  const { data, error } = await query.limit(limit);
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
   if (error) {
     console.warn('public_catalog_products query failed, falling back to products query', error);
-    return fetchLegacyCatalogProducts({ mode, filters, limit, restrictToActiveProducers, hasPremiumAccess });
+    return fetchLegacyCatalogProducts({ mode, filters, limit, offset, restrictToActiveProducers, hasPremiumAccess });
   }
 
   const rows = (data as unknown as CatalogProductRow[] | null) ?? [];
   const products = rows.map(toProduct);
   const visibleProducts = await applyProducerVisibility(products, restrictToActiveProducers);
-  return visibleProducts;
+  return { products: visibleProducts, total: count ?? visibleProducts.length };
 }
 
 export async function fetchCatalogProductBySlug({

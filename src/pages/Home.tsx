@@ -72,7 +72,7 @@ export function HomePage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const nextExclusives = await fetchCatalogProducts({
+        const { products: nextExclusives } = await fetchCatalogProducts({
           mode: 'exclusives',
           filters: {
             search: '',
