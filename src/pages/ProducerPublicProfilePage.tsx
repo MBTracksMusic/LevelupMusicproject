@@ -548,12 +548,12 @@ export function ProducerPublicProfilePage() {
           )}
 
           {!isBeatsLoading && !beatsError && topBeats.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {topBeats.map((beat) => (
                 <Link
                   key={beat.id}
                   to={`/beats/${beat.slug}`}
-                  className={`rounded-xl border border-zinc-800 bg-zinc-950/50 overflow-hidden transition-all duration-150 transform-gpu hover:scale-[1.02] hover:shadow-xl hover:shadow-black/40 hover:border-zinc-600 ${
+                  className={`rounded-lg border border-zinc-800 bg-zinc-950/50 overflow-hidden transition-all duration-150 transform-gpu hover:scale-[1.02] hover:shadow-xl hover:shadow-black/40 hover:border-zinc-600 ${
                     currentTrack?.id === beat.id
                       ? 'ring-2 ring-rose-500 shadow-lg shadow-rose-500/30'
                       : ''
@@ -564,11 +564,11 @@ export function ProducerPublicProfilePage() {
                       <img
                         src={beat.cover_image_url}
                         alt={beat.title}
-                        className="aspect-[4/3] w-full object-cover"
+                        className="aspect-square w-full object-cover"
                       />
                     ) : (
-                      <div className="aspect-[4/3] w-full bg-zinc-800 flex items-center justify-center">
-                        <Users className="w-8 h-8 text-zinc-500" />
+                      <div className="aspect-square w-full bg-zinc-800 flex items-center justify-center">
+                        <Users className="w-6 h-6 text-zinc-500" />
                       </div>
                     )}
                     <button
@@ -582,28 +582,28 @@ export function ProducerPublicProfilePage() {
                         playQueue(topBeatQueue, startIndex);
                       }}
                       disabled={!beat.audio_url}
-                      className="absolute bottom-3 left-3 flex h-9 w-9 items-center justify-center rounded-full border border-rose-500/40 bg-black/70 text-rose-400 backdrop-blur-sm transition hover:border-rose-500 hover:bg-rose-500 hover:text-black active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="absolute bottom-2 left-2 flex h-7 w-7 items-center justify-center rounded-full border border-rose-500/40 bg-black/70 text-rose-400 backdrop-blur-sm transition hover:border-rose-500 hover:bg-rose-500 hover:text-black active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {currentTrack?.id === beat.id && isPlaying ? (
-                        <Pause className="h-4 w-4" />
+                        <Pause className="h-3 w-3" />
                       ) : (
-                        <Play className="h-4 w-4" />
+                        <Play className="h-3 w-3" />
                       )}
                     </button>
                   </div>
-                  <div className="p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-white truncate">{beat.title}</p>
+                  <div className="p-2">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs font-semibold text-white truncate">{beat.title}</p>
                       {typeof beat.producer_rank === 'number' && (
-                        <span className="shrink-0 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                        <span className="shrink-0 inline-flex items-center rounded border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-[9px] font-semibold text-amber-200">
                           #{beat.producer_rank}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-zinc-400 mt-1">
+                    <p className="text-[10px] text-zinc-400 mt-0.5">
                       {beat.bpm ? `${beat.bpm} ${t('products.bpm')}` : '—'} · {beat.key_signature || '—'}
                     </p>
-                    <p className="text-sm font-bold text-rose-300 mt-2">{formatPrice(beat.price || 0)}</p>
+                    <p className="text-xs font-bold text-rose-300 mt-1">{formatPrice(beat.price || 0)}</p>
                   </div>
                 </Link>
               ))}
