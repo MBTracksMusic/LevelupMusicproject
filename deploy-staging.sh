@@ -62,28 +62,26 @@ echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 # Auto-commit si repo non clean
 if [[ -n "$(git status -s)" ]]; then
   echo "📝 Changements non commités détectés — commit automatique..."
-  git add -A
-  git commit -m "auto: staging deploy"
+  git add src/ supabase/ public/ package*.json tsconfig*.json vite.config.* index.html deploy-prod.sh deploy-staging.sh 2>/dev/null || true
+  git commit -m "auto: staging deploy" || true
 fi
+
+git fetch origin
 
 # Si on n'est pas sur staging → merge auto
 if [[ "$CURRENT_BRANCH" != "staging" ]]; then
-  echo "⚠️ Merge $CURRENT_BRANCH → staging"
-
-  read -p "Confirmer merge vers staging ? (y/n): " confirm
-  if [[ "$confirm" != "y" ]]; then
-    echo "❌ Annulé"
-    exit 1
-  fi
-
-  git fetch origin
-
   echo "🔄 Checkout staging"
   git checkout staging
   git pull origin staging
 
-  echo "🔀 Merge"
-  git merge "$CURRENT_BRANCH" --no-ff
+  # Sync hotfixes de main (au cas où un fix a été déployé direct en prod)
+  if git log staging..origin/main --oneline | grep -q .; then
+    echo "🔁 Sync hotfixes main → staging"
+    git merge origin/main --no-ff -m "chore: sync hotfixes main → staging"
+  fi
+
+  echo "🔀 Merge $CURRENT_BRANCH → staging"
+  git merge "$CURRENT_BRANCH" --no-ff -m "chore: merge $CURRENT_BRANCH → staging"
 
   echo "🚀 Push staging"
   git push origin staging

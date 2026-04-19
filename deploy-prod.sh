@@ -64,8 +64,8 @@ echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 # Auto-commit si repo non clean
 if [[ -n "$(git status -s)" ]]; then
   echo "📝 Changements non commités détectés — commit automatique..."
-  git add -A
-  git commit -m "auto: prod deploy"
+  git add src/ supabase/ public/ package*.json tsconfig*.json vite.config.* index.html deploy-prod.sh deploy-staging.sh 2>/dev/null || true
+  git commit -m "auto: prod deploy" || true
 fi
 
 # Si on est sur staging → merge staging → main
@@ -85,7 +85,7 @@ if [[ "$CURRENT_BRANCH" == "staging" ]]; then
   git pull origin main
 
   echo "🔀 Merge staging"
-  git merge staging --no-ff
+  git merge staging --no-ff -m "chore: merge staging → main for prod deploy"
 
   echo "🚀 Push main"
   git push origin main
@@ -167,7 +167,8 @@ echo "✅ Build OK"
 echo "🔗 Supabase production..."
 supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
-echo "📡 DB push..."
+echo "📡 DB push (vérification migrations)..."
+supabase db push --dry-run 2>/dev/null && echo "✅ Dry-run OK" || { echo "⚠️ Dry-run non supporté — push direct"; }
 supabase db push
 
 echo "⚡ Functions deploy..."

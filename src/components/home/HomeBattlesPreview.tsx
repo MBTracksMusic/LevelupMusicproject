@@ -32,7 +32,7 @@ interface HomeBattlesPreviewRpcRow {
   producer2_username: string | null;
 }
 
-const visibleStatuses: BattleStatus[] = ['active', 'voting', 'completed', 'awaiting_admin', 'approved'];
+const visibleStatuses: BattleStatus[] = ['active', 'voting', 'completed', 'awaiting_admin', 'approved', 'pending_acceptance'];
 
 const badgeByStatus: Record<BattleStatus, 'default' | 'success' | 'warning' | 'danger' | 'info' | 'premium'> = {
   pending: 'warning',
