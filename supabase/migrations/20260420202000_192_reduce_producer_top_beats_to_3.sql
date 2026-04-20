@@ -1,7 +1,9 @@
 BEGIN;
 
--- Only update the RPC function limit (view has dependents, cannot be replaced directly)
-CREATE OR REPLACE FUNCTION public.get_producer_top_beats(p_producer_id uuid)
+-- DROP + CREATE to handle return type mismatch with existing function
+DROP FUNCTION IF EXISTS public.get_producer_top_beats(uuid);
+
+CREATE FUNCTION public.get_producer_top_beats(p_producer_id uuid)
 RETURNS TABLE (
   id uuid,
   producer_id uuid,
