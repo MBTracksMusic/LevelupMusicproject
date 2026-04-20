@@ -711,6 +711,8 @@ export const de: TranslationSchema = {
     hideProduct: 'Produkt ausblenden',
     creating: 'Erstellen...',
     createVersion: 'V{version} erstellen',
+    uncategorizedNudge: '{count} deiner Beats haben kein Genre — kategorisiere sie für bessere Sichtbarkeit in den Filtern.',
+    uncategorizedDismiss: 'Ausblenden',
   },
   producerBattles: {
     title: 'Produzenten-Battle-Verwaltung',
@@ -826,6 +828,14 @@ export const de: TranslationSchema = {
     metadataCoverLocked: 'Das aktuelle Cover bleibt erhalten, weil wesentliche Metadaten gesperrt sind.',
     loadingProduct: 'Produkt wird geladen...',
     watermarkProcessing: 'Verarbeitung lauft: Die watermarked Vorschau ist noch nicht verfugbar.',
+    genreLabel: 'Genre',
+    moodLabel: 'Stimmung',
+    tagsLabel: 'Tags',
+    genrePlaceholder: '— Auswählen —',
+    moodPlaceholder: '— Auswählen —',
+    tagsPlaceholder: 'Bsp.: drill, dunkel, 808...',
+    genreRequired: 'Bitte wähle ein Genre aus.',
+    genreRecommended: 'Empfohlen',
   },
   subscription: {
     title: 'Produzenten-Abonnements',

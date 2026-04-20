@@ -713,6 +713,8 @@ export const en: TranslationSchema = {
     hideProduct: 'Hide product',
     creating: 'Creating...',
     createVersion: 'Create V{version}',
+    uncategorizedNudge: '{count} of your beats have no genre — categorize them to boost visibility in filters.',
+    uncategorizedDismiss: 'Dismiss',
   },
   producerBattles: {
     title: 'Producer Battles Management',
@@ -828,6 +830,14 @@ export const en: TranslationSchema = {
     metadataCoverLocked: 'The current cover is kept because essential metadata is locked.',
     loadingProduct: 'Loading product...',
     watermarkProcessing: 'Processing: the watermarked preview is not available yet.',
+    genreLabel: 'Genre',
+    moodLabel: 'Mood',
+    tagsLabel: 'Tags',
+    genrePlaceholder: '— Select —',
+    moodPlaceholder: '— Select —',
+    tagsPlaceholder: 'E.g.: drill, dark, 808...',
+    genreRequired: 'Please select a genre.',
+    genreRecommended: 'Recommended',
   },
   subscription: {
     title: 'Producer subscriptions',

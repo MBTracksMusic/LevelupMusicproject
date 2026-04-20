@@ -712,6 +712,8 @@ export const fr = {
     hideProduct: 'Masquer le produit',
     creating: 'Creation...',
     createVersion: 'Creer V{version}',
+    uncategorizedNudge: '{count} de tes beats n\'ont pas de genre — catégorise-les pour booster leur visibilité dans les filtres.',
+    uncategorizedDismiss: 'Ignorer',
   },
   producerBattles: {
     title: 'Gestion Battles Producteur',
@@ -827,6 +829,14 @@ export const fr = {
     metadataCoverLocked: 'La pochette actuelle est conservee car les metadonnees essentielles sont verrouillees.',
     loadingProduct: 'Chargement du produit...',
     watermarkProcessing: "Traitement en cours: la preview watermarked n'est pas encore disponible.",
+    genreLabel: 'Genre',
+    moodLabel: 'Ambiance',
+    tagsLabel: 'Tags',
+    genrePlaceholder: '— Sélectionner —',
+    moodPlaceholder: '— Sélectionner —',
+    tagsPlaceholder: 'Ex: drill, sombre, 808...',
+    genreRequired: 'Veuillez choisir un genre.',
+    genreRecommended: 'Recommandé',
   },
   subscription: {
     title: 'Abonnements producteur',
