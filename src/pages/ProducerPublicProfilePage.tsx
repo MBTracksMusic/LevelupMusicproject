@@ -318,7 +318,7 @@ export function ProducerPublicProfilePage() {
 
           if (topBeatsResponse.error) {
             console.error('Error loading producer top beats RPC:', topBeatsResponse.error);
-            setTopBeats(fallbackAllBeats.slice(0, 10));
+            setTopBeats(fallbackAllBeats.slice(0, 3));
           } else {
             const rpcRows = ((topBeatsResponse.data ?? []) as Array<{
               id: string;
@@ -334,7 +334,7 @@ export function ProducerPublicProfilePage() {
             );
 
             if (rpcRows.length === 0) {
-              setTopBeats(fallbackAllBeats.slice(0, 10));
+              setTopBeats(fallbackAllBeats.slice(0, 3));
             } else {
               const beatMetaById = new Map(fallbackAllBeats.map((beat) => [beat.id, beat]));
               setTopBeats(
