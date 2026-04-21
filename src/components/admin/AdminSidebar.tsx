@@ -1,4 +1,4 @@
-import { BarChart3, Euro, FolderTree, Inbox, LayoutDashboard, LineChart, MessageSquareText, Newspaper, Rocket, Settings, Sparkles, Swords } from 'lucide-react';
+import { BarChart3, Euro, FolderTree, Inbox, LayoutDashboard, LineChart, MessageSquareText, Newspaper, Rocket, Settings, ShieldCheck, Sparkles, Swords } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useTranslation } from '../../lib/i18n';
@@ -62,6 +62,11 @@ export function AdminSidebar({ battlesAwaitingAdminCount = null }: AdminSidebarP
       to: '/admin/revenue',
       label: t('admin.sidebar.revenue'),
       icon: <Euro className="w-4 h-4" />,
+    },
+    {
+      to: '/admin/elite-access',
+      label: 'Elite Access',
+      icon: <ShieldCheck className="w-4 h-4" />,
     },
     {
       to: '/admin/beat-analytics',

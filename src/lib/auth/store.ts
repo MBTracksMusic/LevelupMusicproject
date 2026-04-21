@@ -29,6 +29,13 @@ const normalizeProducerTier = (value: unknown): UserProfile['producer_tier'] => 
   return null;
 };
 
+const normalizeAccountType = (value: unknown): UserProfile['account_type'] => {
+  if (value === 'producer' || value === 'elite_producer' || value === 'label' || value === 'user') {
+    return value;
+  }
+  return 'user';
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
@@ -83,7 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const fetchPromise = (async () => {
       const { data, error } = await supabase
         .from('my_user_profile')
-        .select('id, user_id, username, full_name, avatar_url, role, producer_tier, is_producer_active, is_deleted, deleted_at, delete_reason, deleted_label, total_purchases, confirmed_at, producer_verified_at, battle_refusal_count, battles_participated, battles_completed, engagement_score, language, bio, website_url, social_links, created_at, updated_at, is_founding_producer, founding_trial_start, founding_trial_end, founding_trial_active, founding_trial_expired, can_access_producer_features, producer_campaign_type, producer_campaign_label, campaign_trial_duration')
+        .select('*')
         .maybeSingle();
 
       if (error) {
@@ -145,8 +152,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             row.role === 'admin'
               ? row.role
               : 'user',
+          account_type: normalizeAccountType(row.account_type),
           is_confirmed: row.confirmed_at != null,
           is_producer_active: row.is_producer_active === true,
+          is_verified: row.is_verified === true,
           producer_tier: normalizeProducerTier(row.producer_tier),
           stripe_customer_id: null,
           stripe_subscription_id: null,

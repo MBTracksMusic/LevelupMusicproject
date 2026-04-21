@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 import { Layout } from './components/layout/Layout';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { EliteAccessRoute } from './components/auth/EliteAccessRoute';
 import { initializeAuth } from './lib/auth/store';
 import { useCartStore } from './lib/stores/cart';
 import { useAuth } from './lib/auth/hooks';
@@ -66,6 +67,8 @@ const ProducerPublicProfilePage = lazyNamed(
   () => import('./pages/ProducerPublicProfilePage'),
   'ProducerPublicProfilePage',
 );
+const EliteHubPage = lazyNamed(() => import('./pages/EliteHub'), 'EliteHubPage');
+const LabelAccessPage = lazyNamed(() => import('./pages/LabelAccess'), 'LabelAccessPage');
 const LeaderboardPage = lazyNamed(() => import('./pages/Leaderboard'), 'LeaderboardPage');
 const LeaderboardWeeklyPage = lazyNamed(() => import('./pages/LeaderboardWeekly'), 'LeaderboardWeeklyPage');
 const NotificationsPage = lazyNamed(() => import('./pages/Notifications'), 'NotificationsPage');
@@ -104,6 +107,7 @@ const AdminMessageDetailPage = lazyNamed(
 const AdminReputationPage = lazyNamed(() => import('./pages/admin/AdminReputation'), 'AdminReputationPage');
 const AdminPayouts = lazyNamed(() => import('./pages/admin/AdminPayouts'), 'AdminPayouts');
 const AdminRevenuePage = lazyNamed(() => import('./pages/admin/AdminRevenue'), 'AdminRevenuePage');
+const AdminEliteAccessPage = lazyNamed(() => import('./pages/admin/AdminEliteAccess'), 'AdminEliteAccessPage');
 
 function RouteFallback() {
   return (
@@ -234,6 +238,24 @@ function AppContent() {
             }
           />
           <Route
+            path="elite-hub"
+            element={
+              <ProtectedRoute>
+                <EliteAccessRoute>
+                  <EliteHubPage />
+                </EliteAccessRoute>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="label-access"
+            element={
+              <ProtectedRoute>
+                <LabelAccessPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="producer"
             element={
               <ProtectedRoute requireProducer>
@@ -293,6 +315,7 @@ function AppContent() {
             <Route path="reputation" element={<AdminReputationPage />} />
             <Route path="revenue" element={<AdminRevenuePage />} />
             <Route path="payouts" element={<AdminPayouts />} />
+            <Route path="elite-access" element={<AdminEliteAccessPage />} />
             <Route path="launch" element={<AdminLaunchPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />
           </Route>

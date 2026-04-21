@@ -3715,6 +3715,116 @@ export type Database = {
         }
         Relationships: []
       }
+      label_requests: {
+        Row: {
+          company_name: string
+          created_at: string
+          email: string
+          id: string
+          message: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "label_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "label_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "label_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "public_producer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "label_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "label_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "weekly_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "label_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "label_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "label_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_producer_profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "label_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "label_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       licenses: {
         Row: {
           created_at: string
@@ -4621,6 +4731,7 @@ export type Database = {
           genre_id: string | null
           id: string
           is_exclusive: boolean
+          is_elite: boolean
           is_published: boolean
           is_sold: boolean
           key_signature: string | null
@@ -4668,6 +4779,7 @@ export type Database = {
           genre_id?: string | null
           id?: string
           is_exclusive?: boolean
+          is_elite?: boolean
           is_published?: boolean
           is_sold?: boolean
           key_signature?: string | null
@@ -4715,6 +4827,7 @@ export type Database = {
           genre_id?: string | null
           id?: string
           is_exclusive?: boolean
+          is_elite?: boolean
           is_published?: boolean
           is_sold?: boolean
           key_signature?: string | null
@@ -6082,6 +6195,7 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          account_type: string
           avatar_url: string | null
           battle_draws: number
           battle_losses: number
@@ -6103,6 +6217,7 @@ export type Database = {
           is_confirmed: boolean
           is_deleted: boolean
           is_producer_active: boolean
+          is_verified: boolean
           language: string | null
           producer_tier: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at: string | null
@@ -6123,6 +6238,7 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          account_type?: string
           avatar_url?: string | null
           battle_draws?: number
           battle_losses?: number
@@ -6144,6 +6260,7 @@ export type Database = {
           is_confirmed?: boolean
           is_deleted?: boolean
           is_producer_active?: boolean
+          is_verified?: boolean
           language?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at?: string | null
@@ -6164,6 +6281,7 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          account_type?: string
           avatar_url?: string | null
           battle_draws?: number
           battle_losses?: number
@@ -6185,6 +6303,7 @@ export type Database = {
           is_confirmed?: boolean
           is_deleted?: boolean
           is_producer_active?: boolean
+          is_verified?: boolean
           language?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at?: string | null
@@ -7026,22 +7145,33 @@ export type Database = {
       }
       my_user_profile: {
         Row: {
+          account_type: string | null
           avatar_url: string | null
           battle_refusal_count: number | null
           battles_completed: number | null
           battles_participated: number | null
           bio: string | null
+          campaign_trial_duration: unknown | null
+          can_access_producer_features: boolean | null
           confirmed_at: string | null
           created_at: string | null
           delete_reason: string | null
           deleted_at: string | null
           deleted_label: string | null
           engagement_score: number | null
+          founding_trial_active: boolean | null
+          founding_trial_end: string | null
+          founding_trial_expired: boolean | null
+          founding_trial_start: string | null
           full_name: string | null
           id: string | null
           is_deleted: boolean | null
+          is_founding_producer: boolean | null
           is_producer_active: boolean | null
+          is_verified: boolean | null
           language: string | null
+          producer_campaign_label: string | null
+          producer_campaign_type: string | null
           producer_tier:
             | Database["public"]["Enums"]["producer_tier_type"]
             | null
@@ -7055,22 +7185,33 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          account_type?: string | null
           avatar_url?: string | null
           battle_refusal_count?: number | null
           battles_completed?: number | null
           battles_participated?: number | null
           bio?: string | null
+          campaign_trial_duration?: unknown | null
+          can_access_producer_features?: boolean | null
           confirmed_at?: string | null
           created_at?: string | null
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_label?: string | null
           engagement_score?: number | null
+          founding_trial_active?: boolean | null
+          founding_trial_end?: string | null
+          founding_trial_expired?: boolean | null
+          founding_trial_start?: string | null
           full_name?: string | null
           id?: string | null
           is_deleted?: boolean | null
+          is_founding_producer?: boolean | null
           is_producer_active?: boolean | null
+          is_verified?: boolean | null
           language?: string | null
+          producer_campaign_label?: string | null
+          producer_campaign_type?: string | null
           producer_tier?:
             | Database["public"]["Enums"]["producer_tier_type"]
             | null
@@ -7084,22 +7225,33 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          account_type?: string | null
           avatar_url?: string | null
           battle_refusal_count?: number | null
           battles_completed?: number | null
           battles_participated?: number | null
           bio?: string | null
+          campaign_trial_duration?: unknown | null
+          can_access_producer_features?: boolean | null
           confirmed_at?: string | null
           created_at?: string | null
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_label?: string | null
           engagement_score?: number | null
+          founding_trial_active?: boolean | null
+          founding_trial_end?: string | null
+          founding_trial_expired?: boolean | null
+          founding_trial_start?: string | null
           full_name?: string | null
           id?: string | null
           is_deleted?: boolean | null
+          is_founding_producer?: boolean | null
           is_producer_active?: boolean | null
+          is_verified?: boolean | null
           language?: string | null
+          producer_campaign_label?: string | null
+          producer_campaign_type?: string | null
           producer_tier?:
             | Database["public"]["Enums"]["producer_tier_type"]
             | null

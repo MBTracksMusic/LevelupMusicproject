@@ -1,6 +1,7 @@
 import type { Database as GeneratedDatabase } from './database.types';
 
 export type UserRole = 'visitor' | 'user' | 'confirmed_user' | 'producer' | 'admin';
+export type AccountType = 'user' | 'producer' | 'elite_producer' | 'label';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'paused';
 export type ProductType = 'beat' | 'exclusive' | 'kit';
 export type ProductLifecycleStatus = 'active' | 'archived';
@@ -8,6 +9,7 @@ export type ProducerTier = 'starter' | 'pro' | 'elite';
 export type ReputationRankTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
 export type PurchaseStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type PurchaseSource = 'stripe_checkout' | 'credits';
+export type LabelRequestStatus = 'pending' | 'approved' | 'rejected';
 export type EntitlementType = 'purchase' | 'subscription' | 'promo' | 'admin_grant';
 export type BattleStatus =
   | 'pending'
@@ -42,9 +44,11 @@ export interface UserProfile {
   full_name: string | null;
   avatar_url: string | null;
   role: UserRole;
+  account_type: AccountType;
   // Transitional IAM flag. May be undefined until the migration is applied everywhere.
   is_confirmed?: boolean;
   is_producer_active: boolean;
+  is_verified: boolean;
   producer_tier?: ProducerTier | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
@@ -127,6 +131,19 @@ export interface Mood {
 }
 
 export type Product = GeneratedDatabase['public']['Tables']['products']['Row'];
+
+export interface LabelRequest {
+  id: string;
+  user_id: string;
+  company_name: string;
+  email: string;
+  message: string;
+  status: LabelRequestStatus;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface ProductWithRelations extends Product {
   producer?: UserProfile;
