@@ -7899,6 +7899,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_approve_label_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: boolean
+      }
       admin_adjust_reputation: {
         Args: {
           p_delta_xp: number
@@ -7972,6 +7976,14 @@ export type Database = {
           status: string
           success: boolean
         }[]
+      }
+      admin_set_private_access_profile: {
+        Args: {
+          p_account_type: string
+          p_is_verified?: boolean
+          p_user_id: string
+        }
+        Returns: boolean
       }
       admin_validate_battle: { Args: { p_battle_id: string }; Returns: boolean }
       agent_finalize_expired_battles: {

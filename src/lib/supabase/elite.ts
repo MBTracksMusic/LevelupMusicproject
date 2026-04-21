@@ -219,43 +219,22 @@ export async function listEliteProductsAdmin(): Promise<EliteAdminProductSummary
 export async function approveLabelRequest(options: {
   requestId: string;
   userId: string;
-  reviewerId: string;
 }): Promise<void> {
-  const reviewedAt = new Date().toISOString();
+  const { error } = await supabase.rpc('admin_approve_label_request', {
+    p_request_id: options.requestId,
+    p_user_id: options.userId,
+  });
 
-  const { error: profileError } = await supabase
-    .from('user_profiles')
-    .update({
-      account_type: 'label',
-      is_verified: true,
-    })
-    .eq('id', options.userId);
-
-  if (profileError) {
-    throw profileError;
-  }
-
-  const { error: requestError } = await supabase
-    .from('label_requests')
-    .update({
-      status: 'approved',
-      reviewed_at: reviewedAt,
-      reviewed_by: options.reviewerId,
-    })
-    .eq('id', options.requestId);
-
-  if (requestError) {
-    throw requestError;
+  if (error) {
+    throw error;
   }
 }
 
 export async function setEliteProducerStatus(userId: string, isElite: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('user_profiles')
-    .update({
-      account_type: isElite ? 'elite_producer' : 'producer',
-    })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('admin_set_private_access_profile', {
+    p_user_id: userId,
+    p_account_type: isElite ? 'elite_producer' : 'producer',
+  });
 
   if (error) {
     throw error;

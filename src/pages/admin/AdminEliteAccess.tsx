@@ -3,7 +3,6 @@ import toast from 'react-hot-toast';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { useAuth } from '../../lib/auth/hooks';
 import {
   approveLabelRequest,
   listEliteProductsAdmin,
@@ -17,7 +16,6 @@ import {
 import type { LabelRequest } from '../../lib/supabase/types';
 
 export function AdminEliteAccessPage() {
-  const { user } = useAuth();
   const [requests, setRequests] = useState<LabelRequest[]>([]);
   const [profiles, setProfiles] = useState<EliteAdminProfileSummary[]>([]);
   const [products, setProducts] = useState<EliteAdminProductSummary[]>([]);
@@ -69,13 +67,11 @@ export function AdminEliteAccessPage() {
   }, [productSearch, products]);
 
   const handleApproveLabel = async (request: LabelRequest) => {
-    if (!user?.id) return;
     setActionKey(`request:${request.id}`);
     try {
       await approveLabelRequest({
         requestId: request.id,
         userId: request.user_id,
-        reviewerId: user.id,
       });
       toast.success('Label verified.');
       await loadAdminData();
@@ -90,6 +86,11 @@ export function AdminEliteAccessPage() {
   const handleSetEliteStatus = async (profile: EliteAdminProfileSummary) => {
     const makeElite = profile.account_type !== 'elite_producer';
 
+    if (makeElite && !profile.is_producer_active) {
+      toast.error('Abonnement producteur actif requis pour passer en elite.');
+      return;
+    }
+
     setActionKey(`profile:${profile.id}`);
     try {
       await setEliteProducerStatus(profile.id, makeElite);
@@ -97,7 +98,13 @@ export function AdminEliteAccessPage() {
       await loadAdminData();
     } catch (error) {
       console.error('promote elite producer error', error);
-      toast.error(makeElite ? 'Impossible de promouvoir ce producteur.' : 'Impossible de retirer le statut elite.');
+      const message =
+        makeElite && error instanceof Error && error.message.includes('active_producer_subscription_required')
+          ? 'Abonnement producteur actif requis pour passer en elite.'
+          : makeElite
+            ? 'Impossible de promouvoir ce producteur.'
+            : 'Impossible de retirer le statut elite.';
+      toast.error(message);
     } finally {
       setActionKey(null);
     }
@@ -208,6 +215,7 @@ export function AdminEliteAccessPage() {
                   <th className="py-2 text-left">Utilisateur</th>
                   <th className="py-2 text-left">Role</th>
                   <th className="py-2 text-left">Type de compte</th>
+                  <th className="py-2 text-left">Abonnement actif</th>
                   <th className="py-2 text-left">Verifie</th>
                   <th className="py-2 text-right">Action</th>
                 </tr>
@@ -215,9 +223,15 @@ export function AdminEliteAccessPage() {
               <tbody>
                 {filteredProfiles.map((profile) => (
                   (() => {
-                    const canManageEliteStatus =
-                      profile.account_type === 'producer' || profile.account_type === 'elite_producer';
                     const isEliteProducer = profile.account_type === 'elite_producer';
+                    const canPromote = profile.account_type === 'producer' && profile.is_producer_active;
+                    const canRemoveElite = isEliteProducer;
+                    const canManageEliteStatus = canPromote || canRemoveElite;
+                    const actionLabel = isEliteProducer ? 'Retirer elite' : 'Promouvoir';
+                    const actionTitle =
+                      !isEliteProducer && !profile.is_producer_active
+                        ? 'Abonnement producteur actif requis'
+                        : actionLabel;
 
                     return (
                       <tr key={profile.id} className="border-b border-zinc-900">
@@ -227,7 +241,8 @@ export function AdminEliteAccessPage() {
                         </td>
                         <td className="py-3 pr-4 text-zinc-300">{profile.role}</td>
                         <td className="py-3 pr-4 text-zinc-300">{profile.account_type}</td>
-                        <td className="py-3 pr-4 text-zinc-300">{profile.is_verified ? 'yes' : 'no'}</td>
+                        <td className="py-3 pr-4 text-zinc-300">{profile.is_producer_active ? 'oui' : 'non'}</td>
+                        <td className="py-3 pr-4 text-zinc-300">{profile.is_verified ? 'oui' : 'non'}</td>
                         <td className="py-3 text-right">
                           <Button
                             size="sm"
@@ -235,8 +250,9 @@ export function AdminEliteAccessPage() {
                             onClick={() => void handleSetEliteStatus(profile)}
                             isLoading={actionKey === `profile:${profile.id}`}
                             disabled={!canManageEliteStatus}
+                            title={actionTitle}
                           >
-                            {isEliteProducer ? 'Retirer elite' : 'Promouvoir'}
+                            {actionLabel}
                           </Button>
                         </td>
                       </tr>
