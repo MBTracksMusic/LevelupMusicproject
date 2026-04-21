@@ -242,12 +242,10 @@ export async function setEliteProducerStatus(userId: string, isElite: boolean): 
 }
 
 export async function toggleEliteProduct(productId: string, isElite: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('products')
-    .update({
-      is_elite: isElite,
-    })
-    .eq('id', productId);
+  const { error } = await supabase.rpc('admin_set_product_elite_status', {
+    p_product_id: productId,
+    p_is_elite: isElite,
+  });
 
   if (error) {
     throw error;

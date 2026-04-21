@@ -7944,6 +7944,10 @@ export type Database = {
           watermarked_path: string
         }[]
       }
+      admin_set_product_elite_status: {
+        Args: { p_is_elite: boolean; p_product_id: string }
+        Returns: boolean
+      }
       admin_launch_battle_campaign: {
         Args: { p_campaign_id: string }
         Returns: {
