@@ -290,7 +290,8 @@ const fetchLegacyCatalogProducts = async ({
       genre:genres(${GENRE_SAFE_COLUMNS}),
       mood:moods(${MOOD_SAFE_COLUMNS})
     ` as any)
-    .eq('is_published', true);
+    .eq('is_published', true)
+    .eq('is_elite', false);
 
   if (mode === 'exclusives') {
     query = query.eq('product_type', 'exclusive').eq('is_sold', false);
@@ -365,7 +366,8 @@ const fetchLegacyCatalogProductBySlug = async ({
       mood:moods(${MOOD_SAFE_COLUMNS})
     ` as any)
     .eq('slug', slug)
-    .eq('is_published', true);
+    .eq('is_published', true)
+    .eq('is_elite', false);
 
   if (routePrefix === 'exclusives') {
     query = query.eq('is_exclusive', true);
