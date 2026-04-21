@@ -16,6 +16,7 @@ import { Select } from '../components/ui/Select';
 import { Modal } from '../components/ui/Modal';
 import { AlertTriangle, User, Lock, Globe, Save, Camera, Instagram, Youtube, Cloud, Music2, Disc3 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { PrivateAccessCard } from '../components/account/PrivateAccessCard';
 
 const AVATAR_BUCKET = import.meta.env.VITE_SUPABASE_AVATAR_BUCKET || 'avatars';
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -493,6 +494,8 @@ export function SettingsPage() {
 
         {activeTab === 'profile' && (
           <div className="space-y-6">
+            <PrivateAccessCard profile={profile} />
+
             {hasActiveUserSubscription && (
               <Card className="p-6">
                 <div className="space-y-4">

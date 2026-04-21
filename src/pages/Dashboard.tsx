@@ -22,6 +22,7 @@ import { useCreditBalance } from '../lib/credits/useCreditBalance';
 import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 import { isProducerSafe } from '../lib/auth/producer';
 import { useMaintenanceModeContext } from '../lib/supabase/MaintenanceModeContext';
+import { PrivateAccessCard } from '../components/account/PrivateAccessCard';
 
 interface DashboardPurchase extends Purchase {
   product: ProductWithRelations | null;
@@ -697,6 +698,8 @@ export function DashboardPage() {
             {t('dashboard.welcome', { name: profile?.username || user?.email || t('common.unknown') })}
           </p>
         </div>
+
+        <PrivateAccessCard profile={profile} className="mb-8" />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {stats.map((stat) => (

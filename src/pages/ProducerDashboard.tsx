@@ -10,6 +10,7 @@ import type { Database, Product, ProducerTier } from '../lib/supabase/types';
 import { formatDate, formatPrice } from '../lib/utils/format';
 import { extractStoragePathFromCandidate } from '../lib/utils/storage';
 import { isProducerSafe, isStripeReady } from '../lib/auth/producer';
+import { PrivateAccessCard } from '../components/account/PrivateAccessCard';
 
 interface ProducerStatsRow {
   total_revenue: number | null;
@@ -760,6 +761,8 @@ export function ProducerDashboardPage() {
             <UploadBeatButton label={t('producer.uploadBeat')} />
           </div>
         </header>
+
+        <PrivateAccessCard profile={profile} />
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard icon={Music} label={t('producer.products')} value={productCount} />
