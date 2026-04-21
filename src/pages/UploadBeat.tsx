@@ -107,6 +107,19 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+const getReturnedProductId = (value: unknown) => {
+  if (Array.isArray(value)) {
+    const firstRow = value[0];
+    return firstRow && typeof firstRow === 'object' && typeof (firstRow as { id?: unknown }).id === 'string'
+      ? (firstRow as { id: string }).id
+      : null;
+  }
+
+  return value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string'
+    ? (value as { id: string }).id
+    : null;
+};
+
 const getEditLockMessage = (
   permissions: EditPermissions | null | undefined,
   t: TranslateFn,
@@ -289,6 +302,23 @@ export async function uploadBeatProduct({
     product: finalProduct as Pick<Database['public']['Tables']['products']['Row'], 'id' | 'producer_id' | 'title' | 'slug'>,
     masterPath: normalizedMasterPath,
   };
+}
+
+async function enqueuePreviewGeneration(productId: string) {
+  const { data, error } = await supabase.rpc('enqueue_audio_processing_job', {
+    p_product_id: productId,
+    p_job_type: 'generate_preview',
+  });
+
+  if (error) {
+    console.error('[upload-beat] explicit preview enqueue failed', {
+      productId,
+      error,
+    });
+    return false;
+  }
+
+  return Boolean(data);
 }
 
 // Page d'upload minimaliste pour les producteurs actifs.
@@ -812,6 +842,7 @@ export function UploadBeatPage() {
     let coverPath = '';
     let persistedVersion = false;
     let updatedExistingProduct = false;
+    let queuedPreview = false;
 
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -898,13 +929,18 @@ export function UploadBeatPage() {
           license_terms: versionSource.license_terms,
         };
 
-        const { error: versionPublishError } = await supabase.rpc('rpc_publish_product_version', {
+        const { data: versionData, error: versionPublishError } = await supabase.rpc('rpc_publish_product_version', {
           p_source_product_id: versionSource.id,
           p_new_data: versionPayload,
         });
 
         if (versionPublishError) {
           throw versionPublishError;
+        }
+
+        const versionProductId = getReturnedProductId(versionData);
+        if (versionProductId) {
+          queuedPreview = await enqueuePreviewGeneration(versionProductId);
         }
 
         persistedVersion = true;
@@ -938,6 +974,10 @@ export function UploadBeatPage() {
           throw updateError;
         }
 
+        if (masterStorageReference) {
+          queuedPreview = await enqueuePreviewGeneration(editingProduct.id);
+        }
+
         updatedExistingProduct = true;
       } else {
         if (!audioFile) {
@@ -952,11 +992,12 @@ export function UploadBeatPage() {
           payload: basePayload,
         });
         masterStorageReference = created.masterPath;
+        queuedPreview = await enqueuePreviewGeneration(created.product.id);
         setUploadStatus((prev) => ({ ...prev, audio: 'success' }));
         setUploadProgress((prev) => ({ ...prev, audio: 100 }));
       }
 
-      setIsWatermarkProcessing(Boolean(versionSource || audioFile));
+      setIsWatermarkProcessing(Boolean(queuedPreview || versionSource || audioFile));
       toast.success(
         versionSource
           ? t('uploadBeat.versionPublished')
