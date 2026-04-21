@@ -119,25 +119,25 @@ export function AdminEliteAccessPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Elite Producer & Label Access</CardTitle>
+          <CardTitle>Acces prive labels et producteurs elite</CardTitle>
           <CardDescription>
-            Minimal admin controls for private label verification, elite producer promotion, and elite beat curation.
+            Gerez les demandes labels, les comptes elite et les beats visibles dans l'espace prive.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3">
           <p className="text-sm text-zinc-400">
-            These actions extend the private ecosystem without touching the public marketplace logic.
+            Ces reglages etendent l'acces prive sans modifier la marketplace publique.
           </p>
           <Button variant="outline" onClick={() => void loadAdminData()} isLoading={isLoading}>
-            Refresh
+            Actualiser
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Label Requests</CardTitle>
-          <CardDescription>Approve pending label requests and verify the requesting account.</CardDescription>
+          <CardTitle>Demandes de labels</CardTitle>
+          <CardDescription>Consultez les demandes d'acces prive et validez les comptes labels.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -147,15 +147,15 @@ export function AdminEliteAccessPage() {
               ))}
             </div>
           ) : requests.length === 0 ? (
-            <p className="text-sm text-zinc-400">No label requests yet.</p>
+            <p className="text-sm text-zinc-400">Aucune demande de label pour le moment.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-zinc-500">
                   <tr className="border-b border-zinc-800">
-                    <th className="py-2 text-left">Company</th>
+                    <th className="py-2 text-left">Societe</th>
                     <th className="py-2 text-left">Email</th>
-                    <th className="py-2 text-left">Status</th>
+                    <th className="py-2 text-left">Statut</th>
                     <th className="py-2 text-left">Message</th>
                     <th className="py-2 text-right">Action</th>
                   </tr>
@@ -175,7 +175,7 @@ export function AdminEliteAccessPage() {
                           isLoading={actionKey === `request:${request.id}`}
                           disabled={request.status !== 'pending'}
                         >
-                          Verify label
+                          Valider le label
                         </Button>
                       </td>
                     </tr>
@@ -189,24 +189,24 @@ export function AdminEliteAccessPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Producer Promotion</CardTitle>
-          <CardDescription>Promote an existing producer account to elite_producer.</CardDescription>
+          <CardTitle>Promotion producteur elite</CardTitle>
+          <CardDescription>Donnez l'acces elite a un producteur existant.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
-            label="Search producer"
+            label="Rechercher un producteur"
             value={profileSearch}
             onChange={(event) => setProfileSearch(event.target.value)}
-            placeholder="email, username, full name"
+            placeholder="email, pseudo, nom complet"
           />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-zinc-500">
                 <tr className="border-b border-zinc-800">
-                  <th className="py-2 text-left">User</th>
+                  <th className="py-2 text-left">Utilisateur</th>
                   <th className="py-2 text-left">Role</th>
-                  <th className="py-2 text-left">Account type</th>
-                  <th className="py-2 text-left">Verified</th>
+                  <th className="py-2 text-left">Type de compte</th>
+                  <th className="py-2 text-left">Verifie</th>
                   <th className="py-2 text-right">Action</th>
                 </tr>
               </thead>
@@ -228,7 +228,7 @@ export function AdminEliteAccessPage() {
                         isLoading={actionKey === `profile:${profile.id}`}
                         disabled={profile.account_type === 'elite_producer'}
                       >
-                        Promote
+                        Promouvoir
                       </Button>
                     </td>
                   </tr>
@@ -241,24 +241,24 @@ export function AdminEliteAccessPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Elite Beats</CardTitle>
-          <CardDescription>Toggle which published beats are visible inside the Elite Hub.</CardDescription>
+          <CardTitle>Beats prives</CardTitle>
+          <CardDescription>Choisissez les beats publies visibles dans l'Elite Hub.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
-            label="Search beat"
+            label="Rechercher un beat"
             value={productSearch}
             onChange={(event) => setProductSearch(event.target.value)}
-            placeholder="title or slug"
+            placeholder="titre ou slug"
           />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-zinc-500">
                 <tr className="border-b border-zinc-800">
                   <th className="py-2 text-left">Beat</th>
-                  <th className="py-2 text-left">Status</th>
-                  <th className="py-2 text-left">Published</th>
-                  <th className="py-2 text-left">Elite</th>
+                  <th className="py-2 text-left">Statut</th>
+                  <th className="py-2 text-left">Publie</th>
+                  <th className="py-2 text-left">Prive</th>
                   <th className="py-2 text-right">Action</th>
                 </tr>
               </thead>
@@ -279,7 +279,7 @@ export function AdminEliteAccessPage() {
                         onClick={() => void handleToggleElite(product)}
                         isLoading={actionKey === `product:${product.id}`}
                       >
-                        {product.is_elite ? 'Remove elite' : 'Mark elite'}
+                        {product.is_elite ? 'Retirer' : 'Ajouter'}
                       </Button>
                     </td>
                   </tr>
