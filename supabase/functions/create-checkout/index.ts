@@ -8,6 +8,9 @@ const BASE_CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 const CREATE_CHECKOUT_RATE_LIMIT_RPC = "create_checkout_user";
+const MAX_CHECKOUT_ITEMS = 5;
+const CART_PLATFORM_COMMISSION_RATE = 0.3;
+const CART_PRODUCER_PAYOUT_RATE = 0.7;
 
 interface CheckoutRequest {
   beatId?: string;
@@ -15,6 +18,7 @@ interface CheckoutRequest {
   licenseId?: string;
   license_id?: string;
   licenseType?: string;
+  items?: CheckoutItemRequest[];
   successUrl?: string;
   cancelUrl?: string;
   success_url?: string;
@@ -22,6 +26,16 @@ interface CheckoutRequest {
   price_id?: string;
   priceId?: string;
   subscription_kind?: string;
+}
+
+interface CheckoutItemRequest {
+  beatId?: string;
+  productId?: string;
+  product_id?: string;
+  licenseId?: string;
+  license_id?: string;
+  licenseType?: string;
+  license_type?: string;
 }
 
 interface ProductRow {
@@ -47,15 +61,23 @@ interface LicenseRow {
   exclusive_allowed: boolean;
 }
 
-interface ProductLicenseRow {
-  id: string;
-  product_id: string;
-  license_id: string;
-  license_type: string;
-  price: number;
-  stripe_price_id: string | null;
-  is_active: boolean;
-  license: LicenseRow | null;
+interface ProducerProfileRow {
+  is_deleted: boolean | null;
+  deleted_at: string | null;
+  stripe_account_id: string | null;
+  stripe_account_charges_enabled: boolean | null;
+}
+
+interface CheckoutProductItem {
+  product: ProductRow;
+  licenseId: string | null;
+  licenseType: string;
+  licenseName: string;
+  amount: number;
+  producerPayoutAmount: number;
+  applicationFeeAmount: number;
+  producerProfile: ProducerProfileRow;
+  hasStripeConnect: boolean;
 }
 
 const isProduction = () => {
@@ -243,31 +265,6 @@ const isValidCheckoutAmount = (value: unknown): value is number => (
   value > 0
 );
 
-const normalizeLicenseLookup = (value: string | null) => value?.trim().toLowerCase() ?? "";
-
-async function fetchProductLicenses(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  productId: string,
-): Promise<ProductLicenseRow[]> {
-  const { data, error } = await supabaseAdmin
-    .from("product_licenses")
-    .select("id, product_id, license_id, license_type, price, stripe_price_id, is_active, license:licenses(id, name, price, exclusive_allowed)")
-    .eq("product_id", productId)
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true })
-    .order("price", { ascending: true });
-
-  if (error) {
-    console.error("[create-checkout] Product license lookup failed, falling back to product.price", {
-      productId,
-      message: error.message,
-    });
-    return [];
-  }
-
-  return ((data ?? []) as ProductLicenseRow[]).filter((row) => row.license !== null);
-}
-
 async function resolveCheckoutLicense(
   supabaseAdmin: ReturnType<typeof createClient>,
   params: {
@@ -348,6 +345,64 @@ async function resolveCheckoutLicense(
   }
 
   return (data as LicenseRow | null) ?? null;
+}
+
+const normalizeCheckoutItemRequests = (body: CheckoutRequest): CheckoutItemRequest[] => {
+  if (Array.isArray(body.items) && body.items.length > 0) {
+    return body.items;
+  }
+
+  return [{
+    beatId: body.beatId,
+    productId: body.productId,
+    licenseId: body.licenseId,
+    license_id: body.license_id,
+    licenseType: body.licenseType,
+  }];
+};
+
+const resolveItemProductId = (item: CheckoutItemRequest) => (
+  asNonEmptyString(item.productId) ||
+  asNonEmptyString(item.product_id) ||
+  asNonEmptyString(item.beatId)
+);
+
+async function resolveLicenseSnapshot(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  params: {
+    productId: string;
+    licenseId: string | null;
+    licenseType: string | null;
+    isExclusiveProduct: boolean;
+  },
+) {
+  const fallbackName = params.isExclusiveProduct ? "Exclusive" : "Standard";
+  const fallbackType = params.isExclusiveProduct ? "exclusive" : "standard";
+
+  try {
+    const license = await resolveCheckoutLicense(supabaseAdmin, {
+      licenseId: params.licenseId,
+      licenseType: params.licenseType,
+      isExclusiveProduct: params.isExclusiveProduct,
+    });
+
+    return {
+      licenseId: license?.id ?? null,
+      licenseName: license?.name ?? fallbackName,
+      licenseType: license?.name?.toLowerCase() ?? params.licenseType ?? fallbackType,
+    };
+  } catch (error) {
+    console.warn("[create-checkout] License snapshot resolution failed, using product default", {
+      productId: params.productId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    return {
+      licenseId: null,
+      licenseName: fallbackName,
+      licenseType: params.licenseType ?? fallbackType,
+    };
+  }
 }
 
 serveWithErrorHandling("create-checkout", async (req: Request) => {
@@ -655,6 +710,579 @@ serveWithErrorHandling("create-checkout", async (req: Request) => {
       }
 
       return new Response(JSON.stringify({ url: sessionPayload.url, sessionId: sessionPayload.id }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const checkoutItemRequests = Array.isArray(body.items) ? normalizeCheckoutItemRequests(body) : [];
+
+    if (checkoutItemRequests.length > 0) {
+      if (!successUrl || !cancelUrl) {
+        return new Response(JSON.stringify({ error: "Missing required fields" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (checkoutItemRequests.length > MAX_CHECKOUT_ITEMS) {
+        return new Response(JSON.stringify({
+          error: `Le panier est limite a ${MAX_CHECKOUT_ITEMS} produits par paiement.`,
+          code: "checkout_item_limit_exceeded",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const validatedSuccessUrl = validateRedirectUrl(successUrl);
+      const validatedCancelUrl = validateRedirectUrl(cancelUrl);
+
+      if (!validatedSuccessUrl || !validatedCancelUrl) {
+        return new Response(JSON.stringify({ error: "invalid_redirect_url" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const normalizedRequests = checkoutItemRequests.map((item) => ({
+        productId: resolveItemProductId(item),
+        licenseId: asNonEmptyString(item.licenseId) || asNonEmptyString(item.license_id),
+        licenseType: asNonEmptyString(item.licenseType) || asNonEmptyString(item.license_type),
+      }));
+
+      if (normalizedRequests.some((item) => !item.productId)) {
+        return new Response(JSON.stringify({ error: "Missing required fields" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const productIds = normalizedRequests.map((item) => item.productId as string);
+      const uniqueProductIds = [...new Set(productIds)];
+
+      if (uniqueProductIds.length !== productIds.length) {
+        return new Response(JSON.stringify({
+          error: "Un produit est present plusieurs fois dans le panier.",
+          code: "duplicate_checkout_item",
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("role, stripe_customer_id, is_deleted, deleted_at")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("[create-checkout] Failed to load buyer profile", {
+          userId: user.id,
+          message: profileError.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate account status" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!profile || profile.is_deleted === true || profile.deleted_at !== null) {
+        return new Response(JSON.stringify({ error: "Account deleted" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: products, error: productsError } = await supabaseAdmin
+        .from("products")
+        .select("id, title, slug, price, early_access_until, cover_image_url, producer_id, is_exclusive, is_sold, is_published, deleted_at, product_type, status")
+        .in("id", uniqueProductIds);
+
+      if (productsError) {
+        console.error("[create-checkout] Cart product lookup failed", {
+          userId: user.id,
+          message: productsError.message,
+        });
+        return new Response(JSON.stringify({ error: "Beat introuvable ou indisponible." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const productById = new Map((products ?? []).map((product) => [product.id, product as ProductRow]));
+      const orderedProducts = productIds.map((productId) => productById.get(productId));
+
+      if (orderedProducts.some((product) => !product)) {
+        return new Response(JSON.stringify({ error: "Beat introuvable ou indisponible." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      for (const productRow of orderedProducts as ProductRow[]) {
+        if (productRow.producer_id === user.id) {
+          console.warn("SECURITY: self_purchase_attempt", {
+            user_id: user.id,
+            product_id: productRow.id,
+          });
+
+          return new Response(JSON.stringify({
+            error: "Forbidden: self purchase",
+            code: "self_purchase_forbidden",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!productRow.is_published || productRow.deleted_at !== null || productRow.status !== "active") {
+          return new Response(JSON.stringify({ error: "Beat introuvable ou indisponible." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (productRow.is_exclusive && productRow.is_sold) {
+          return new Response(JSON.stringify({ error: "This exclusive has already been sold" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!isValidCheckoutAmount(productRow.price)) {
+          console.error("[create-checkout] Invalid cart product price", {
+            beatId: productRow.id,
+            price: productRow.price,
+          });
+
+          return new Response(JSON.stringify({ error: "Invalid product price" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const { data: existingPurchases, error: purchaseCheckError } = await supabaseAdmin
+        .from("purchases")
+        .select("id, product_id")
+        .eq("user_id", user.id)
+        .eq("status", "completed")
+        .in("product_id", uniqueProductIds);
+
+      if (purchaseCheckError) {
+        console.error("[create-checkout] Failed to check existing cart purchases", {
+          userId: user.id,
+          message: purchaseCheckError.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate purchase eligibility" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if ((existingPurchases ?? []).length > 0) {
+        return new Response(JSON.stringify({
+          error: "Vous avez deja achete un produit de ce panier.",
+          code: "already_purchased",
+        }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      for (const productId of uniqueProductIds) {
+        const productRateLimitKey = `create_checkout_user_product_${productId}`;
+        const { data: productRateLimitAllowed, error: productRateLimitError } = await supabaseAdmin.rpc(
+          "check_rpc_rate_limit",
+          {
+            p_user_id: user.id,
+            p_rpc_name: productRateLimitKey,
+          },
+        );
+
+        if (productRateLimitError) {
+          console.error("[create-checkout] Product-level rate limit check failed", {
+            userId: user.id,
+            beatId: productId,
+            rpc: productRateLimitKey,
+            productRateLimitError,
+          });
+          return new Response(JSON.stringify({ error: "Rate limit unavailable" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (productRateLimitAllowed !== true) {
+          return new Response(JSON.stringify({
+            error: "Un paiement est deja en cours pour un produit de ce panier.",
+            code: "checkout_in_progress",
+          }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const productRows = orderedProducts as ProductRow[];
+      const producerIds = [...new Set(productRows.map((product) => product.producer_id))];
+      const { data: producerProfiles, error: producerProfilesError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, is_deleted, deleted_at, stripe_account_id, stripe_account_charges_enabled")
+        .in("id", producerIds);
+
+      if (producerProfilesError) {
+        console.error("[create-checkout] Failed to load cart producer profiles", {
+          userId: user.id,
+          message: producerProfilesError.message,
+        });
+        return new Response(JSON.stringify({ error: "Failed to validate product availability" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const producerProfileById = new Map(
+        (producerProfiles ?? []).map((producerProfile) => [
+          producerProfile.id,
+          producerProfile as ProducerProfileRow & { id: string },
+        ]),
+      );
+
+      for (const productRow of productRows) {
+        const producerProfile = producerProfileById.get(productRow.producer_id);
+
+        if (!producerProfile || producerProfile.is_deleted === true || producerProfile.deleted_at !== null) {
+          return new Response(JSON.stringify({ error: "Account deleted" }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const hasEarlyAccessProduct = productRows.some((productRow) => (
+        productRow.product_type === "beat" &&
+        typeof productRow.early_access_until === "string" &&
+        new Date(productRow.early_access_until).getTime() > Date.now()
+      ));
+
+      if (hasEarlyAccessProduct && profile?.role !== "admin") {
+        const { data: userSubscription, error: userSubscriptionError } = await supabaseAdmin
+          .from("user_subscriptions")
+          .select("subscription_status, current_period_end")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (userSubscriptionError) {
+          console.error("[create-checkout] Failed to load buyer subscription for cart early access", {
+            userId: user.id,
+            message: userSubscriptionError.message,
+          });
+          return new Response(JSON.stringify({ error: "Failed to validate product availability" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const hasPremiumAccess =
+          userSubscription !== null &&
+          ["active", "trialing"].includes(userSubscription.subscription_status) &&
+          (
+            userSubscription.current_period_end === null ||
+            new Date(userSubscription.current_period_end).getTime() > Date.now()
+          );
+
+        if (!hasPremiumAccess) {
+          return new Response(JSON.stringify({
+            error: "Disponible bientot",
+            code: "early_access_premium_only",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const hasExclusiveProduct = productRows.some((productRow) => productRow.is_exclusive);
+
+      if (hasExclusiveProduct) {
+        let canPurchaseExclusive = false;
+        const { data: isConfirmedData, error: isConfirmedError } = await supabaseAdmin.rpc(
+          "is_confirmed_user",
+          { p_user_id: user.id },
+        );
+
+        if (isConfirmedError) {
+          canPurchaseExclusive = Boolean(
+            profile?.role && ["confirmed_user", "producer", "admin"].includes(profile.role),
+          );
+        } else {
+          canPurchaseExclusive = isConfirmedData === true;
+        }
+
+        if (!canPurchaseExclusive) {
+          return new Response(JSON.stringify({
+            error: "You must be a confirmed user to purchase exclusives",
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const checkoutItems: CheckoutProductItem[] = [];
+
+      for (let index = 0; index < productRows.length; index += 1) {
+        const productRow = productRows[index]!;
+        const requestItem = normalizedRequests[index]!;
+        const producerProfile = producerProfileById.get(productRow.producer_id)!;
+        const licenseSnapshot = await resolveLicenseSnapshot(supabaseAdmin, {
+          productId: productRow.id,
+          licenseId: requestItem.licenseId,
+          licenseType: requestItem.licenseType,
+          isExclusiveProduct: productRow.is_exclusive,
+        });
+        const amount = productRow.price;
+        const applicationFeeAmount = Math.round(amount * CART_PLATFORM_COMMISSION_RATE);
+        const producerPayoutAmount = Math.round(amount * CART_PRODUCER_PAYOUT_RATE);
+        const hasStripeConnect = Boolean(
+          producerProfile.stripe_account_id &&
+          producerProfile.stripe_account_charges_enabled,
+        );
+
+        checkoutItems.push({
+          product: productRow,
+          licenseId: licenseSnapshot.licenseId,
+          licenseType: licenseSnapshot.licenseType,
+          licenseName: licenseSnapshot.licenseName,
+          amount,
+          applicationFeeAmount,
+          producerPayoutAmount,
+          producerProfile,
+          hasStripeConnect,
+        });
+      }
+
+      const createdExclusiveLockProductIds: string[] = [];
+
+      for (const item of checkoutItems.filter((checkoutItem) => checkoutItem.product.is_exclusive)) {
+        const { data: lockCreated, error: lockError } = await supabaseAdmin.rpc(
+          "create_exclusive_lock",
+          {
+            p_product_id: item.product.id,
+            p_user_id: user.id,
+            p_checkout_session_id: `pending_${Date.now()}_${item.product.id}`,
+          },
+        );
+
+        if (lockError || !lockCreated) {
+          if (createdExclusiveLockProductIds.length > 0) {
+            await supabaseAdmin
+              .from("exclusive_locks")
+              .delete()
+              .eq("user_id", user.id)
+              .in("product_id", createdExclusiveLockProductIds);
+          }
+
+          return new Response(JSON.stringify({
+            error: "This exclusive is currently being purchased by another user",
+          }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        createdExclusiveLockProductIds.push(item.product.id);
+      }
+
+      const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+      if (!stripeSecretKey) {
+        return new Response(JSON.stringify({ error: "Stripe not configured" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let customerId = profile?.stripe_customer_id;
+
+      if (!customerId) {
+        const customerResponse = await fetch("https://api.stripe.com/v1/customers", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${stripeSecretKey}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            email: user.email || "",
+            "metadata[user_id]": user.id,
+          }),
+        });
+
+        const customer = await customerResponse.json();
+        if (!customerResponse.ok || !customer?.id) {
+          console.error("[create-checkout] Failed to create Stripe customer for cart", {
+            userId: user.id,
+            status: customerResponse.status,
+            error: customer?.error?.message ?? "unknown_customer_creation_error",
+          });
+          return new Response(JSON.stringify({ error: "Impossible de preparer le paiement." }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        customerId = customer.id;
+
+        await supabaseAdmin
+          .from("user_profiles")
+          .update({ stripe_customer_id: customerId })
+          .eq("id", user.id);
+      }
+
+      const lineItems = new URLSearchParams();
+      let checkoutAmount = 0;
+
+      checkoutItems.forEach((item, index) => {
+        checkoutAmount += item.amount;
+        lineItems.append(`line_items[${index}][price_data][currency]`, "eur");
+        lineItems.append(`line_items[${index}][price_data][unit_amount]`, item.amount.toString());
+        lineItems.append(`line_items[${index}][price_data][product_data][name]`, item.product.title);
+        lineItems.append(
+          `line_items[${index}][price_data][product_data][description]`,
+          item.product.is_exclusive ? "Exclusive purchase" : "Beat purchase",
+        );
+        if (item.product.cover_image_url) {
+          lineItems.append(`line_items[${index}][price_data][product_data][images][0]`, item.product.cover_image_url);
+        }
+        lineItems.append(`line_items[${index}][quantity]`, "1");
+      });
+
+      const connectedDestinationAccountId = (
+        producerIds.length === 1 &&
+        checkoutItems.every((item) => item.hasStripeConnect)
+      )
+        ? checkoutItems[0]?.producerProfile.stripe_account_id ?? null
+        : null;
+      const canUseConnectDestination = Boolean(connectedDestinationAccountId);
+      const totalApplicationFeeAmount = checkoutItems.reduce((sum, item) => sum + item.applicationFeeAmount, 0);
+      const totalProducerPayoutAmount = checkoutItems.reduce((sum, item) => sum + item.producerPayoutAmount, 0);
+      const sessionParamsData: Record<string, string> = {
+        mode: "payment",
+        success_url: validatedSuccessUrl,
+        cancel_url: validatedCancelUrl,
+        "metadata[user_id]": user.id,
+        "metadata[buyer_id]": user.id,
+        "metadata[checkout_mode]": "cart",
+        "metadata[cart_item_count]": checkoutItems.length.toString(),
+        "metadata[cart_amount_snapshot]": checkoutAmount.toString(),
+        "metadata[price_source]": "products.price",
+        "metadata[stripe_connect_mode]": canUseConnectDestination ? "connect" : "fallback",
+        "metadata[producer_payout_amount]": totalProducerPayoutAmount.toString(),
+        ...(canUseConnectDestination
+          ? {
+              "payment_intent_data[transfer_data][destination]": connectedDestinationAccountId!,
+              "payment_intent_data[application_fee_amount]": totalApplicationFeeAmount.toString(),
+            }
+          : {}),
+      };
+
+      checkoutItems.forEach((item, index) => {
+        sessionParamsData[`metadata[item_${index}_product_id]`] = item.product.id;
+        sessionParamsData[`metadata[item_${index}_amount]`] = item.amount.toString();
+        sessionParamsData[`metadata[item_${index}_is_exclusive]`] = item.product.is_exclusive.toString();
+        sessionParamsData[`metadata[item_${index}_license_type]`] = item.licenseType;
+        sessionParamsData[`metadata[item_${index}_producer_payout_amount]`] = item.producerPayoutAmount.toString();
+      });
+
+      if (checkoutItems.length === 1) {
+        const item = checkoutItems[0]!;
+        sessionParamsData["metadata[beat_id]"] = item.product.id;
+        sessionParamsData["metadata[product_id]"] = item.product.id;
+        sessionParamsData["metadata[producer_id]"] = item.product.producer_id;
+        sessionParamsData["metadata[product_title]"] = item.product.title;
+        sessionParamsData["metadata[product_slug]"] = item.product.slug;
+        sessionParamsData["metadata[product_type]"] = item.product.product_type;
+        sessionParamsData["metadata[is_exclusive]"] = item.product.is_exclusive.toString();
+        sessionParamsData["metadata[license_name]"] = item.licenseName;
+        sessionParamsData["metadata[license_type]"] = item.licenseType;
+        sessionParamsData["metadata[db_price_snapshot]"] = item.amount.toString();
+        sessionParamsData["metadata[db_price]"] = item.amount.toString();
+      }
+
+      if (customerId) {
+        sessionParamsData.customer = customerId;
+      } else {
+        sessionParamsData.customer_creation = "always";
+      }
+
+      const sessionParams = new URLSearchParams(sessionParamsData);
+      const sessionResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeSecretKey}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: `${sessionParams.toString()}&${lineItems.toString()}`,
+      });
+
+      const session = await sessionResponse.json();
+
+      if (session.error) {
+        if (createdExclusiveLockProductIds.length > 0) {
+          await supabaseAdmin
+            .from("exclusive_locks")
+            .delete()
+            .eq("user_id", user.id)
+            .in("product_id", createdExclusiveLockProductIds);
+        }
+
+        console.error("[create-checkout] Stripe cart checkout session creation failed", {
+          userId: user.id,
+          productIds,
+          amount: checkoutAmount,
+          message: session.error.message,
+        });
+        return new Response(JSON.stringify({ error: session.error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (createdExclusiveLockProductIds.length > 0) {
+        const { data: boundLocks, error: lockBindError } = await supabaseAdmin
+          .from("exclusive_locks")
+          .update({ stripe_checkout_session_id: session.id })
+          .eq("user_id", user.id)
+          .in("product_id", createdExclusiveLockProductIds)
+          .select("id");
+
+        if (lockBindError || !boundLocks || boundLocks.length !== createdExclusiveLockProductIds.length) {
+          console.error("[create-checkout] Failed to bind cart exclusive locks", {
+            userId: user.id,
+            sessionId: session.id,
+            message: lockBindError?.message ?? "exclusive_lock_missing",
+          });
+
+          return new Response(JSON.stringify({
+            error: "Exclusive lock binding failed",
+            code: "exclusive_lock_bind_failed",
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      console.log("[create-checkout] Stripe cart checkout session created", {
+        userId: user.id,
+        productIds,
+        sessionId: session.id,
+        checkoutAmount,
+        checkoutMode: canUseConnectDestination ? "connect_destination" : "platform_fallback",
+      });
+
+      return new Response(JSON.stringify({ url: session.url, sessionId: session.id }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

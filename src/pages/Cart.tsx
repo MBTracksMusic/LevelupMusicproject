@@ -29,20 +29,27 @@ export function CartPage() {
         const userId = authData.user?.id;
 
         if (userId) {
-          const { data: latestPurchase, error } = await supabase
+          const checkoutSessionId = params.get('session_id');
+          let purchaseQuery = supabase
             .from('purchases')
             .select('id, product_id, beat_title_snapshot, stripe_checkout_session_id, amount, currency, status, license_id, license_name_snapshot, license_type_snapshot, price_snapshot')
             .eq('user_id', userId)
             .eq('status', 'completed')
             .order('completed_at', { ascending: false, nullsFirst: false })
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .order('created_at', { ascending: false });
+
+          if (checkoutSessionId) {
+            purchaseQuery = purchaseQuery.eq('stripe_checkout_session_id', checkoutSessionId);
+          } else {
+            purchaseQuery = purchaseQuery.limit(1);
+          }
+
+          const { data: completedPurchases, error } = await purchaseQuery;
 
           if (error) {
             console.error('Error loading latest purchase for analytics:', error);
-          } else if (latestPurchase) {
-            const purchase = latestPurchase as {
+          } else if (completedPurchases?.length) {
+            const purchases = completedPurchases as Array<{
               id: string;
               product_id: string;
               beat_title_snapshot: string | null;
@@ -53,14 +60,20 @@ export function CartPage() {
               license_name_snapshot: string | null;
               license_type_snapshot: string | null;
               price_snapshot: number | null;
-            };
+            }>;
+            const firstPurchase = purchases[0]!;
+            const transactionId = checkoutSessionId || firstPurchase.stripe_checkout_session_id || firstPurchase.id;
+            const purchaseValue = purchases.reduce((sum, purchase) => sum + purchase.amount, 0) / 100;
 
             trackPurchase({
-              transactionId: purchase.stripe_checkout_session_id || purchase.id,
-              value: purchase.amount / 100,
-              currency: purchase.currency || 'EUR',
-              itemId: purchase.product_id,
-              itemName: purchase.beat_title_snapshot ?? 'unknown',
+              transactionId,
+              value: purchaseValue,
+              currency: firstPurchase.currency || 'EUR',
+              items: purchases.map((purchase) => ({
+                productId: purchase.product_id,
+                productName: purchase.beat_title_snapshot ?? 'unknown',
+                price: purchase.amount / 100,
+              })),
             });
           }
         }
@@ -81,8 +94,6 @@ export function CartPage() {
 
   const total = getTotal();
   const hasItems = items.length > 0;
-  const isSingleItemCheckout = items.length === 1;
-  const firstItem = items[0];
 
   const handleRemove = async (productId: string) => {
     setRemovingId(productId);
@@ -94,18 +105,15 @@ export function CartPage() {
   };
 
   const handleCheckout = async () => {
-    if (!isSingleItemCheckout) {
-      setCheckoutError(t('checkout.singleItemOnly'));
-      return;
-    }
-
-    if (!firstItem) return;
-    const selectedPrice = firstItem.product?.price ?? 0;
+    if (!hasItems) return;
 
     trackBeginCheckout({
-      productId: firstItem.product_id,
-      price: selectedPrice / 100,
-      productName: firstItem.product?.title ?? null,
+      price: total / 100,
+      items: items.map((item) => ({
+        productId: item.product_id,
+        productName: item.product?.title ?? null,
+        price: (item.product?.price ?? 0) / 100,
+      })),
     });
 
     setCheckoutError(null);
@@ -123,8 +131,12 @@ export function CartPage() {
 
       const { data, error } = await supabase.functions.invoke<{ url?: string }>('create-checkout', {
         body: {
-          beatId: firstItem.product_id,
-          successUrl: `${window.location.origin}/cart?status=success`,
+          items: items.map((item) => ({
+            productId: item.product_id,
+            licenseId: item.license_id ?? undefined,
+            licenseType: item.license_type ?? undefined,
+          })),
+          successUrl: `${window.location.origin}/cart?status=success&session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${window.location.origin}/cart`,
         },
         headers: {
@@ -275,12 +287,6 @@ export function CartPage() {
               </div>
             )}
 
-            {items.length > 1 && (
-              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                {t('checkout.singleItemOnly')}
-              </div>
-            )}
-
             <div className="flex items-center justify-between text-sm text-zinc-400 mb-3">
               <span>{t('checkout.subtotal')}</span>
               <span className="text-white">{formatPrice(total)}</span>
@@ -295,7 +301,7 @@ export function CartPage() {
               className="w-full mt-6"
               size="lg"
               leftIcon={<ArrowRight className="w-4 h-4" />}
-              disabled={!hasItems || isCheckoutLoading || !isSingleItemCheckout}
+              disabled={!hasItems || isCheckoutLoading}
               isLoading={isCheckoutLoading}
               onClick={handleCheckout}
             >

@@ -86,6 +86,14 @@ type Ga4PurchasePayload = {
   item: Ga4PurchaseItem;
 };
 
+type CheckoutCompletionItem = {
+  productId: string;
+  amount: number;
+  isExclusive: boolean;
+  licenseType: string;
+  producerPayoutAmount: number | null;
+};
+
 async function claimGa4PurchaseTracking(
   supabase: ReturnType<typeof createClient>,
   transactionId: string,
@@ -106,7 +114,7 @@ async function claimGa4PurchaseTracking(
   }
 
   if (error.code === "23505") {
-    const { data: existingRow, error: existingRowError } = await supabase
+    const { error: existingRowError } = await supabase
       .from("ga4_tracked_purchases")
       .select("status")
       .eq("transaction_id", transactionId)
@@ -208,13 +216,9 @@ async function trackPurchaseViaGa4(
     return;
   }
 
-  try {
-    const sent = await sendPurchaseToGA4(payload);
-    if (sent) {
-      await markGa4PurchaseTrackingSent(supabase, payload.transactionId);
-    }
-  } catch (error) {
-    throw error;
+  const sent = await sendPurchaseToGA4(payload);
+  if (sent) {
+    await markGa4PurchaseTrackingSent(supabase, payload.transactionId);
   }
 }
 
@@ -377,7 +381,7 @@ async function resolveProfileForStripeCustomer<TProfile extends { id: string; st
 ): Promise<TProfile | null> {
   const { customerId, subscriptionId, userId, selectClause, logContext } = params;
 
-  let { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
     .select(selectClause)
     .eq("stripe_customer_id", customerId)
@@ -617,7 +621,7 @@ const resolveProducerTierFromSubscription = async (
   subscriptionId: string;
   userId: string;
 }) => {
-  const { isActive, priceIds, currentTier, subscriptionId, userId } = params;
+  const { isActive, priceIds, subscriptionId, userId } = params;
   if (!isActive) {
     return { tier: "user" as ProducerTier, matchedPriceId: null, source: "inactive" };
   }
@@ -814,6 +818,109 @@ async function completePurchaseWithLegacyRpc(
 
   console.log("[stripe-webhook] Standard purchase completed via legacy RPC", { sessionId, purchaseId });
   return purchaseId;
+}
+
+const parsePositiveIntMetadata = (value: unknown): number | null => {
+  const rawValue = asNonEmptyString(value);
+  if (!rawValue || !/^\d+$/.test(rawValue)) return null;
+  const parsed = Number.parseInt(rawValue, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseNonNegativeIntMetadata = (value: unknown): number | null => {
+  const rawValue = asNonEmptyString(value);
+  if (!rawValue || !/^\d+$/.test(rawValue)) return null;
+  const parsed = Number.parseInt(rawValue, 10);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+};
+
+function resolveCheckoutCompletionItems(
+  metadata: Record<string, string>,
+  amountTotal: number,
+): CheckoutCompletionItem[] {
+  const cartItemCount = parsePositiveIntMetadata(metadata.cart_item_count);
+
+  if (cartItemCount !== null) {
+    const items: CheckoutCompletionItem[] = [];
+
+    for (let index = 0; index < cartItemCount; index += 1) {
+      const productId = asNonEmptyString(metadata[`item_${index}_product_id`]);
+      const amount = parsePositiveIntMetadata(metadata[`item_${index}_amount`]);
+
+      if (!productId || amount === null) {
+        return [];
+      }
+
+      items.push({
+        productId,
+        amount,
+        isExclusive: metadata[`item_${index}_is_exclusive`] === "true",
+        licenseType: asNonEmptyString(metadata[`item_${index}_license_type`]) || "standard",
+        producerPayoutAmount: parseNonNegativeIntMetadata(metadata[`item_${index}_producer_payout_amount`]),
+      });
+    }
+
+    return items;
+  }
+
+  const productId = asNonEmptyString(metadata.product_id);
+  const amount =
+    parsePositiveIntMetadata(metadata.db_price_snapshot) ??
+    parsePositiveIntMetadata(metadata.db_price) ??
+    amountTotal;
+
+  if (!productId || !Number.isSafeInteger(amount) || amount <= 0) {
+    return [];
+  }
+
+  return [{
+    productId,
+    amount,
+    isExclusive: metadata.is_exclusive === "true",
+    licenseType: asNonEmptyString(metadata.license_type) || asNonEmptyString(metadata.license_name) || "standard",
+    producerPayoutAmount: parseNonNegativeIntMetadata(metadata.producer_payout_amount),
+  }];
+}
+
+async function applyFallbackPayoutTracking(
+  supabase: ReturnType<typeof createClient>,
+  purchaseId: string,
+  producerAmount: number,
+) {
+  const { data: existingPurchase, error: fetchError } = await supabase
+    .from("purchases")
+    .select("metadata")
+    .eq("id", purchaseId)
+    .maybeSingle();
+
+  if (fetchError || !existingPurchase) {
+    if (fetchError) {
+      console.error("[stripe-webhook] Failed to fetch purchase metadata for fallback payout tracking", {
+        purchaseId,
+        message: fetchError.message,
+      });
+    }
+    return;
+  }
+
+  const existingMetadata =
+    typeof existingPurchase?.metadata === "object" && existingPurchase?.metadata !== null
+      ? existingPurchase.metadata as Record<string, unknown>
+      : {};
+
+  const mergedMetadata = {
+    ...existingMetadata,
+    payout_mode: "platform_fallback",
+    payout_amount: producerAmount,
+    requires_manual_payout: true,
+    payout_status: existingMetadata?.payout_status ?? "pending",
+    tracked_at: new Date().toISOString(),
+  };
+
+  await supabase
+    .from("purchases")
+    .update({ metadata: mergedMetadata })
+    .eq("id", purchaseId);
 }
 
 const isCheckoutSession = (
@@ -1725,32 +1832,14 @@ async function handleCheckoutCompleted(
   }
 
   const userId = asNonEmptyString(metadata.user_id);
-  const productId = asNonEmptyString(metadata.product_id);
-  const isExclusive = metadata.is_exclusive === "true";
-  const metadataLicenseId = asNonEmptyString(metadata.license_id);
-  const metadataLicenseName = asNonEmptyString(metadata.license_name);
-  const licenseType = asNonEmptyString(metadata.license_type) || metadataLicenseName || "standard";
-  const priceSource = asNonEmptyString(metadata.price_source);
-  // Source of truth for checkout pricing:
-  // Stripe paid amount must match immutable snapshot captured at checkout creation.
-  const metadataDbPriceSnapshotRaw =
-    asNonEmptyString(metadata.db_price_snapshot) ??
-    // Backward compatibility for sessions created before snapshot key rollout.
-    asNonEmptyString(metadata.db_price);
-  const metadataDbPriceSnapshot = metadataDbPriceSnapshotRaw && /^\d+$/.test(metadataDbPriceSnapshotRaw)
-    ? Number.parseInt(metadataDbPriceSnapshotRaw, 10)
-    : null;
-
   const paymentIntentId =
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
-
   const amountTotal = session.amount_total;
 
   if (
     !userId ||
-    !productId ||
     !paymentIntentId ||
     amountTotal === null ||
     !Number.isSafeInteger(amountTotal) ||
@@ -1759,167 +1848,161 @@ async function handleCheckoutCompleted(
     throw new WebhookError("Missing secure checkout metadata for purchase completion", 400, true);
   }
 
-  if (metadataDbPriceSnapshot === null || metadataDbPriceSnapshot !== amountTotal) {
+  const checkoutItems = resolveCheckoutCompletionItems(metadata, amountTotal);
+  const itemAmountTotal = checkoutItems.reduce((sum, item) => sum + item.amount, 0);
+  const metadataAmountSnapshot =
+    parsePositiveIntMetadata(metadata.cart_amount_snapshot) ??
+    parsePositiveIntMetadata(metadata.db_price_snapshot) ??
+    parsePositiveIntMetadata(metadata.db_price);
+
+  if (
+    checkoutItems.length === 0 ||
+    itemAmountTotal !== amountTotal ||
+    metadataAmountSnapshot === null ||
+    metadataAmountSnapshot !== amountTotal
+  ) {
     throw new WebhookError(
-      `Checkout amount mismatch (expected ${metadataDbPriceSnapshot ?? "unknown"}, got ${amountTotal})`,
+      `Checkout amount mismatch (expected ${metadataAmountSnapshot ?? "unknown"}, got ${amountTotal})`,
       400,
       true,
     );
   }
 
-  // Primary licensing flow:
-  // Resolve a trusted license id and use the unified complete_license_purchase RPC.
-  const resolvedLicenseId = priceSource === "products.price"
-    ? null
-    : await resolveLicenseIdForCheckout(supabase, {
-      metadataLicenseId,
-      metadataLicenseName,
-      legacyLicenseType: licenseType,
-      isExclusive,
-    });
+  const stripeConnectMode = asNonEmptyString(metadata.stripe_connect_mode);
+  const priceSource = asNonEmptyString(metadata.price_source);
+  const purchaseResults: Array<{ item: CheckoutCompletionItem; purchaseId: string }> = [];
 
-  let purchaseId: string | null = null;
+  for (const item of checkoutItems) {
+    let purchaseId: string | null = null;
 
-  if (resolvedLicenseId) {
-    const { data, error } = await supabase.rpc("complete_license_purchase", {
-      p_product_id: productId,
-      p_user_id: userId,
-      p_checkout_session_id: sessionId,
-      p_payment_intent_id: paymentIntentId,
-      p_license_id: resolvedLicenseId,
-      // Persist the immutable checkout snapshot after Stripe-vs-snapshot validation above.
-      p_amount: metadataDbPriceSnapshot,
-    });
+    if (checkoutItems.length === 1 && priceSource !== "products.price") {
+      const metadataLicenseId = asNonEmptyString(metadata.license_id);
+      const metadataLicenseName = asNonEmptyString(metadata.license_name);
+      const resolvedLicenseId = await resolveLicenseIdForCheckout(supabase, {
+        metadataLicenseId,
+        metadataLicenseName,
+        legacyLicenseType: item.licenseType,
+        isExclusive: item.isExclusive,
+      });
 
-    if (error) {
-      if (isMissingCompleteLicensePurchaseFunctionError(error)) {
-        console.warn("[stripe-webhook] complete_license_purchase missing, using legacy fallback", {
-          sessionId,
-          productId,
-          userId,
+      if (resolvedLicenseId) {
+        const { data, error } = await supabase.rpc("complete_license_purchase", {
+          p_product_id: item.productId,
+          p_user_id: userId,
+          p_checkout_session_id: sessionId,
+          p_payment_intent_id: paymentIntentId,
+          p_license_id: resolvedLicenseId,
+          p_amount: item.amount,
         });
-      } else {
-        throw new Error(`complete_license_purchase failed: ${error.message}`);
+
+        if (error) {
+          if (isMissingCompleteLicensePurchaseFunctionError(error)) {
+            console.warn("[stripe-webhook] complete_license_purchase missing, using legacy fallback", {
+              sessionId,
+              productId: item.productId,
+              userId,
+            });
+          } else {
+            throw new Error(`complete_license_purchase failed: ${error.message}`);
+          }
+        } else {
+          purchaseId = extractPurchaseId(data);
+          console.log("[stripe-webhook] License purchase completed", {
+            sessionId,
+            purchaseId,
+            licenseId: resolvedLicenseId,
+          });
+        }
       }
-    } else {
-      purchaseId = extractPurchaseId(data);
-      console.log("[stripe-webhook] License purchase completed", {
+    }
+
+    if (!purchaseId) {
+      purchaseId = await completePurchaseWithLegacyRpc(supabase, {
+        isExclusive: item.isExclusive,
         sessionId,
-        purchaseId,
-        licenseId: resolvedLicenseId,
+        productId: item.productId,
+        userId,
+        paymentIntentId,
+        amountTotal: item.amount,
+        licenseType: item.licenseType,
       });
     }
-  }
 
-  if (!purchaseId) {
-    purchaseId = await completePurchaseWithLegacyRpc(supabase, {
-      isExclusive,
-      sessionId,
-      productId,
-      userId,
-      paymentIntentId,
-      amountTotal,
-      licenseType,
-    });
-  }
-
-  if (!purchaseId) {
-    throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
-  }
-
-  // Fallback payment tracking: if producer lacks Stripe Connect
-  const stripeConnectMode = asNonEmptyString(metadata.stripe_connect_mode);
-  const metadataProducerPayoutAmount = asNonEmptyString(metadata.producer_payout_amount);
-
-  if (stripeConnectMode === "fallback" && purchaseId) {
-    const producerAmount = metadataProducerPayoutAmount
-      ? Number.parseInt(metadataProducerPayoutAmount, 10)
-      : 0;
-
-    // Fetch existing to preserve license info
-    const { data: existingPurchase, error: fetchError } = await supabase
-      .from("purchases")
-      .select("metadata")
-      .eq("id", purchaseId)
-      .maybeSingle();
-
-    if (!fetchError && existingPurchase) {
-      const existingMetadata =
-        typeof existingPurchase?.metadata === "object" && existingPurchase?.metadata !== null
-          ? existingPurchase.metadata
-          : {};
-
-      const mergedMetadata = {
-        ...existingMetadata,
-        payout_mode: "platform_fallback",
-        payout_amount: producerAmount,
-        requires_manual_payout: true,
-        payout_status: existingMetadata?.payout_status ?? "pending",
-        tracked_at: new Date().toISOString(),
-      };
-
-      await supabase
-        .from("purchases")
-        .update({ metadata: mergedMetadata })
-        .eq("id", purchaseId);
+    if (!purchaseId) {
+      throw new Error(`Missing purchase id after checkout completion (session ${sessionId})`);
     }
-  }
 
-  const { error: notificationError } = await supabase
-    .from("notifications")
-    .upsert(
-      {
-        user_id: userId,
-        purchase_id: purchaseId,
-        type: "purchase",
-        title: "Paiement confirme",
-        message: "Ton achat a ete valide, tu peux telecharger ton contenu.",
-      },
-      {
-        onConflict: "purchase_id",
-        ignoreDuplicates: true,
-      },
-    );
+    purchaseResults.push({ item, purchaseId });
 
-  if (notificationError) {
-    console.error("[stripe-webhook] failed to upsert purchase notification", {
-      purchaseId,
-      userId,
-      message: notificationError.message,
-      code: notificationError.code,
-    });
-  }
+    if (stripeConnectMode === "fallback") {
+      await applyFallbackPayoutTracking(
+        supabase,
+        purchaseId,
+        item.producerPayoutAmount ?? Math.round(item.amount * 0.7),
+      );
+    }
 
-  await enqueueContractGenerationJob(supabase, purchaseId);
-  const contractTrigger = await notifyContractService(purchaseId);
+    const { error: notificationError } = await supabase
+      .from("notifications")
+      .upsert(
+        {
+          user_id: userId,
+          purchase_id: purchaseId,
+          type: "purchase",
+          title: "Paiement confirme",
+          message: "Ton achat a ete valide, tu peux telecharger ton contenu.",
+        },
+        {
+          onConflict: "purchase_id",
+          ignoreDuplicates: true,
+        },
+      );
 
-  if (contractTrigger.ok) {
-    await markContractGenerationJobSuccess(supabase, purchaseId);
-  } else {
-    const composedReason = [
-      asNonEmptyString(contractTrigger.error),
-      asNonEmptyString(contractTrigger.details),
-      contractTrigger.status ? `status=${contractTrigger.status}` : null,
-    ].filter((value): value is string => Boolean(value)).join(" | ") || "contract_generation_failed";
+    if (notificationError) {
+      console.error("[stripe-webhook] failed to upsert purchase notification", {
+        purchaseId,
+        userId,
+        message: notificationError.message,
+        code: notificationError.code,
+      });
+    }
 
-    await markContractGenerationJobFailure(supabase, purchaseId, composedReason);
-    await triggerContractJobWorker(supabase, purchaseId);
+    await enqueueContractGenerationJob(supabase, purchaseId);
+    const contractTrigger = await notifyContractService(purchaseId);
+
+    if (contractTrigger.ok) {
+      await markContractGenerationJobSuccess(supabase, purchaseId);
+    } else {
+      const composedReason = [
+        asNonEmptyString(contractTrigger.error),
+        asNonEmptyString(contractTrigger.details),
+        contractTrigger.status ? `status=${contractTrigger.status}` : null,
+      ].filter((value): value is string => Boolean(value)).join(" | ") || "contract_generation_failed";
+
+      await markContractGenerationJobFailure(supabase, purchaseId, composedReason);
+      await triggerContractJobWorker(supabase, purchaseId);
+    }
   }
 
   try {
     const currency = asNonEmptyString(session.currency)?.toUpperCase() ?? "EUR";
     const value = centsToCurrencyAmount(amountTotal);
 
-    if (value !== null) {
-      const productTitle = asNonEmptyString(metadata.product_name)
-        ?? (
-          await supabase
-            .from("products")
-            .select("title")
-            .eq("id", productId)
-            .maybeSingle()
-        ).data?.title
-        ?? "Product purchase";
+    if (value !== null && purchaseResults.length > 0) {
+      const firstItem = purchaseResults[0]!.item;
+      const productTitle = purchaseResults.length === 1
+        ? (
+          asNonEmptyString(metadata.product_name)
+          ?? (
+            await supabase
+              .from("products")
+              .select("title")
+              .eq("id", firstItem.productId)
+              .maybeSingle()
+          ).data?.title
+          ?? "Product purchase"
+        )
+        : `${purchaseResults.length} product purchase`;
 
       await trackPurchaseViaGa4(supabase, {
         transactionId: sessionId,
@@ -1929,7 +2012,7 @@ async function handleCheckoutCompleted(
         userId,
         gaClientId: asNonEmptyString(metadata.ga_client_id),
         item: {
-          item_id: productId,
+          item_id: purchaseResults.length === 1 ? firstItem.productId : sessionId,
           item_name: productTitle,
           price: value,
         },

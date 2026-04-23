@@ -5,6 +5,12 @@ type EcommerceItem = {
   price?: number;
   quantity?: number;
 };
+type CheckoutAnalyticsItem = {
+  productId: string;
+  productName?: string | null;
+  price: number;
+  quantity?: number;
+};
 type AnalyticsParams = Record<string, AnalyticsValue | EcommerceItem[]>;
 type ConsentMode = 'default' | 'update';
 type ConsentParams = {
@@ -57,8 +63,9 @@ function trackOnce(key: string, callback: () => void) {
 }
 
 export const trackEvent = (eventName: string, params?: AnalyticsParams) => {
-  if (canTrack()) {
-    window.gtag('event', eventName, params);
+  const gtag = typeof window !== 'undefined' ? window.gtag : undefined;
+  if (typeof gtag === 'function') {
+    gtag('event', eventName, params);
   }
 };
 
@@ -217,22 +224,32 @@ export function trackClickBuy(params: {
 }
 
 export function trackBeginCheckout(params: {
-  productId: string;
+  productId?: string;
   price: number;
   productName?: string | null;
   currency?: string;
+  items?: CheckoutAnalyticsItem[];
 }) {
+  const items = params.items?.length
+    ? params.items.map((item) => ({
+        item_id: item.productId,
+        item_name: item.productName ?? undefined,
+        price: item.price,
+        quantity: item.quantity ?? 1,
+      }))
+    : [
+        {
+          item_id: params.productId ?? 'unknown',
+          item_name: params.productName ?? undefined,
+          price: params.price,
+          quantity: 1,
+        },
+      ];
+
   trackEvent('begin_checkout', {
     value: params.price,
     currency: params.currency ?? 'EUR',
-    items: [
-      {
-        item_id: params.productId,
-        item_name: params.productName ?? undefined,
-        price: params.price,
-        quantity: 1,
-      },
-    ],
+    items,
   });
 }
 
@@ -242,20 +259,30 @@ export function trackPurchase(params: {
   currency?: string;
   itemId?: string;
   itemName?: string;
+  items?: CheckoutAnalyticsItem[];
 }) {
   trackOnce(`ga:purchase:${params.transactionId}`, () => {
+    const items = params.items?.length
+      ? params.items.map((item) => ({
+          item_id: item.productId,
+          item_name: item.productName ?? undefined,
+          price: item.price,
+          quantity: item.quantity ?? 1,
+        }))
+      : [
+          {
+            item_id: params.itemId ?? 'unknown',
+            item_name: params.itemName ?? 'unknown',
+            price: params.value,
+            quantity: 1,
+          },
+        ];
+
     trackEvent('purchase', {
       transaction_id: params.transactionId,
       value: params.value,
       currency: params.currency ?? 'EUR',
-      items: [
-        {
-          item_id: params.itemId ?? 'unknown',
-          item_name: params.itemName ?? 'unknown',
-          price: params.value,
-          quantity: 1,
-        },
-      ],
+      items,
     });
   });
 }
@@ -384,7 +411,7 @@ export async function initAnalytics() {
       ? GRANTED_CONSENT
       : DEFAULT_CONSENT;
 
-  window.gtag('consent', 'default', consent);
+  window.gtag?.('consent', 'default', consent);
   consentInitialized = true;
 }
 
@@ -393,7 +420,7 @@ export function setAnalyticsUserId(userId: string) {
     return;
   }
 
-  window.gtag('config', MEASUREMENT_ID, {
+  window.gtag?.('config', MEASUREMENT_ID, {
     user_id: userId,
   });
   configuredUserId = userId;
@@ -423,7 +450,7 @@ export async function grantAnalyticsConsent() {
   }
 
   if (canTrack()) {
-    window.gtag('consent', 'update', GRANTED_CONSENT);
+    window.gtag?.('consent', 'update', GRANTED_CONSENT);
   }
 }
 
@@ -439,7 +466,7 @@ export function revokeAnalyticsConsent() {
   }
 
   if (canTrack()) {
-    window.gtag('consent', 'update', DEFAULT_CONSENT);
+    window.gtag?.('consent', 'update', DEFAULT_CONSENT);
   }
 }
 
