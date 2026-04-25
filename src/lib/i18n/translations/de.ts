@@ -1259,6 +1259,7 @@ export const de: TranslationSchema = {
     createTopicCardDescription: 'Die erste Nachricht wird zusammen mit dem Topic veroffentlicht.',
     categoryLabel: 'Kategorie',
     selectCategory: 'Kategorie auswahlen',
+    labelAnnouncementsNotice: 'Veroeffentlichen Sie hier, was das Label sucht. Diese Anzeige ist nur fur abonnierte Produzenten sichtbar.',
     titleLabel: 'Titel',
     messageLabel: 'Nachricht',
     publishTopic: 'Topic veroffentlichen',

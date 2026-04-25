@@ -1261,6 +1261,7 @@ export const en: TranslationSchema = {
     createTopicCardDescription: 'The first message will be published with the topic.',
     categoryLabel: 'Category',
     selectCategory: 'Select a category',
+    labelAnnouncementsNotice: 'Post what the label is looking for here. This announcement will only be visible to subscribed producers.',
     titleLabel: 'Title',
     messageLabel: 'Message',
     publishTopic: 'Publish topic',

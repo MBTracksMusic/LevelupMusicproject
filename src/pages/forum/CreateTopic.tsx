@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Info } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -32,6 +32,7 @@ export function CreateTopicPage() {
     () => categories.find((item) => item.id === categoryId) ?? null,
     [categories, categoryId],
   );
+  const isLabelAnnouncementsCategory = selectedCategory?.slug === 'annonces-label';
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -109,6 +110,12 @@ export function CreateTopicPage() {
                     </option>
                   ))}
                 </select>
+                {isLabelAnnouncementsCategory && (
+                  <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                    <Info className="mt-0.5 h-4 w-4 flex-none text-amber-300" aria-hidden="true" />
+                    <span>{t('forum.labelAnnouncementsNotice')}</span>
+                  </p>
+                )}
               </div>
 
               <Input

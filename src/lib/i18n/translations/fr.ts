@@ -1260,6 +1260,7 @@ export const fr = {
     createTopicCardDescription: 'Le premier message sera publie avec le topic.',
     categoryLabel: 'Categorie',
     selectCategory: 'Selectionner une categorie',
+    labelAnnouncementsNotice: 'Publiez ici ce que recherche le label. Cette annonce sera visible uniquement par les producteurs abonnes.',
     titleLabel: 'Titre',
     messageLabel: 'Message',
     publishTopic: 'Publier le topic',
