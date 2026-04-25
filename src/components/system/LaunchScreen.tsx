@@ -263,8 +263,8 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             </h1>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              {heroChips.map(({ icon: Icon, label, className }) => (
-                <span key={label} className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
+              {heroChips.map(({ icon: Icon, label, className }, index) => (
+                <span key={`hero-chip-${index}`} className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
                   <Icon className={`h-3.5 w-3.5 ${className}`} />
                   {label}
                 </span>
@@ -279,14 +279,14 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             </p>
 
             <div className="mt-5 space-y-2 text-sm font-semibold text-zinc-200">
-              {content.conversionBullets.map((item) => (
-                <p key={item} className="leading-relaxed">{item}</p>
+              {content.conversionBullets.map((item, index) => (
+                <p key={`conversion-bullet-${index}`} className="leading-relaxed">{item}</p>
               ))}
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {accessHighlights.map(({ icon: Icon, title, text }) => (
-                <div key={title} className="rounded-xl border border-zinc-800 bg-zinc-950/55 p-4">
+              {accessHighlights.map(({ icon: Icon, title, text }, index) => (
+                <div key={`access-highlight-${index}`} className="rounded-xl border border-zinc-800 bg-zinc-950/55 p-4">
                   <Icon className="h-5 w-5 text-amber-300" />
                   <p className="mt-3 text-sm font-semibold text-white">{title}</p>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-500">{text}</p>
@@ -443,8 +443,8 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             </div>
 
             <div className="mt-5 space-y-3">
-              {platformRows.map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              {platformRows.map(({ icon: Icon, label, value }, index) => (
+                <div key={`platform-row-${index}`} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-amber-300">
                     <Icon className="h-5 w-5" />
                   </div>
@@ -480,8 +480,8 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-500">{content.processEyebrow}</p>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {content.processSteps.map((item) => (
-                  <div key={item.step} className="rounded-xl border border-zinc-800 bg-zinc-900/55 p-4">
+                {content.processSteps.map((item, index) => (
+                  <div key={`process-step-${index}`} className="rounded-xl border border-zinc-800 bg-zinc-900/55 p-4">
                     <p className="text-xs font-black text-amber-300">{item.step}</p>
                     <p className="mt-3 text-sm font-semibold text-white">{item.title}</p>
                     <p className="mt-1 text-xs leading-relaxed text-zinc-500">{item.text}</p>

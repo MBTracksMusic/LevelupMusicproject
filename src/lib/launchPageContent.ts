@@ -114,7 +114,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function textOrDefault(value: unknown, fallback: string) {
-  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
+  return typeof value === 'string' ? value : fallback;
 }
 
 function textArrayOrDefault(value: unknown, fallback: string[]) {
