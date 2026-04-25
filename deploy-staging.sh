@@ -89,6 +89,11 @@ fi
 
 echo "📦 Branche finale : $(git rev-parse --abbrev-ref HEAD)"
 
+if [[ "$(git rev-parse --abbrev-ref HEAD)" == "staging" ]]; then
+  echo "🚀 Push staging"
+  git push origin staging
+fi
+
 # =========================
 # 4. VERCEL LINK (STAGING)
 # =========================

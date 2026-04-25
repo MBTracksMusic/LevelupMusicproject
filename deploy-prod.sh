@@ -98,6 +98,11 @@ fi
 
 echo "📦 Branche finale : $(git rev-parse --abbrev-ref HEAD)"
 
+if [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]]; then
+  echo "🚀 Push main"
+  git push origin main
+fi
+
 # =========================
 # 4. CONFIRMATION FINALE
 # =========================
