@@ -1294,6 +1294,11 @@ export function UploadBeatPage() {
               <div className="space-y-1">
                 <span className="font-medium text-zinc-100">{t('uploadBeat.exclusiveOptionLabel')}</span>
                 <p className="text-xs text-zinc-500">{t('uploadBeat.exclusiveOptionHint')}</p>
+                {isExclusive && (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">
+                    {t('uploadBeat.exclusiveStemsNotice')}
+                  </p>
+                )}
               </div>
             </label>
           </div>

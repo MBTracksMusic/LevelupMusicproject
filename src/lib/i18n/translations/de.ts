@@ -835,6 +835,7 @@ export const de: TranslationSchema = {
     publishOptionsSubtitle: 'Waehlen Sie, ob dieser Titel exklusiv verkauft wird.',
     exclusiveOptionLabel: 'Exklusiver Verkauf',
     exclusiveOptionHint: 'Dieser Titel wird zu einem exklusiven Beat mit einmaligem Verkauf.',
+    exclusiveStemsNotice: 'Mit dieser Auswahl bestaetigen Sie, dass ein vollstaendiger Stems-Ordner vorbereitet ist und nach Freigabe an das Label geliefert werden kann.',
     genrePlaceholder: '— Auswählen —',
     moodPlaceholder: '— Auswählen —',
     tagsPlaceholder: 'Bsp.: drill, dunkel, 808...',

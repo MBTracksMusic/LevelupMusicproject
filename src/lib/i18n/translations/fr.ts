@@ -836,6 +836,7 @@ export const fr = {
     publishOptionsSubtitle: 'Definissez si ce titre est vendu en exclusif.',
     exclusiveOptionLabel: 'Vente exclusive',
     exclusiveOptionHint: 'Le titre devient un beat exclusif a vente unique.',
+    exclusiveStemsNotice: 'En cochant cette case, vous confirmez avoir prepare un dossier de stems complet pour pouvoir le delivrer au label apres validation.',
     genrePlaceholder: '— Sélectionner —',
     moodPlaceholder: '— Sélectionner —',
     tagsPlaceholder: 'Ex: drill, sombre, 808...',
