@@ -28,6 +28,11 @@ import type { SiteAccessMode } from '@/lib/supabase/useMaintenanceMode';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import {
+  parseLaunchPageContent,
+  serializeLaunchPageContent,
+  type LaunchPageContent,
+} from '@/lib/launchPageContent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +57,10 @@ interface WhitelistRow {
 }
 
 type WaitlistTab = 'pending' | 'accepted' | 'rejected';
+type LaunchPageTextKey = Exclude<
+  keyof LaunchPageContent,
+  'heroChips' | 'conversionBullets' | 'highlightCards' | 'platformRows' | 'processSteps'
+>;
 
 const ACCESS_MODE_ORDER: SiteAccessMode[] = ['private', 'controlled', 'public'];
 
@@ -516,7 +525,9 @@ function LaunchPhaseCard() {
   } = useMaintenanceModeContext();
 
   const [mode, setMode] = useState<SiteAccessMode>(siteAccessMode);
-  const [msgPublic, setMsgPublic] = useState(launchMessagePublic ?? '');
+  const [publicContent, setPublicContent] = useState<LaunchPageContent>(() =>
+    parseLaunchPageContent(launchMessagePublic),
+  );
   const [msgPending, setMsgPending] = useState(launchMessageWaitlistPending ?? '');
   const [msgWhitelist, setMsgWhitelist] = useState(launchMessageWhitelist ?? '');
   const [countDisplay, setCountDisplay] = useState(String(waitlistCountDisplay ?? 0));
@@ -525,10 +536,64 @@ function LaunchPhaseCard() {
 
   // Sync when Realtime pushes an update
   useEffect(() => { setMode(siteAccessMode); }, [siteAccessMode]);
-  useEffect(() => { setMsgPublic(launchMessagePublic ?? ''); }, [launchMessagePublic]);
+  useEffect(() => { setPublicContent(parseLaunchPageContent(launchMessagePublic)); }, [launchMessagePublic]);
   useEffect(() => { setMsgPending(launchMessageWaitlistPending ?? ''); }, [launchMessageWaitlistPending]);
   useEffect(() => { setMsgWhitelist(launchMessageWhitelist ?? ''); }, [launchMessageWhitelist]);
   useEffect(() => { setCountDisplay(String(waitlistCountDisplay ?? 0)); }, [waitlistCountDisplay]);
+
+  const updatePublicText = (key: LaunchPageTextKey, value: string) => {
+    setPublicContent((previous) => ({ ...previous, [key]: value }));
+  };
+
+  const updatePublicArrayText = (
+    key: 'heroChips' | 'conversionBullets',
+    index: number,
+    value: string,
+  ) => {
+    setPublicContent((previous) => ({
+      ...previous,
+      [key]: previous[key].map((item, itemIndex) => (itemIndex === index ? value : item)),
+    }));
+  };
+
+  const updateHighlightCard = (
+    index: number,
+    field: keyof LaunchPageContent['highlightCards'][number],
+    value: string,
+  ) => {
+    setPublicContent((previous) => ({
+      ...previous,
+      highlightCards: previous.highlightCards.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const updatePlatformRow = (
+    index: number,
+    field: keyof LaunchPageContent['platformRows'][number],
+    value: string,
+  ) => {
+    setPublicContent((previous) => ({
+      ...previous,
+      platformRows: previous.platformRows.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
+
+  const updateProcessStep = (
+    index: number,
+    field: keyof LaunchPageContent['processSteps'][number],
+    value: string,
+  ) => {
+    setPublicContent((previous) => ({
+      ...previous,
+      processSteps: previous.processSteps.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    }));
+  };
 
   const handleSendCampaign = async () => {
     if (isSendingCampaign) return;
@@ -563,7 +628,7 @@ function LaunchPhaseCard() {
     try {
       await updateSettings({
         site_access_mode: mode,
-        launch_message_public: msgPublic.trim() || null,
+        launch_message_public: serializeLaunchPageContent(publicContent),
         launch_message_waitlist_pending: msgPending.trim() || null,
         launch_message_whitelist: msgWhitelist.trim() || null,
         waitlist_count_display: parsedCount,
@@ -644,40 +709,373 @@ function LaunchPhaseCard() {
               <Mail className="h-4 w-4 text-zinc-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-300">Messages dynamiques</p>
+              <p className="text-sm font-medium text-zinc-300">Textes de la page publique</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Laisse vide pour utiliser les textes par défaut.
+                Tous ces champs pilotent directement la landing page. Les anciens messages simples sont repris comme message principal.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-4">
-            <MessageField
-              label="Message public"
-              value={msgPublic}
-              onChange={setMsgPublic}
-              placeholder="Beatelion est en accès privé."
-              rows={3}
-              disabled={isSaving}
-            />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <MessageField
-                label="Waitlist en attente"
-                value={msgPending}
-                onChange={setMsgPending}
-                placeholder="Tu es sur la liste. Les accès s'ouvrent progressivement."
-                rows={3}
-                disabled={isSaving}
-              />
-              <MessageField
-                label="Whitelist"
-                value={msgWhitelist}
-                onChange={setMsgWhitelist}
-                placeholder="Bienvenue dans le cercle."
-                rows={3}
-                disabled={isSaving}
-              />
-            </div>
+          <div className="space-y-6">
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Hero</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <Input
+                  label="Sous-titre header"
+                  value={publicContent.headerTagline}
+                  onChange={(e) => updatePublicText('headerTagline', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Badge hero"
+                  value={publicContent.heroBadge}
+                  onChange={(e) => updatePublicText('heroBadge', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <MessageField
+                  label="Titre hero - ligne blanche"
+                  value={publicContent.heroTitlePrimary}
+                  onChange={(value) => updatePublicText('heroTitlePrimary', value)}
+                  placeholder="Aujourd’hui, tout le monde pense être bon."
+                  rows={2}
+                  disabled={isSaving}
+                />
+                <MessageField
+                  label="Titre hero - ligne dégradée"
+                  value={publicContent.heroTitleAccent}
+                  onChange={(value) => updatePublicText('heroTitleAccent', value)}
+                  placeholder="Mais personne n’est vraiment testé."
+                  rows={2}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <MessageField
+                  label="Message principal"
+                  value={publicContent.heroMessage}
+                  onChange={(value) => updatePublicText('heroMessage', value)}
+                  placeholder="Entre dans le cercle des producteurs..."
+                  rows={3}
+                  disabled={isSaving}
+                />
+                <MessageField
+                  label="Sous-texte"
+                  value={publicContent.heroSubline}
+                  onChange={(value) => updatePublicText('heroSubline', value)}
+                  placeholder="Sur Beatelion, ton niveau est comparé..."
+                  rows={3}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {publicContent.heroChips.map((item, index) => (
+                  <Input
+                    key={`hero-chip-${index}`}
+                    label={`Pastille ${index + 1}`}
+                    value={item}
+                    onChange={(e) => updatePublicArrayText('heroChips', index, e.target.value)}
+                    disabled={isSaving}
+                  />
+                ))}
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                {publicContent.conversionBullets.map((item, index) => (
+                  <Input
+                    key={`conversion-bullet-${index}`}
+                    label={`Bullet ${index + 1}`}
+                    value={item}
+                    onChange={(e) => updatePublicArrayText('conversionBullets', index, e.target.value)}
+                    disabled={isSaving}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Cartes de valeur</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {publicContent.highlightCards.map((item, index) => (
+                  <div key={`highlight-card-${index}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                    <Input
+                      label={`Titre carte ${index + 1}`}
+                      value={item.title}
+                      onChange={(e) => updateHighlightCard(index, 'title', e.target.value)}
+                      disabled={isSaving}
+                    />
+                    <MessageField
+                      label={`Texte carte ${index + 1}`}
+                      value={item.text}
+                      onChange={(value) => updateHighlightCard(index, 'text', value)}
+                      placeholder="Texte affiché dans la carte"
+                      rows={3}
+                      disabled={isSaving}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Formulaire et CTA</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <Input
+                  label="Eyebrow formulaire"
+                  value={publicContent.formEyebrow}
+                  onChange={(e) => updatePublicText('formEyebrow', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Titre formulaire"
+                  value={publicContent.formTitle}
+                  onChange={(e) => updatePublicText('formTitle', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Sous-titre formulaire"
+                  value={publicContent.formSubtitle}
+                  onChange={(e) => updatePublicText('formSubtitle', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <Input
+                  label="Label email"
+                  value={publicContent.emailLabel}
+                  onChange={(e) => updatePublicText('emailLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Placeholder email"
+                  value={publicContent.emailPlaceholder}
+                  onChange={(e) => updatePublicText('emailPlaceholder', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Texte bouton"
+                  value={publicContent.formSubmitLabel}
+                  onChange={(e) => updatePublicText('formSubmitLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Texte bouton pendant envoi"
+                  value={publicContent.formSubmittingLabel}
+                  onChange={(e) => updatePublicText('formSubmittingLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Micro-trust"
+                  value={publicContent.trustText}
+                  onChange={(e) => updatePublicText('trustText', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Social proof statique"
+                  value={publicContent.socialProofText}
+                  onChange={(e) => updatePublicText('socialProofText', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4">
+                <MessageField
+                  label="Note sous formulaire"
+                  value={publicContent.formNote}
+                  onChange={(value) => updatePublicText('formNote', value)}
+                  placeholder="Tu recevras un email..."
+                  rows={3}
+                  disabled={isSaving}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Compte à rebours et accès validé</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-5">
+                <Input
+                  label="Libellé date"
+                  value={publicContent.countdownLabel}
+                  onChange={(e) => updatePublicText('countdownLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Jours"
+                  value={publicContent.countdownDaysLabel}
+                  onChange={(e) => updatePublicText('countdownDaysLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Heures"
+                  value={publicContent.countdownHoursLabel}
+                  onChange={(e) => updatePublicText('countdownHoursLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Minutes"
+                  value={publicContent.countdownMinutesLabel}
+                  onChange={(e) => updatePublicText('countdownMinutesLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Secondes"
+                  value={publicContent.countdownSecondsLabel}
+                  onChange={(e) => updatePublicText('countdownSecondsLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <Input
+                  label="Titre accès validé"
+                  value={publicContent.loginTitle}
+                  onChange={(e) => updatePublicText('loginTitle', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Texte accès validé"
+                  value={publicContent.loginText}
+                  onChange={(e) => updatePublicText('loginText', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Bouton connexion"
+                  value={publicContent.loginCta}
+                  onChange={(e) => updatePublicText('loginCta', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Preuve sociale et aperçu plateforme</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <Input
+                  label="Libellé compteur dynamique"
+                  value={publicContent.waitlistCountLabel}
+                  onChange={(e) => updatePublicText('waitlistCountLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Libellé accès par vagues"
+                  value={publicContent.wavesLabel}
+                  onChange={(e) => updatePublicText('wavesLabel', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Eyebrow aperçu"
+                  value={publicContent.platformEyebrow}
+                  onChange={(e) => updatePublicText('platformEyebrow', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Titre aperçu"
+                  value={publicContent.platformTitle}
+                  onChange={(e) => updatePublicText('platformTitle', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {publicContent.platformRows.map((item, index) => (
+                  <div key={`platform-row-${index}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                    <Input
+                      label={`Aperçu ${index + 1}`}
+                      value={item.label}
+                      onChange={(e) => updatePlatformRow(index, 'label', e.target.value)}
+                      disabled={isSaving}
+                    />
+                    <Input
+                      label={`Détail ${index + 1}`}
+                      value={item.value}
+                      onChange={(e) => updatePlatformRow(index, 'value', e.target.value)}
+                      disabled={isSaving}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Vidéo, process et footer</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <Input
+                  label="Titre vidéo"
+                  value={publicContent.videoTitle}
+                  onChange={(e) => updatePublicText('videoTitle', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Sous-titre vidéo"
+                  value={publicContent.videoSubtitle}
+                  onChange={(e) => updatePublicText('videoSubtitle', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Titre iframe"
+                  value={publicContent.videoIframeTitle}
+                  onChange={(e) => updatePublicText('videoIframeTitle', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Eyebrow process"
+                  value={publicContent.processEyebrow}
+                  onChange={(e) => updatePublicText('processEyebrow', e.target.value)}
+                  disabled={isSaving}
+                />
+                <Input
+                  label="Footer"
+                  value={publicContent.footerText}
+                  onChange={(e) => updatePublicText('footerText', e.target.value)}
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {publicContent.processSteps.map((item, index) => (
+                  <div key={`process-step-${index}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                    <Input
+                      label={`Numéro étape ${index + 1}`}
+                      value={item.step}
+                      onChange={(e) => updateProcessStep(index, 'step', e.target.value)}
+                      disabled={isSaving}
+                    />
+                    <Input
+                      label={`Titre étape ${index + 1}`}
+                      value={item.title}
+                      onChange={(e) => updateProcessStep(index, 'title', e.target.value)}
+                      disabled={isSaving}
+                    />
+                    <MessageField
+                      label={`Texte étape ${index + 1}`}
+                      value={item.text}
+                      onChange={(value) => updateProcessStep(index, 'text', value)}
+                      placeholder="Texte affiché dans l'étape"
+                      rows={3}
+                      disabled={isSaving}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/35 p-4">
+              <p className="text-sm font-semibold text-white">Autres écrans d'accès</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <MessageField
+                  label="Waitlist en attente"
+                  value={msgPending}
+                  onChange={setMsgPending}
+                  placeholder="Tu es sur la liste. Les accès s'ouvrent progressivement."
+                  rows={3}
+                  disabled={isSaving}
+                />
+                <MessageField
+                  label="Whitelist"
+                  value={msgWhitelist}
+                  onChange={setMsgWhitelist}
+                  placeholder="Bienvenue dans le cercle."
+                  rows={3}
+                  disabled={isSaving}
+                />
+              </div>
+            </section>
           </div>
         </div>
 

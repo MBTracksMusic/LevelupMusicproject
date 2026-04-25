@@ -3,6 +3,7 @@ import { useAuth } from '../auth/hooks';
 import { supabase } from './client';
 import { useMaintenanceModeContext } from './MaintenanceModeContext';
 import type { SiteAccessMode } from './useMaintenanceMode';
+import { DEFAULT_LAUNCH_PAGE_CONTENT } from '../launchPageContent';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,9 +34,8 @@ interface RpcRow {
 
 const FALLBACK_MESSAGES: Record<'public' | 'waitlist_pending', LaunchMessages> = {
   public: {
-    headline: 'Beatelion est en accès privé.',
-    subline:
-      'Un cercle de producteurs sélectionnés est déjà dedans. Rejoins la liste pour être parmi les premiers.',
+    headline: DEFAULT_LAUNCH_PAGE_CONTENT.heroMessage,
+    subline: DEFAULT_LAUNCH_PAGE_CONTENT.heroSubline,
   },
   waitlist_pending: {
     headline: 'Candidature reçue.',

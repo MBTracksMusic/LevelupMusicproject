@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useMaintenanceModeContext } from '@/lib/supabase/MaintenanceModeContext';
 import toast from 'react-hot-toast';
 import type { LaunchMessages } from '@/lib/supabase/useLaunchAccess';
+import { parseLaunchPageContent } from '@/lib/launchPageContent';
 
 interface LaunchScreenProps {
   messages: LaunchMessages;
@@ -197,27 +198,33 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
   };
 
   // Fallbacks ultra-robustes: .trim() elimine les chaines vides venant de la DB.
-  const headline = messages?.headline?.trim() || 'Beatelion est en accès privé';
-  const subline =
-    messages?.subline?.trim() ||
-    "Une sélection de producteurs est déjà à l'intérieur. Les prochains accès arrivent progressivement.";
+  const content = parseLaunchPageContent(messages?.headline, messages?.subline);
 
   const accessHighlights = [
     {
       icon: Trophy,
-      title: 'Classement réel',
-      text: 'Des confrontations et retours qui montrent ton niveau autrement.',
+      ...content.highlightCards[0],
     },
     {
       icon: Swords,
-      title: 'Battles sélectives',
-      text: 'Les producteurs actifs passent devant les profils dormants.',
+      ...content.highlightCards[1],
     },
     {
       icon: ShieldCheck,
-      title: 'Accès contrôlé',
-      text: 'Les invitations sont ouvertes par vagues pour garder la qualité.',
+      ...content.highlightCards[2],
     },
+  ];
+
+  const heroChips = [
+    { icon: Trophy, label: content.heroChips[0], className: 'text-amber-300' },
+    { icon: Swords, label: content.heroChips[1], className: 'text-rose-300' },
+    { icon: ShieldCheck, label: content.heroChips[2], className: 'text-emerald-300' },
+  ];
+
+  const platformRows = [
+    { icon: BarChart3, ...content.platformRows[0] },
+    { icon: Swords, ...content.platformRows[1] },
+    { icon: CheckCircle2, ...content.platformRows[2] },
   ];
 
   return (
@@ -231,7 +238,7 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             <img src="/beatelion-icon.svg" alt="Beatelion" className="h-12 w-12 rounded-2xl shadow-lg shadow-orange-500/10" />
             <div>
               <p className="text-xl font-black leading-none text-white">Beatelion</p>
-              <p className="mt-1 text-sm text-zinc-500">Battles producteurs & accès privé</p>
+              <p className="mt-1 text-sm text-zinc-500">{content.headerTagline}</p>
             </div>
           </div>
         </header>
@@ -240,38 +247,37 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-amber-300">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-              Accès privé par sélection
+              {content.heroBadge}
             </div>
 
             <h1 className="mt-6 max-w-3xl text-4xl font-black leading-[0.98] text-white sm:text-5xl lg:text-6xl">
-              <span className="block text-zinc-100">Entre dans le cercle</span>
-              <span className="mt-1 block text-zinc-100">des producteurs</span>
+              <span className="block text-zinc-100">{content.heroTitlePrimary}</span>
               <span className="mt-2 block bg-gradient-to-r from-amber-200 via-orange-300 to-rose-400 bg-clip-text text-transparent">
-                qui veulent connaître leur vrai niveau.
+                {content.heroTitleAccent}
               </span>
             </h1>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
-                <Trophy className="h-3.5 w-3.5 text-amber-300" />
-                Niveau réel
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
-                <Swords className="h-3.5 w-3.5 text-rose-300" />
-                Battles privées
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
-                Sélection active
-              </span>
+              {heroChips.map(({ icon: Icon, label, className }) => (
+                <span key={label} className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1.5 text-xs font-semibold text-zinc-300">
+                  <Icon className={`h-3.5 w-3.5 ${className}`} />
+                  {label}
+                </span>
+              ))}
             </div>
 
             <p className="mt-6 max-w-2xl whitespace-pre-line text-lg font-semibold leading-relaxed text-zinc-200 sm:text-xl">
-              {headline}
+              {content.heroMessage}
             </p>
             <p className="mt-4 max-w-xl text-base leading-7 text-zinc-400">
-              {subline}
+              {content.heroSubline}
             </p>
+
+            <div className="mt-5 space-y-2 text-sm font-semibold text-zinc-200">
+              {content.conversionBullets.map((item) => (
+                <p key={item} className="leading-relaxed">{item}</p>
+              ))}
+            </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {accessHighlights.map(({ icon: Icon, title, text }) => (
@@ -288,12 +294,12 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
                   <UserCheck className="h-4 w-4 text-emerald-300" />
                   <span className="font-semibold">+{waitlistCountDisplay}</span>
-                  <span className="text-emerald-200/70">producteurs déjà inscrits</span>
+                  <span className="text-emerald-200/70">{content.waitlistCountLabel}</span>
                 </div>
               )}
               <div className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/60 px-4 py-2 text-sm text-zinc-400">
                 <Radio className="h-4 w-4 text-rose-300" />
-                Accès ouverts par vagues
+                {content.wavesLabel}
               </div>
             </div>
           </div>
@@ -303,9 +309,9 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
               <div className="border-b border-zinc-800 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">Nouvelle demande</p>
-                    <p className="mt-1 text-lg font-bold text-white">Demande ton invitation</p>
-                    <p className="mt-1 text-sm text-zinc-500">Les premiers profils actifs sont traités en priorité.</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-300">{content.formEyebrow}</p>
+                    <p className="mt-1 text-lg font-bold text-white">{content.formTitle}</p>
+                    <p className="mt-1 text-sm text-zinc-500">{content.formSubtitle}</p>
                   </div>
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10">
                     <Crown className="h-5 w-5 text-amber-300" />
@@ -318,15 +324,15 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                   {formattedDate && (
                     <p className="mb-3 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
                       <Clock3 className="h-3.5 w-3.5 text-amber-300" />
-                      Lancement: <span className="text-amber-200">{formattedDate}</span>
+                      {content.countdownLabel} <span className="text-amber-200">{formattedDate}</span>
                     </p>
                   )}
                   <div className="grid grid-cols-4 gap-2">
                     {[
-                      { label: 'Jours', value: countdown.days },
-                      { label: 'Heures', value: countdown.hours },
-                      { label: 'Min', value: countdown.minutes },
-                      { label: 'Sec', value: countdown.seconds },
+                      { label: content.countdownDaysLabel, value: countdown.days },
+                      { label: content.countdownHoursLabel, value: countdown.hours },
+                      { label: content.countdownMinutesLabel, value: countdown.minutes },
+                      { label: content.countdownSecondsLabel, value: countdown.seconds },
                     ].map((item) => (
                       <div key={item.label} className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-2 py-3 text-center">
                         <span key={pad(item.value)} className="block text-2xl font-black tabular-nums text-white">
@@ -343,14 +349,14 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
 
               <form onSubmit={handleSubmit} className="space-y-4 p-5">
                 <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-zinc-300">Email professionnel ou principal</span>
+                  <span className="mb-2 block text-sm font-medium text-zinc-300">{content.emailLabel}</span>
                   <input
                     type="email"
                     inputMode="email"
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ton@email.com"
+                    placeholder={content.emailPlaceholder}
                     disabled={isSubmitting}
                     required
                     className="h-12 w-full rounded-xl border border-zinc-700 bg-[#0b0b0f] px-4 text-sm text-white placeholder:text-zinc-600 transition-all focus:border-amber-400/70 focus:outline-none focus:ring-2 focus:ring-amber-400/10 disabled:opacity-60"
@@ -375,11 +381,17 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-300 via-orange-400 to-rose-500 text-sm font-black text-zinc-950 shadow-[0_18px_45px_rgba(251,146,60,0.2)] transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-300 via-orange-400 to-rose-500 text-sm font-black text-zinc-950 shadow-[0_18px_45px_rgba(251,146,60,0.2)] transition hover:scale-[1.01] hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSubmitting ? 'Envoi en cours...' : 'Demander mon accès'}
+                  {isSubmitting ? content.formSubmittingLabel : content.formSubmitLabel}
                   {!isSubmitting && <ArrowRight className="h-4 w-4" />}
                 </button>
+
+                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs font-medium text-zinc-500">
+                  <span>{content.trustText}</span>
+                  <span className="hidden text-zinc-700 sm:inline">•</span>
+                  <span>{content.socialProofText}</span>
+                </div>
 
                 <div className="min-h-[20px] text-sm">
                   {feedback && (
@@ -390,16 +402,16 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                 </div>
 
                 <p className="text-xs leading-relaxed text-zinc-600">
-                  Tu recevras un email quand ton accès est disponible. Les profils producteurs actifs sont validés en premier.
+                  {content.formNote}
                 </p>
               </form>
 
               <div className="border-t border-zinc-800 bg-zinc-900/35 p-5">
                 <div className="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">Accès déjà validé ?</p>
+                    <p className="text-sm font-semibold text-white">{content.loginTitle}</p>
                     <p className="mt-1 text-xs text-zinc-500">
-                      Connecte-toi directement avec le compte autorisé.
+                      {content.loginText}
                     </p>
                   </div>
                   <a
@@ -407,7 +419,7 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                     className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-200 transition hover:border-amber-400/50 hover:text-white"
                   >
                     <LockKeyhole className="h-4 w-4 text-amber-300" />
-                    Se connecter
+                    {content.loginCta}
                   </a>
                 </div>
               </div>
@@ -419,18 +431,14 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-500">Aperçu plateforme</p>
-                <h2 className="mt-2 text-xl font-bold text-white">Ce que l'accès débloque</h2>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-500">{content.platformEyebrow}</p>
+                <h2 className="mt-2 text-xl font-bold text-white">{content.platformTitle}</h2>
               </div>
               <Sparkles className="h-5 w-5 text-amber-300" />
             </div>
 
             <div className="mt-5 space-y-3">
-              {[
-                { icon: BarChart3, label: 'Classements et signaux de niveau', value: 'avis, votes, progression' },
-                { icon: Swords, label: 'Battles entre producteurs', value: 'comparaison directe' },
-                { icon: CheckCircle2, label: 'Profil producteur sélectionné', value: 'accès par validation' },
-              ].map(({ icon: Icon, label, value }) => (
+              {platformRows.map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-amber-300">
                     <Icon className="h-5 w-5" />
@@ -448,8 +456,8 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
             <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/70">
               <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
                 <div>
-                  <p className="text-sm font-semibold text-white">Regarder l'annonce</p>
-                  <p className="text-xs text-zinc-500">Comprendre le lancement Beatelion.</p>
+                  <p className="text-sm font-semibold text-white">{content.videoTitle}</p>
+                  <p className="text-xs text-zinc-500">{content.videoSubtitle}</p>
                 </div>
                 <Play className="h-5 w-5 text-rose-300" />
               </div>
@@ -460,18 +468,14 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
                 allow="autoplay; encrypted-media"
                 allowFullScreen
                 className="aspect-video w-full"
-                title="Beatelion Launch Video"
+                title={content.videoIframeTitle}
               />
             </div>
           ) : (
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-5">
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-500">Process</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-500">{content.processEyebrow}</p>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {[
-                  { step: '01', title: 'Candidature', text: 'Tu demandes ton accès.' },
-                  { step: '02', title: 'Validation', text: 'Le profil producteur est vérifié.' },
-                  { step: '03', title: 'Entrée', text: 'Tu rejoins la plateforme.' },
-                ].map((item) => (
+                {content.processSteps.map((item) => (
                   <div key={item.step} className="rounded-xl border border-zinc-800 bg-zinc-900/55 p-4">
                     <p className="text-xs font-black text-amber-300">{item.step}</p>
                     <p className="mt-3 text-sm font-semibold text-white">{item.title}</p>
@@ -484,7 +488,7 @@ export function LaunchScreen({ messages }: LaunchScreenProps) {
         </section>
 
         <footer className="border-t border-zinc-900 py-6 text-xs text-zinc-700">
-          © {new Date().getFullYear()} Beatelion. Plateforme réservée aux producteurs.
+          © {new Date().getFullYear()} Beatelion. {content.footerText}
         </footer>
       </main>
     </div>
