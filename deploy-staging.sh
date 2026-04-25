@@ -62,7 +62,7 @@ echo "🌿 Branche actuelle : $CURRENT_BRANCH"
 # Auto-commit si repo non clean
 if [[ -n "$(git status -s)" ]]; then
   echo "📝 Changements non commités détectés — commit automatique..."
-  git add src/ supabase/ public/ package*.json tsconfig*.json vite.config.* index.html deploy-prod.sh deploy-staging.sh 2>/dev/null || true
+  git add src/ supabase/ public/ docs/ package*.json tsconfig*.json vite.config.* index.html render.yaml deploy-prod.sh deploy-staging.sh 2>/dev/null || true
   git commit -m "auto: staging deploy" || true
 fi
 

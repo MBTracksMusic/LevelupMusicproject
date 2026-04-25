@@ -2,6 +2,7 @@ services:
   - name: beatelion-audio-worker
     type: worker
     runtime: docker
+    branch: main
     rootDir: audio-worker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -19,6 +20,36 @@ services:
         value: watermark-assets
       - key: WORKER_ID
         value: render-audio-worker-1
+      - key: BATCH_LIMIT
+        value: "3"
+      - key: DOWNLOAD_MASTER_MAX_BYTES
+        value: "52428800"
+      - key: POLL_INTERVAL_MS
+        value: "5000"
+      - key: ERROR_BACKOFF_MS
+        value: "5000"
+
+  - name: beatelion-audio-worker-staging
+    type: worker
+    runtime: docker
+    branch: staging
+    rootDir: audio-worker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_AUDIO_BUCKET
+        value: beats-masters
+      - key: SUPABASE_WATERMARKED_BUCKET
+        value: beats-watermarked
+      - key: SUPABASE_WATERMARK_ASSETS_BUCKET
+        value: watermark-assets
+      - key: WORKER_ID
+        value: render-audio-worker-staging-1
       - key: BATCH_LIMIT
         value: "3"
       - key: DOWNLOAD_MASTER_MAX_BYTES
