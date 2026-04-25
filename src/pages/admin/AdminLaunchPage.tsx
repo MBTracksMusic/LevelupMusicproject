@@ -83,8 +83,8 @@ const ACCESS_MODE_META: Record<SiteAccessMode, {
   controlled: {
     icon: KeyRound,
     title: 'Contrôlé',
-    eyebrow: 'Whitelist + waitlist acceptés',
-    badge: 'Accès progressif',
+    eyebrow: 'Adresses inscrites confirmées',
+    badge: 'Sélection campagne',
     dotClassName: 'bg-amber-400',
     selectedClassName: 'border-amber-400/60 bg-amber-500/10 text-white shadow-[0_0_0_1px_rgba(251,191,36,0.12)]',
   },
@@ -102,7 +102,7 @@ const ACCESS_MODE_DESCRIPTIONS: Record<SiteAccessMode, string> = {
   private:
     'Seuls les emails présents dans la whitelist ont accès. Tous les autres voient la page de lancement.',
   controlled:
-    'La whitelist a accès complet. Les personnes acceptées en waitlist ont également accès. Les autres voient la page de lancement ou l\'écran d\'attente.',
+    'La whitelist a accès complet. Les adresses inscrites confirmées dans la waitlist ont également accès. Les autres voient la page de lancement ou l\'écran d\'attente.',
   public:
     'Tout le monde a accès à la plateforme. Le système whitelist/waitlist reste actif pour les futures campagnes.',
 };
