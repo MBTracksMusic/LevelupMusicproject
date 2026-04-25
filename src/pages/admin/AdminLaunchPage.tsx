@@ -1,13 +1,33 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { UserPlus, Trash2, Check, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Film,
+  Globe2,
+  KeyRound,
+  Lock,
+  Mail,
+  Radio,
+  Send,
+  ShieldCheck,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useMaintenanceModeContext } from '@/lib/supabase/MaintenanceModeContext';
 import type { SiteAccessMode } from '@/lib/supabase/useMaintenanceMode';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,11 +53,41 @@ interface WhitelistRow {
 
 type WaitlistTab = 'pending' | 'accepted' | 'rejected';
 
-const ACCESS_MODE_OPTIONS: { value: SiteAccessMode; label: string }[] = [
-  { value: 'private', label: '🔒 Privé — whitelist uniquement' },
-  { value: 'controlled', label: '🟡 Contrôlé — whitelist + waitlist acceptés' },
-  { value: 'public', label: '🟢 Public — ouverture totale' },
-];
+const ACCESS_MODE_ORDER: SiteAccessMode[] = ['private', 'controlled', 'public'];
+
+const ACCESS_MODE_META: Record<SiteAccessMode, {
+  icon: LucideIcon;
+  title: string;
+  eyebrow: string;
+  badge: string;
+  dotClassName: string;
+  selectedClassName: string;
+}> = {
+  private: {
+    icon: Lock,
+    title: 'Privé',
+    eyebrow: 'Whitelist uniquement',
+    badge: 'Accès fermé',
+    dotClassName: 'bg-rose-400',
+    selectedClassName: 'border-rose-400/60 bg-rose-500/10 text-white shadow-[0_0_0_1px_rgba(251,113,133,0.12)]',
+  },
+  controlled: {
+    icon: KeyRound,
+    title: 'Contrôlé',
+    eyebrow: 'Whitelist + waitlist acceptés',
+    badge: 'Accès progressif',
+    dotClassName: 'bg-amber-400',
+    selectedClassName: 'border-amber-400/60 bg-amber-500/10 text-white shadow-[0_0_0_1px_rgba(251,191,36,0.12)]',
+  },
+  public: {
+    icon: Globe2,
+    title: 'Public',
+    eyebrow: 'Ouverture totale',
+    badge: 'Plateforme ouverte',
+    dotClassName: 'bg-emerald-400',
+    selectedClassName: 'border-emerald-400/60 bg-emerald-500/10 text-white shadow-[0_0_0_1px_rgba(52,211,153,0.12)]',
+  },
+};
 
 const ACCESS_MODE_DESCRIPTIONS: Record<SiteAccessMode, string> = {
   private:
@@ -64,6 +114,191 @@ function toIsoStringOrNull(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error('invalid-launch-date');
   return date.toISOString();
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function getLaunchTiming(value: string | null) {
+  if (!value) {
+    return {
+      label: 'Non programmée',
+      detail: 'La page utilise le mode simple, sans compte à rebours.',
+      tone: 'neutral' as const,
+    };
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      label: 'Date invalide',
+      detail: 'La date enregistrée ne peut pas être lue.',
+      tone: 'danger' as const,
+    };
+  }
+
+  if (date.getTime() <= Date.now()) {
+    return {
+      label: 'Date passée',
+      detail: formatDateTime(value) ?? 'Date enregistrée',
+      tone: 'warning' as const,
+    };
+  }
+
+  return {
+    label: 'Compte à rebours actif',
+    detail: formatDateTime(value) ?? 'Date programmée',
+    tone: 'success' as const,
+  };
+}
+
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+}) {
+  const toneClassName = {
+    neutral: 'border-zinc-800 bg-zinc-950/45 text-zinc-300',
+    success: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+    warning: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+    danger: 'border-rose-500/25 bg-rose-500/10 text-rose-200',
+  }[tone];
+
+  return (
+    <div className={`rounded-xl border p-4 ${toneClassName}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">{label}</p>
+          <p className="mt-2 text-lg font-semibold text-white">{value}</p>
+        </div>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-zinc-500">{detail}</p>
+    </div>
+  );
+}
+
+function MessageField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  rows = 3,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled: boolean;
+  rows?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-zinc-300">{label}</span>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        disabled={disabled}
+        className="w-full resize-none rounded-xl border border-zinc-700/80 bg-zinc-950/70 px-3 py-3 text-sm leading-relaxed text-white placeholder:text-zinc-600 transition-colors focus:border-rose-400/70 focus:outline-none focus:ring-2 focus:ring-rose-500/10 disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function LaunchOverview() {
+  const {
+    siteAccessMode,
+    launchDate,
+    launchVideoUrl,
+    waitlistCountDisplay,
+    isLoading,
+  } = useMaintenanceModeContext();
+
+  const meta = ACCESS_MODE_META[siteAccessMode];
+  const ModeIcon = meta.icon;
+  const timing = getLaunchTiming(launchDate);
+  const hasVideo = Boolean(launchVideoUrl?.trim());
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-zinc-800 bg-[linear-gradient(135deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))]">
+      <div className="border-b border-zinc-800/80 p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-zinc-700/80 bg-zinc-950/70 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">
+              <Radio className="h-3.5 w-3.5 text-rose-300" />
+              Console lancement
+            </div>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              Pilotage de la page d&apos;accès
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+              Organise l&apos;ouverture de Beatelion, ajuste les messages visibles avant connexion et valide les producteurs autorisés.
+            </p>
+          </div>
+          <a
+            href="/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-800"
+          >
+            <Eye className="h-4 w-4" />
+            Ouvrir le site
+          </a>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          icon={ModeIcon}
+          label="Accès"
+          value={isLoading ? 'Chargement' : meta.badge}
+          detail={ACCESS_MODE_DESCRIPTIONS[siteAccessMode]}
+          tone={siteAccessMode === 'public' ? 'success' : siteAccessMode === 'controlled' ? 'warning' : 'danger'}
+        />
+        <StatTile
+          icon={CalendarClock}
+          label="Lancement"
+          value={timing.label}
+          detail={timing.detail}
+          tone={timing.tone}
+        />
+        <StatTile
+          icon={Film}
+          label="Vidéo"
+          value={hasVideo ? 'Configurée' : 'Aucune vidéo'}
+          detail={hasVideo ? 'La vidéo est affichée sur la page publique.' : 'Aucun aperçu vidéo ne sera affiché.'}
+          tone={hasVideo ? 'success' : 'neutral'}
+        />
+        <StatTile
+          icon={Users}
+          label="Compteur public"
+          value={waitlistCountDisplay > 0 ? `+${waitlistCountDisplay}` : 'Masqué'}
+          detail="Nombre affiché comme preuve sociale sur l'écran de lancement."
+          tone={waitlistCountDisplay > 0 ? 'success' : 'neutral'}
+        />
+      </div>
+    </section>
+  );
 }
 
 // ─── Section: Paramètres de lancement ─────────────────────────────────────────
@@ -140,21 +375,46 @@ function LaunchSettingsCard() {
     }
   };
 
-  return (
-    <Card className="p-6 border-zinc-800">
-      <h2 className="text-xl font-semibold text-white">Paramètres de lancement</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        Configure la date de lancement et la vidéo affichée sur l&apos;écran de maintenance.
-      </p>
+  const timing = getLaunchTiming(launchDate);
+  const hasVideo = Boolean(launchVideoUrl?.trim());
 
-      <div className="mt-6 flex flex-col gap-4">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+  return (
+    <Card padding="none" className="border-zinc-800 bg-zinc-900/80">
+      <div className="border-b border-zinc-800 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Paramètres de lancement</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Date, compte à rebours et vidéo affichés sur la page publique.
+            </p>
+          </div>
+          <CalendarClock className="mt-1 h-5 w-5 text-zinc-500" />
+        </div>
+      </div>
+
+      <div className="divide-y divide-zinc-800">
+        <section className="p-5">
           <div className="flex flex-col gap-4">
-            <div>
-              <p className="text-sm font-medium text-white">Date de lancement</p>
-              <p className="mt-1 text-sm text-zinc-400">
-                Laisse vide pour le mode simple. Renseigne une date pour afficher le mode lancement avec compte à rebours.
-              </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">Date de lancement</p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Laisse vide pour masquer le compte à rebours.
+                </p>
+              </div>
+              <span className={[
+                'inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium',
+                timing.tone === 'success'
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : timing.tone === 'warning'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                    : timing.tone === 'danger'
+                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                      : 'border-zinc-700 bg-zinc-950/60 text-zinc-400',
+              ].join(' ')}>
+                <Clock3 className="h-3.5 w-3.5" />
+                {timing.label}
+              </span>
             </div>
             <Input
               type="datetime-local"
@@ -164,26 +424,46 @@ function LaunchSettingsCard() {
               disabled={isLoading || isSavingLaunchDate}
             />
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="primary" onClick={handleLaunchDateSave} isLoading={isSavingLaunchDate} disabled={isLoading}>
-                Enregistrer la date
+              <Button
+                variant="primary"
+                onClick={handleLaunchDateSave}
+                isLoading={isSavingLaunchDate}
+                disabled={isLoading}
+                leftIcon={<CheckCircle2 className="h-4 w-4" />}
+              >
+                Enregistrer
               </Button>
-              <Button variant="outline" onClick={handleLaunchDateClear} disabled={isLoading || isSavingLaunchDate || !launchDate}>
-                Vider la date
+              <Button
+                variant="outline"
+                onClick={handleLaunchDateClear}
+                disabled={isLoading || isSavingLaunchDate || !launchDate}
+                leftIcon={<XCircle className="h-4 w-4" />}
+              >
+                Vider
               </Button>
-              <span className="text-sm text-zinc-500">
-                {launchDate ? `Date active : ${new Date(launchDate).toLocaleString()}` : 'Aucune date active'}
-              </span>
+              <span className="text-xs text-zinc-500">{timing.detail}</span>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+        <section className="p-5">
           <div className="flex flex-col gap-4">
-            <div>
-              <p className="text-sm font-medium text-white">Vidéo de lancement</p>
-              <p className="mt-1 text-sm text-zinc-400">
-                URL facultative. Si elle est vide, aucune vidéo ne sera affichée sur l&apos;écran de maintenance.
-              </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">Vidéo de lancement</p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  URL YouTube facultative affichée sous le formulaire d&apos;accès.
+                </p>
+              </div>
+              <span className={[
+                'inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium',
+                hasVideo
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                  : 'border-zinc-700 bg-zinc-950/60 text-zinc-400',
+              ].join(' ')}>
+                <Film className="h-3.5 w-3.5" />
+                {hasVideo ? 'Active' : 'Inactive'}
+              </span>
             </div>
             <Input
               type="url"
@@ -194,18 +474,29 @@ function LaunchSettingsCard() {
               disabled={isLoading || isSavingLaunchVideoUrl}
             />
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="primary" onClick={handleLaunchVideoUrlSave} isLoading={isSavingLaunchVideoUrl} disabled={isLoading}>
-                Enregistrer l&apos;URL
+              <Button
+                variant="primary"
+                onClick={handleLaunchVideoUrlSave}
+                isLoading={isSavingLaunchVideoUrl}
+                disabled={isLoading}
+                leftIcon={<CheckCircle2 className="h-4 w-4" />}
+              >
+                Enregistrer
               </Button>
-              <Button variant="outline" onClick={handleLaunchVideoUrlClear} disabled={isLoading || isSavingLaunchVideoUrl || !launchVideoUrl}>
-                Vider l&apos;URL
+              <Button
+                variant="outline"
+                onClick={handleLaunchVideoUrlClear}
+                disabled={isLoading || isSavingLaunchVideoUrl || !launchVideoUrl}
+                leftIcon={<XCircle className="h-4 w-4" />}
+              >
+                Vider
               </Button>
-              <span className="text-sm text-zinc-500">
-                {launchVideoUrl ? 'Une vidéo est actuellement configurée' : 'Aucune vidéo active'}
+              <span className="text-xs text-zinc-500">
+                {hasVideo ? 'La vidéo est configurée pour la page publique.' : 'Aucune vidéo active.'}
               </span>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </Card>
   );
@@ -254,7 +545,7 @@ function LaunchPhaseCard() {
       });
       if (error) { toast.error('Erreur réseau'); return; }
       if (!data?.success) { toast.error('Erreur: ' + (data?.error ?? 'unknown')); return; }
-      toast.success(`Campagne envoyée 🚀 (${data.sent ?? 0} emails)`);
+      toast.success(`Campagne envoyée (${data.sent ?? 0} emails)`);
     } catch {
       toast.error("Erreur lors de l'envoi");
     } finally {
@@ -287,86 +578,109 @@ function LaunchPhaseCard() {
   };
 
   return (
-    <Card className="p-6 border-zinc-800">
-      <h2 className="text-xl font-semibold text-white">Phase de lancement</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        Source de vérité unique pour l&apos;accès au site.
-      </p>
+    <Card padding="none" className="border-zinc-800 bg-zinc-900/80">
+      <div className="border-b border-zinc-800 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Phase de lancement</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              Définis qui peut entrer sur la plateforme.
+            </p>
+          </div>
+          <ShieldCheck className="mt-1 h-5 w-5 text-zinc-500" />
+        </div>
+      </div>
 
-      <form onSubmit={handleSave} className="mt-6 space-y-5">
-        {/* Mode selector */}
-        <Select
-          label="Mode d'accès"
-          value={mode}
-          onChange={(e) => setMode(e.target.value as SiteAccessMode)}
-          options={ACCESS_MODE_OPTIONS}
-          disabled={isSettingsLoading || isSaving}
-        />
+      <form onSubmit={handleSave} className="space-y-6 p-5">
+        <div>
+          <p className="mb-3 text-sm font-medium text-zinc-300">Mode d&apos;accès</p>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {ACCESS_MODE_ORDER.map((value) => {
+              const meta = ACCESS_MODE_META[value];
+              const Icon = meta.icon;
+              const isSelected = mode === value;
 
-        {/* Description of current mode */}
-        <p className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm text-zinc-400">
-          {ACCESS_MODE_DESCRIPTIONS[mode]}
-        </p>
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value)}
+                  disabled={isSettingsLoading || isSaving}
+                  className={[
+                    'min-h-[118px] rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
+                    isSelected
+                      ? meta.selectedClassName
+                      : 'border-zinc-800 bg-zinc-950/45 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-950/80',
+                  ].join(' ')}
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04]">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className={`mt-1 h-2 w-2 rounded-full ${meta.dotClassName}`} />
+                  </span>
+                  <span className="mt-4 block text-base font-semibold text-white">{meta.title}</span>
+                  <span className="mt-1 block text-xs leading-relaxed text-zinc-500">{meta.eyebrow}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm leading-relaxed text-zinc-400">
+            {ACCESS_MODE_DESCRIPTIONS[mode]}
+          </p>
+        </div>
 
-        {/* Warning when switching to public */}
         {mode === 'public' && siteAccessMode !== 'public' && (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          <div className="flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             Vous êtes sur le point d&apos;ouvrir la plateforme au public. Cette action est
             visible immédiatement par tous les visiteurs.
           </div>
         )}
 
-        {/* Dynamic messages */}
-        <div className="space-y-3 border-t border-zinc-800 pt-5">
-          <p className="text-sm font-medium text-zinc-300">Messages dynamiques</p>
-          <p className="text-xs text-zinc-500">
-            Laissez vide pour utiliser les messages par défaut.
-          </p>
+        <div className="border-t border-zinc-800 pt-6">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950/70">
+              <Mail className="h-4 w-4 text-zinc-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-zinc-300">Messages dynamiques</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Laisse vide pour utiliser les textes par défaut.
+              </p>
+            </div>
+          </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm text-zinc-400">
-              Message public (visiteurs non inscrits)
-            </label>
-            <textarea
+          <div className="grid gap-4">
+            <MessageField
+              label="Message public"
               value={msgPublic}
-              onChange={(e) => setMsgPublic(e.target.value)}
+              onChange={setMsgPublic}
               placeholder="Beatelion est en accès privé."
-              rows={2}
+              rows={3}
               disabled={isSaving}
-              className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
             />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm text-zinc-400">
-              Message waitlist en attente
-            </label>
-            <textarea
-              value={msgPending}
-              onChange={(e) => setMsgPending(e.target.value)}
-              placeholder="Tu es sur la liste. Les accès s'ouvrent progressivement."
-              rows={2}
-              disabled={isSaving}
-              className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm text-zinc-400">
-              Message whitelist (toast de bienvenue)
-            </label>
-            <textarea
-              value={msgWhitelist}
-              onChange={(e) => setMsgWhitelist(e.target.value)}
-              placeholder="Bienvenue dans le cercle."
-              rows={2}
-              disabled={isSaving}
-              className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
-            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <MessageField
+                label="Waitlist en attente"
+                value={msgPending}
+                onChange={setMsgPending}
+                placeholder="Tu es sur la liste. Les accès s'ouvrent progressivement."
+                rows={3}
+                disabled={isSaving}
+              />
+              <MessageField
+                label="Whitelist"
+                value={msgWhitelist}
+                onChange={setMsgWhitelist}
+                placeholder="Bienvenue dans le cercle."
+                rows={3}
+                disabled={isSaving}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Social proof counter */}
         <div className="border-t border-zinc-800 pt-5">
           <label className="mb-1.5 block text-sm font-medium text-zinc-300">
             Compteur social (page de lancement)
@@ -382,23 +696,40 @@ function LaunchPhaseCard() {
             value={countDisplay}
             onChange={(e) => setCountDisplay(e.target.value)}
             disabled={isSaving}
-            className="h-10 w-40 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-white placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none disabled:opacity-60"
+            className="h-10 w-40 rounded-lg border border-zinc-700 bg-zinc-950/70 px-3 text-sm text-white placeholder:text-zinc-600 focus:border-rose-400/70 focus:outline-none focus:ring-2 focus:ring-rose-500/10 disabled:opacity-60"
           />
         </div>
 
-        <Button type="submit" isLoading={isSaving} disabled={isSettingsLoading || isSaving}>
-          Sauvegarder
-        </Button>
+        <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-5">
+          <Button
+            type="submit"
+            isLoading={isSaving}
+            disabled={isSettingsLoading || isSaving}
+            leftIcon={<CheckCircle2 className="h-4 w-4" />}
+          >
+            Sauvegarder
+          </Button>
+          <span className="text-xs text-zinc-500">Les changements sont appliqués dès validation.</span>
+        </div>
       </form>
 
-      <div className="mt-5 border-t border-zinc-800 pt-5">
-        <p className="mb-1 text-sm font-medium text-zinc-300">Campagne waitlist</p>
-        <p className="mb-3 text-xs text-zinc-500">
-          Envoie un email à tous les inscrits en attente pour les inviter à rejoindre la plateforme.
-        </p>
-        <Button variant="outline" onClick={handleSendCampaign} isLoading={isSendingCampaign}>
-          🚀 Envoyer la campagne
-        </Button>
+      <div className="border-t border-zinc-800 bg-zinc-950/30 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-zinc-300">Campagne waitlist</p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Envoie un email à tous les inscrits en attente pour les inviter à rejoindre la plateforme.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={handleSendCampaign}
+            isLoading={isSendingCampaign}
+            leftIcon={<Send className="h-4 w-4" />}
+          >
+            Envoyer la campagne
+          </Button>
+        </div>
       </div>
     </Card>
   );
@@ -469,17 +800,17 @@ function WaitlistCard() {
     rejected: rows.filter((r) => r.status === 'rejected').length,
   };
 
-  const TABS: { key: WaitlistTab; label: string }[] = [
-    { key: 'pending', label: `En attente (${counts.pending})` },
-    { key: 'accepted', label: `Acceptés (${counts.accepted})` },
-    { key: 'rejected', label: `Refusés (${counts.rejected})` },
+  const TABS: { key: WaitlistTab; label: string; icon: LucideIcon }[] = [
+    { key: 'pending', label: `En attente (${counts.pending})`, icon: Clock3 },
+    { key: 'accepted', label: `Acceptés (${counts.accepted})`, icon: CheckCircle2 },
+    { key: 'rejected', label: `Refusés (${counts.rejected})`, icon: XCircle },
   ];
 
   return (
-    <Card className="p-6 border-zinc-800">
-      <div className="flex items-center justify-between gap-4">
+    <Card padding="none" className="border-zinc-800 bg-zinc-900/80">
+      <div className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
         <div>
-          <h2 className="text-xl font-semibold text-white">Waitlist</h2>
+          <h2 className="text-lg font-semibold text-white">Waitlist</h2>
           <p className="mt-1 text-sm text-zinc-400">
             {rows.length} inscription{rows.length !== 1 ? 's' : ''} au total
           </p>
@@ -489,29 +820,28 @@ function WaitlistCard() {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="mt-5 flex gap-2 border-b border-zinc-800 pb-1">
-        {TABS.map(({ key, label }) => (
+      <div className="grid gap-2 border-b border-zinc-800 bg-zinc-950/25 p-3 sm:grid-cols-3">
+        {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
             onClick={() => setTab(key)}
             className={[
-              'rounded-t px-3 py-1.5 text-sm font-medium transition-colors',
+              'inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
               tab === key
-                ? 'border-b-2 border-rose-500 text-white'
-                : 'text-zinc-500 hover:text-zinc-300',
+                ? 'border-rose-400/50 bg-rose-500/10 text-white'
+                : 'border-zinc-800 bg-zinc-950/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300',
             ].join(' ')}
           >
+            <Icon className="h-4 w-4" />
             {label}
           </button>
         ))}
       </div>
 
-      {/* Table */}
-      <div className="mt-4 overflow-x-auto">
+      <div className="max-h-[430px] overflow-auto">
         {loadError && (
-          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400 font-mono break-all">
+          <div className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400 font-mono break-all">
             <span className="font-semibold">Erreur DB :</span> {loadError}
           </div>
         )}
@@ -522,19 +852,19 @@ function WaitlistCard() {
             Aucune entrée {tab === 'pending' ? 'en attente' : tab === 'accepted' ? 'acceptée' : 'refusée'}.
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="sticky top-0 z-10 bg-zinc-900">
               <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
-                <th className="pb-2 pr-4">Email</th>
-                <th className="pb-2 pr-4">Source</th>
-                <th className="pb-2 pr-4">Date</th>
-                {tab === 'pending' && <th className="pb-2">Actions</th>}
+                <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Source</th>
+                <th className="px-5 py-3">Date</th>
+                {tab === 'pending' && <th className="px-5 py-3">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {filtered.map((row) => (
                 <tr key={row.id} className="py-2">
-                  <td className="py-2.5 pr-4 text-zinc-200">
+                  <td className="px-5 py-3 text-zinc-200">
                     {row.email}
                     {row.user_id && (
                       <span className="ml-1.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
@@ -542,12 +872,12 @@ function WaitlistCard() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-4 text-zinc-500">{row.source}</td>
-                  <td className="py-2.5 pr-4 text-zinc-500">
+                  <td className="px-5 py-3 text-zinc-500">{row.source}</td>
+                  <td className="px-5 py-3 text-zinc-500">
                     {new Date(row.created_at).toLocaleDateString('fr-FR')}
                   </td>
                   {tab === 'pending' && (
-                    <td className="py-2.5">
+                    <td className="px-5 py-3">
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -663,15 +993,21 @@ function WhitelistCard() {
   const inactiveRows = rows.filter((r) => !r.is_active);
 
   return (
-    <Card className="p-6 border-zinc-800">
-      <h2 className="text-xl font-semibold text-white">Whitelist</h2>
-      <p className="mt-1 text-sm text-zinc-400">
-        {activeRows.length} email{activeRows.length !== 1 ? 's' : ''} actif
-        {activeRows.length !== 1 ? 's' : ''} — accès complet indépendamment de la phase.
-      </p>
+    <Card padding="none" className="border-zinc-800 bg-zinc-900/80">
+      <div className="border-b border-zinc-800 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Whitelist</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              {activeRows.length} email{activeRows.length !== 1 ? 's' : ''} actif
+              {activeRows.length !== 1 ? 's' : ''} avec accès complet.
+            </p>
+          </div>
+          <ShieldCheck className="mt-1 h-5 w-5 text-zinc-500" />
+        </div>
+      </div>
 
-      {/* Add form */}
-      <form onSubmit={handleAdd} className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+      <form onSubmit={handleAdd} className="grid gap-3 border-b border-zinc-800 bg-zinc-950/25 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
         <div className="flex-1">
           <Input
             label="Email"
@@ -702,8 +1038,7 @@ function WhitelistCard() {
         </Button>
       </form>
 
-      {/* Active entries */}
-      <div className="mt-6 overflow-x-auto">
+      <div className="max-h-[430px] overflow-auto">
         {isLoading ? (
           <p className="py-6 text-center text-sm text-zinc-500">Chargement...</p>
         ) : rows.length === 0 ? (
@@ -711,19 +1046,19 @@ function WhitelistCard() {
             Aucun email dans la whitelist.
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
+          <table className="w-full min-w-[680px] text-sm">
+            <thead className="sticky top-0 z-10 bg-zinc-900">
               <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wider text-zinc-500">
-                <th className="pb-2 pr-4">Email</th>
-                <th className="pb-2 pr-4">Note</th>
-                <th className="pb-2 pr-4">Ajouté le</th>
-                <th className="pb-2">Statut</th>
+                <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Note</th>
+                <th className="px-5 py-3">Ajouté le</th>
+                <th className="px-5 py-3">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {[...activeRows, ...inactiveRows].map((row) => (
                 <tr key={row.id} className={row.is_active ? '' : 'opacity-40'}>
-                  <td className="py-2.5 pr-4 text-zinc-200">
+                  <td className="px-5 py-3 text-zinc-200">
                     {row.email}
                     {row.user_id && (
                       <span className="ml-1.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
@@ -731,13 +1066,13 @@ function WhitelistCard() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-4 text-zinc-500 max-w-[160px] truncate">
+                  <td className="max-w-[180px] truncate px-5 py-3 text-zinc-500">
                     {row.note ?? '—'}
                   </td>
-                  <td className="py-2.5 pr-4 text-zinc-500">
+                  <td className="px-5 py-3 text-zinc-500">
                     {new Date(row.granted_at).toLocaleDateString('fr-FR')}
                   </td>
-                  <td className="py-2.5">
+                  <td className="px-5 py-3">
                     <button
                       type="button"
                       title={row.is_active ? 'Désactiver' : 'Réactiver'}
@@ -772,10 +1107,15 @@ function WhitelistCard() {
 export function AdminLaunchPage() {
   return (
     <div className="space-y-6">
-      <LaunchPhaseCard />
-      <LaunchSettingsCard />
-      <WaitlistCard />
-      <WhitelistCard />
+      <LaunchOverview />
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]">
+        <LaunchPhaseCard />
+        <LaunchSettingsCard />
+      </div>
+      <div className="grid gap-6 2xl:grid-cols-2">
+        <WaitlistCard />
+        <WhitelistCard />
+      </div>
     </div>
   );
 }
