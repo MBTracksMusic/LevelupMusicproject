@@ -158,9 +158,9 @@ function AppContent() {
           <Route index element={<HomePage />} />
           <Route path="beats" element={<BeatsPage mode="beats" />} />
           <Route path="beats/:slug" element={<ProductDetailsPage />} />
-          {/* TODO(levelup): sections exclusives/kits temporairement desactivees (focus Beats + Battles). */}
-          <Route path="exclusives" element={<Navigate to="/beats" replace />} />
-          <Route path="exclusives/:slug" element={<Navigate to="/beats" replace />} />
+          <Route path="exclusives" element={<BeatsPage mode="exclusives" />} />
+          <Route path="exclusives/:slug" element={<ProductDetailsPage />} />
+          {/* TODO(levelup): section kits temporairement desactivee (focus Beats + Battles). */}
           <Route path="kits" element={<Navigate to="/beats" replace />} />
           <Route path="kits/:slug" element={<Navigate to="/beats" replace />} />
           <Route path="battles" element={<BattlesPage />} />
