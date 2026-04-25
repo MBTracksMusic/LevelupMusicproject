@@ -37,6 +37,8 @@ export interface EliteAdminProductSummary {
   created_at: string;
 }
 
+export type EliteAdminProductProducer = EliteAdminProfileSummary;
+
 const ELITE_PRODUCT_COLUMNS = [
   PRODUCT_SAFE_COLUMNS,
   'is_elite',
@@ -267,12 +269,36 @@ export async function listEliteProfilesAdmin(): Promise<EliteAdminProfileSummary
   return ((data as unknown as EliteAdminProfileSummary[] | null) ?? []);
 }
 
-export async function listEliteProductsAdmin(): Promise<EliteAdminProductSummary[]> {
+export async function listEliteProductProducersAdmin(): Promise<EliteAdminProductProducer[]> {
   const { data, error } = await supabase
+    .from('user_profiles')
+    .select(ADMIN_PROFILE_COLUMNS)
+    .eq('account_type', 'elite_producer')
+    .order('username', { ascending: true, nullsFirst: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data as unknown as EliteAdminProductProducer[] | null) ?? []);
+}
+
+export async function listEliteProductsAdmin(options: { producerIds?: string[] } = {}): Promise<EliteAdminProductSummary[]> {
+  if (options.producerIds && options.producerIds.length === 0) {
+    return [];
+  }
+
+  let query = supabase
     .from('products')
     .select(ADMIN_PRODUCT_COLUMNS)
     .in('product_type', ['beat', 'exclusive'])
-    .is('deleted_at', null)
+    .is('deleted_at', null);
+
+  if (options.producerIds) {
+    query = query.in('producer_id', options.producerIds);
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .limit(50);
 

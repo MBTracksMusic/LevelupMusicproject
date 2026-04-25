@@ -6,15 +6,18 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
+import { Select } from '../../components/ui/Select';
 import {
   approveLabelRequest,
   deleteRejectedLabelRequest,
+  listEliteProductProducersAdmin,
   listEliteProductsAdmin,
   listEliteProfilesAdmin,
   listLabelRequestsAdmin,
   revokeLabelRequest,
   setEliteProducerStatus,
   toggleEliteProduct,
+  type EliteAdminProductProducer,
   type EliteAdminProductSummary,
   type EliteAdminProfileSummary,
 } from '../../lib/supabase/elite';
@@ -31,6 +34,10 @@ function formatOptionalDate(value: string | null) {
   return value ? formatDateTime(value, 'fr-FR') : '-';
 }
 
+function getProducerDisplayName(profile: Pick<EliteAdminProductProducer, 'email' | 'full_name' | 'username'> | undefined) {
+  return profile?.username || profile?.full_name || profile?.email || 'Producteur inconnu';
+}
+
 function RequestDetailItem({ label, value }: { label: string; value: string | null }) {
   const displayValue = value && value.trim() ? value : '-';
 
@@ -45,23 +52,29 @@ function RequestDetailItem({ label, value }: { label: string; value: string | nu
 export function AdminEliteAccessPage() {
   const [requests, setRequests] = useState<LabelRequest[]>([]);
   const [profiles, setProfiles] = useState<EliteAdminProfileSummary[]>([]);
+  const [productProducers, setProductProducers] = useState<EliteAdminProductProducer[]>([]);
   const [products, setProducts] = useState<EliteAdminProductSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [profileSearch, setProfileSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [productProducerFilter, setProductProducerFilter] = useState('');
 
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
-      const [nextRequests, nextProfiles, nextProducts] = await Promise.all([
+      const [nextRequests, nextProfiles, nextProductProducers] = await Promise.all([
         listLabelRequestsAdmin(),
         listEliteProfilesAdmin(),
-        listEliteProductsAdmin(),
+        listEliteProductProducersAdmin(),
       ]);
+      const nextProducts = await listEliteProductsAdmin({
+        producerIds: nextProductProducers.map((producer) => producer.id),
+      });
       setRequests(nextRequests);
       setProfiles(nextProfiles);
+      setProductProducers(nextProductProducers);
       setProducts(nextProducts);
     } catch (error) {
       console.error('admin elite access load error', error);
@@ -92,13 +105,42 @@ export function AdminEliteAccessPage() {
     );
   }, [profileSearch, profiles]);
 
+  const productProducersById = useMemo(
+    () => new Map(productProducers.map((producer) => [producer.id, producer])),
+    [productProducers],
+  );
+
+  const productProducerOptions = useMemo(
+    () => [
+      { value: '', label: 'Tous les producteurs elite' },
+      ...productProducers.map((producer) => ({
+        value: producer.id,
+        label: getProducerDisplayName(producer),
+      })),
+    ],
+    [productProducers],
+  );
+
+  useEffect(() => {
+    if (productProducerFilter && !productProducersById.has(productProducerFilter)) {
+      setProductProducerFilter('');
+    }
+  }, [productProducerFilter, productProducersById]);
+
   const filteredProducts = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
-    if (!search) return products;
-    return products.filter((product) =>
-      [product.title, product.slug, product.product_type].join(' ').toLowerCase().includes(search),
-    );
-  }, [productSearch, products]);
+    return products.filter((product) => {
+      if (productProducerFilter && product.producer_id !== productProducerFilter) {
+        return false;
+      }
+
+      if (!search) {
+        return true;
+      }
+
+      return [product.title, product.slug, product.product_type].join(' ').toLowerCase().includes(search);
+    });
+  }, [productProducerFilter, productSearch, products]);
 
   const handleApproveLabel = async (request: LabelRequest) => {
     setActionKey(`request:${request.id}:approve`);
@@ -432,17 +474,26 @@ export function AdminEliteAccessPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Input
-            label="Rechercher un beat"
-            value={productSearch}
-            onChange={(event) => setProductSearch(event.target.value)}
-            placeholder="titre ou slug"
-          />
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
+            <Input
+              label="Rechercher un beat"
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              placeholder="titre ou slug"
+            />
+            <Select
+              label="Filtrer par producteur"
+              value={productProducerFilter}
+              onChange={(event) => setProductProducerFilter(event.target.value)}
+              options={productProducerOptions}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-zinc-500">
                 <tr className="border-b border-zinc-800">
                   <th className="py-2 text-left">Titre</th>
+                  <th className="py-2 text-left">Producteur</th>
                   <th className="py-2 text-left">Type</th>
                   <th className="py-2 text-left">Statut</th>
                   <th className="py-2 text-left">Exclusif</th>
@@ -452,29 +503,37 @@ export function AdminEliteAccessPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="border-b border-zinc-900">
-                    <td className="py-3 pr-4">
-                      <div className="text-white">{product.title}</div>
-                      <div className="text-zinc-400">{product.slug}</div>
-                    </td>
-                    <td className="py-3 pr-4 text-zinc-300">{product.product_type}</td>
-                    <td className="py-3 pr-4 text-zinc-300">{product.status}</td>
-                    <td className="py-3 pr-4 text-zinc-300">{product.is_exclusive ? 'yes' : 'no'}</td>
-                    <td className="py-3 pr-4 text-zinc-300">{product.is_published ? 'yes' : 'no'}</td>
-                    <td className="py-3 pr-4 text-zinc-300">{product.is_elite ? 'yes' : 'no'}</td>
-                    <td className="py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant={product.is_elite ? 'outline' : 'secondary'}
-                        onClick={() => void handleToggleElite(product)}
-                        isLoading={actionKey === `product:${product.id}`}
-                      >
-                        {product.is_elite ? 'Retirer' : 'Ajouter'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredProducts.map((product) => {
+                  const productProducer = productProducersById.get(product.producer_id);
+
+                  return (
+                    <tr key={product.id} className="border-b border-zinc-900">
+                      <td className="py-3 pr-4">
+                        <div className="text-white">{product.title}</div>
+                        <div className="text-zinc-400">{product.slug}</div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="text-zinc-300">{getProducerDisplayName(productProducer)}</div>
+                        {productProducer?.email && <div className="text-zinc-500">{productProducer.email}</div>}
+                      </td>
+                      <td className="py-3 pr-4 text-zinc-300">{product.product_type}</td>
+                      <td className="py-3 pr-4 text-zinc-300">{product.status}</td>
+                      <td className="py-3 pr-4 text-zinc-300">{product.is_exclusive ? 'yes' : 'no'}</td>
+                      <td className="py-3 pr-4 text-zinc-300">{product.is_published ? 'yes' : 'no'}</td>
+                      <td className="py-3 pr-4 text-zinc-300">{product.is_elite ? 'yes' : 'no'}</td>
+                      <td className="py-3 text-right">
+                        <Button
+                          size="sm"
+                          variant={product.is_elite ? 'outline' : 'secondary'}
+                          onClick={() => void handleToggleElite(product)}
+                          isLoading={actionKey === `product:${product.id}`}
+                        >
+                          {product.is_elite ? 'Retirer' : 'Ajouter'}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
