@@ -28,6 +28,7 @@ import type { SiteAccessMode } from '@/lib/supabase/useMaintenanceMode';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ProducerCampaignManager } from '@/components/admin/ProducerCampaignManager';
 import {
   parseLaunchPageContent,
   serializeLaunchPageContent,
@@ -1510,6 +1511,7 @@ export function AdminLaunchPage() {
         <LaunchPhaseCard />
         <LaunchSettingsCard />
       </div>
+      <ProducerCampaignManager campaignType="founding" />
       <div className="grid gap-6 2xl:grid-cols-2">
         <WaitlistCard />
         <WhitelistCard />
