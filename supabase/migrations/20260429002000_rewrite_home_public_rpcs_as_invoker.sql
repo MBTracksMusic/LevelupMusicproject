@@ -56,6 +56,7 @@ RETURNS TABLE (
   play_count integer,
   cover_image_url text,
   is_sold boolean,
+  is_exclusive boolean,
   producer_id uuid,
   producer_username text
 )
@@ -72,6 +73,7 @@ AS $$
     COALESCE(p.play_count, 0) AS play_count,
     p.cover_image_url,
     COALESCE(p.is_sold, false) AS is_sold,
+    COALESCE(p.is_exclusive, false) AS is_exclusive,
     p.producer_id,
     p.producer_username
   FROM public.public_catalog_products p
