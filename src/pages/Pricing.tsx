@@ -541,8 +541,8 @@ export function PricingPage() {
   const isProCurrent = hasActiveProducerSubscription && currentTier === 'pro';
   const isEliteCurrent = hasActiveProducerSubscription && currentTier === 'elite';
   const visibleCardCount = [showFreePlan, showUserPremiumPlan, showProducerPlan, showProducerElitePlan].filter(Boolean).length;
-  const gridColsClass = visibleCardCount <= 2 ? 'sm:grid-cols-2' : 'md:grid-cols-3';
-  const gridWidthClass = visibleCardCount === 1 ? 'max-w-sm mx-auto' : visibleCardCount === 2 ? 'max-w-[900px] mx-auto' : '';
+  const gridColsClass = visibleCardCount === 1 ? '' : visibleCardCount === 2 ? 'sm:grid-cols-2' : 'md:grid-cols-3';
+  const gridWidthClass = visibleCardCount === 1 ? 'max-w-md mx-auto' : visibleCardCount === 2 ? 'max-w-[900px] mx-auto' : '';
   const proBattlesLimit = typeof proPlan.max_battles_created_per_month === 'number'
     ? proPlan.max_battles_created_per_month
     : 5;
