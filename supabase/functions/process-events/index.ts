@@ -30,6 +30,7 @@ type EventType =
   | "BEAT_PURCHASED"
   | "LICENSE_GENERATED"
   | "BATTLE_WON"
+  | "BATTLE_INVITATION"
   | "COMMENT_RECEIVED";
 
 type EventHandler = {

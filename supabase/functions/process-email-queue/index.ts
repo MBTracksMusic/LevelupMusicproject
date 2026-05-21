@@ -305,6 +305,78 @@ const getTemplateContent = (params: {
     };
   }
 
+  if (template === "battle_invitation") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const inviterName = asNonEmptyString(payload?.inviter_name);
+    const battleSlug = asNonEmptyString(payload?.battle_slug);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const responseDeadline = asNonEmptyString(payload?.response_deadline);
+    const ctaUrl = battleSlug
+      ? `${safeAppUrl}/battles/${battleSlug}`
+      : `${safeAppUrl}/producer/battles`;
+    const titleLine = battleTitle ? `Battle : ${battleTitle}` : null;
+    const fromLine = inviterName ? `De la part de : ${inviterName}` : null;
+    const deadlineLine = responseDeadline
+      ? `A repondre avant : ${responseDeadline}`
+      : null;
+    const metaLines = [titleLine, fromLine, deadlineLine, `Reference : ${battleId}`]
+      .filter((line): line is string => line !== null);
+    const bodyIntro = inviterName
+      ? `${inviterName} t'invite a une battle sur Beatelion.`
+      : "Un autre producteur t'invite a une battle sur Beatelion.";
+
+    return {
+      subject: battleTitle
+        ? `Nouvelle invitation a la battle "${battleTitle}"`
+        : "Tu as recu une invitation a une battle",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Nouvelle invitation a une battle",
+        preheader: "Un producteur veut t'affronter en battle",
+        bodyLines: [
+          bodyIntro,
+          "Ouvre la battle pour accepter ou refuser l'invitation.",
+        ],
+        ctaLabel: "Voir l'invitation",
+        ctaUrl,
+        metaLines,
+      }),
+    };
+  }
+
+  if (template === "battle_awaiting_admin") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const producer1Name = asNonEmptyString(payload?.producer1_name);
+    const producer2Name = asNonEmptyString(payload?.producer2_name);
+    const acceptedAt = asNonEmptyString(payload?.accepted_at);
+    const titleLine = battleTitle ? `Battle : ${battleTitle}` : null;
+    const matchupLine = producer1Name && producer2Name
+      ? `Affrontement : ${producer1Name} vs ${producer2Name}`
+      : null;
+    const acceptedLine = acceptedAt ? `Acceptee le : ${acceptedAt}` : null;
+    const metaLines = [titleLine, matchupLine, acceptedLine, `Reference : ${battleId}`]
+      .filter((line): line is string => line !== null);
+
+    return {
+      subject: battleTitle
+        ? `[Admin] Battle "${battleTitle}" en attente de validation`
+        : "[Admin] Une battle est en attente de validation",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Battle en attente de validation",
+        preheader: "Deux producteurs ont accepte, validation requise",
+        bodyLines: [
+          "Les deux producteurs ont accepte l'invitation.",
+          "La battle attend une validation administrateur avant de demarrer.",
+        ],
+        ctaLabel: "Ouvrir l'admin battles",
+        ctaUrl: `${safeAppUrl}/admin/battles`,
+        metaLines,
+      }),
+    };
+  }
+
   if (template === "comment_received") {
     const battleId = asNonEmptyString(payload?.battle_id);
     const metaLines = battleId ? [`Battle: ${battleId}`] : [];
