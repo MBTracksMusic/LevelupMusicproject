@@ -60,7 +60,7 @@ export interface UserProfile {
   battles_participated: number;
   battles_completed: number;
   engagement_score: number;
-  language: 'fr' | 'en' | 'de';
+  language: 'fr' | 'en' | 'de' | 'es';
   bio: string | null;
   website_url: string | null;
   social_links: Record<string, string>;

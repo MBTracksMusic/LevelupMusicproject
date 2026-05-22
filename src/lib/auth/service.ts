@@ -185,7 +185,7 @@ export async function updateProfile(updates: {
   avatar_url?: string;
   bio?: string;
   website_url?: string;
-  language?: 'fr' | 'en' | 'de';
+  language?: 'fr' | 'en' | 'de' | 'es';
 }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

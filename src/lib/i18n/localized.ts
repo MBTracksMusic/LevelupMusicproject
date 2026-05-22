@@ -4,6 +4,7 @@ interface LocalizedNameRecord {
   name?: string | null;
   name_en?: string | null;
   name_de?: string | null;
+  name_es?: string | null;
 }
 
 function getFirstNonEmptyValue(values: Array<string | null | undefined>): string | null {
@@ -23,6 +24,7 @@ export function getLocalizedField(entity: LocalizedNameRecord | null | undefined
     fr: entity.name,
     en: entity.name_en,
     de: entity.name_de,
+    es: entity.name_es,
   };
 
   return getFirstNonEmptyValue([
@@ -30,6 +32,7 @@ export function getLocalizedField(entity: LocalizedNameRecord | null | undefined
     entity.name,
     entity.name_en,
     entity.name_de,
+    entity.name_es,
   ]);
 }
 

@@ -4,11 +4,12 @@ import { persist, type PersistStorage, type StorageValue } from 'zustand/middlew
 import { fr, type TranslationSchema } from './translations/fr';
 import { en } from './translations/en';
 import { de } from './translations/de';
+import { es } from './translations/es';
 import { updateProfile } from '../auth/service';
 import { supabase } from '@/lib/supabase/client';
 
 const I18N_STORAGE_KEY = 'levelup-language';
-const SUPPORTED_LANGUAGES = ['fr', 'en', 'de'] as const;
+const SUPPORTED_LANGUAGES = ['fr', 'en', 'de', 'es'] as const;
 const FALLBACK_LANGUAGE = 'en';
 
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
@@ -17,6 +18,7 @@ const translations: Record<Language, TranslationSchema> = {
   fr,
   en,
   de,
+  es,
 };
 
 interface I18nState {
@@ -251,6 +253,7 @@ export const languageNames: Record<Language, string> = {
   fr: 'Francais',
   en: 'English',
   de: 'Deutsch',
+  es: 'Español',
 };
 
 updateDocumentLanguage(useI18nStore.getState().language);

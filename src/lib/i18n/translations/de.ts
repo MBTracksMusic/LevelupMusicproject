@@ -473,6 +473,7 @@ export const de: TranslationSchema = {
     languageFrench: 'Francais',
     languageEnglish: 'English',
     languageGerman: 'Deutsch',
+    languageSpanish: 'Spanisch',
     dangerZoneTitle: 'Gefahrenzone',
     dangerZoneDescription:
       'Die Kontoloschung ist unumkehrbar. Ihr Profil wird anonymisiert. Ihre Kaufe, Battle-Teilnahmen und historischen Inhalte konnen aus Integritatsgrunden der Plattform erhalten bleiben.',

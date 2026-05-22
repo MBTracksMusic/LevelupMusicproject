@@ -473,6 +473,7 @@ export const en: TranslationSchema = {
     languageFrench: 'Francais',
     languageEnglish: 'English',
     languageGerman: 'Deutsch',
+    languageSpanish: 'Spanish',
     dangerZoneTitle: 'Danger zone',
     dangerZoneDescription:
       'Account deletion is irreversible. Your profile will be anonymized. Your purchases, battle participation, and historical content may be kept for platform integrity.',
