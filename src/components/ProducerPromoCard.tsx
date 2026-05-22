@@ -111,6 +111,11 @@ export function ProducerPromoCard({
         setSubmitState('idle');
         return;
       }
+      if (msg?.error === 'campaign_inactive') {
+        toast.error('Cette campagne est désactivée.');
+        setSubmitState('idle');
+        return;
+      }
       if (msg?.error === 'campaign_slots_exhausted') {
         toast.error('Les 20 places fondateur sont déjà prises. Merci pour ton intérêt — reste à l’affût des prochaines vagues.');
         setSubmitState('idle');

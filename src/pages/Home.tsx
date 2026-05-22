@@ -36,6 +36,20 @@ interface HomeStatsPayload {
   show_homepage_stats?: boolean;
 }
 
+interface ProducerCampaignStatusPayload {
+  exists?: boolean;
+  is_active?: boolean;
+  reason?: string;
+}
+
+type ProducerCampaignStatusRpc = (
+  fn: string,
+  params: { p_campaign_type: string },
+) => Promise<{
+  data: ProducerCampaignStatusPayload | null;
+  error: { message?: string } | null;
+}>;
+
 export function HomePage() {
   const { t } = useTranslation();
   const { user, profile } = useAuth();
@@ -43,7 +57,8 @@ export function HomePage() {
   const isUserPremium = hasPremiumAccess && userSubStatus?.plan_code === 'user_monthly';
   const { showHomepageStats, showHomepageBadge, pricingProducerPromo } = useMaintenanceModeContext();
   const hasActiveProducerSubscription = Boolean(user && profile?.is_producer_active === true);
-  const showProducerPromoCard = Boolean(pricingProducerPromo?.enabled) && !hasActiveProducerSubscription;
+  const isProducerPromoEnabled = Boolean(pricingProducerPromo?.enabled);
+  const promoCampaignType = pricingProducerPromo?.campaign_type?.trim() ?? '';
   const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
   // TODO(levelup): reactiver cette section quand les categories Exclusifs/Kits reviennent.
   const isExclusiveSectionEnabled = false;
@@ -56,6 +71,10 @@ export function HomePage() {
     activeProducers: null,
   });
   const [isHomeStatsLoading, setIsHomeStatsLoading] = useState(true);
+  const [isProducerPromoCampaignActive, setIsProducerPromoCampaignActive] = useState(false);
+  const showProducerPromoCard =
+    isProducerPromoEnabled && isProducerPromoCampaignActive && !hasActiveProducerSubscription;
+
   useEffect(() => {
     if (!user) {
       clearWishlist();
@@ -63,6 +82,38 @@ export function HomePage() {
     }
     void fetchWishlist();
   }, [user, fetchWishlist, clearWishlist]);
+
+  useEffect(() => {
+    if (!isProducerPromoEnabled || promoCampaignType.length === 0) {
+      setIsProducerPromoCampaignActive(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function fetchProducerCampaignStatus() {
+      const campaignStatusRpc = supabase.rpc as unknown as ProducerCampaignStatusRpc;
+      const { data, error } = await campaignStatusRpc('get_public_producer_campaign_status', {
+        p_campaign_type: promoCampaignType,
+      });
+
+      if (isCancelled) return;
+
+      if (error) {
+        console.error('Error fetching producer campaign status:', error);
+        setIsProducerPromoCampaignActive(false);
+        return;
+      }
+
+      setIsProducerPromoCampaignActive(data?.is_active === true);
+    }
+
+    void fetchProducerCampaignStatus();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isProducerPromoEnabled, promoCampaignType]);
 
   const handleWishlistToggle = async (productId: string) => {
     try {

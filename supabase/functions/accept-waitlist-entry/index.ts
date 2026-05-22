@@ -16,7 +16,7 @@ import {
   sendEmailWithResend,
 } from "../_shared/email.ts";
 
-const FUNCTION_VERSION = "2026-05-22-accept-waitlist-entry-1";
+const FUNCTION_VERSION = "2026-05-22-accept-waitlist-entry-2";
 
 type AcceptResult = {
   waitlist_id: string;
@@ -65,10 +65,10 @@ const updateDeliveryState = async (
 
 const buildAcceptanceEmail = (
   email: string,
-  campaignType: string | null,
+  isFoundingAccepted: boolean,
   appUrl: string,
 ) => {
-  const isFounding = campaignType === "founding";
+  const isFounding = isFoundingAccepted;
   const signupUrl = `${appUrl.replace(/\/$/, "")}/register?email=${encodeURIComponent(email)}`;
   const safeSignupUrl = escapeHtml(signupUrl);
 
@@ -205,6 +205,11 @@ serveWithErrorHandling("accept-waitlist-entry", async (req: Request): Promise<Re
       ?? Deno.env.get("SITE_URL")
       ?? Deno.env.get("PUBLIC_SITE_URL")
       ?? "https://beatelion.com";
+    const shouldSendFoundingEmail =
+      result.campaign_type === "founding" && result.founding_promoted === true;
+    const acceptanceSubject = shouldSendFoundingEmail
+      ? "🎉 Bienvenue producteur fondateur sur Beatelion"
+      : "✅ Ton accès à Beatelion est activé";
 
     const claimRpc = serviceClient.rpc.bind(serviceClient) as unknown as (
       fn: string,
@@ -221,9 +226,8 @@ serveWithErrorHandling("accept-waitlist-entry", async (req: Request): Promise<Re
         p_metadata: {
           recipient_email: normalizedEmail,
           campaign_type: result.campaign_type,
-          subject: result.campaign_type === "founding"
-            ? "🎉 Bienvenue producteur fondateur sur Beatelion"
-            : "✅ Ton accès à Beatelion est activé",
+          founding_promoted: result.founding_promoted,
+          subject: acceptanceSubject,
         },
       },
     );
@@ -243,7 +247,7 @@ serveWithErrorHandling("accept-waitlist-entry", async (req: Request): Promise<Re
 
       const { subject, title, preheader, bodyHtml, bodyText } = buildAcceptanceEmail(
         result.email,
-        result.campaign_type,
+        shouldSendFoundingEmail,
         appUrl,
       );
 

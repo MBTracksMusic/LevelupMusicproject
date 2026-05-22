@@ -31,6 +31,7 @@ type JoinWaitlistResponse =
         | "captcha_failed"
         | "launch_public"
         | "invalid_campaign_type"
+        | "campaign_inactive"
         | "campaign_slots_exhausted";
     };
 
@@ -198,6 +199,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       if (reason === "invalid_campaign_type") {
         return jsonResponse({ error: "invalid_campaign_type" }, 400, corsHeaders);
+      }
+      if (reason === "campaign_inactive") {
+        return jsonResponse({ error: "campaign_inactive" }, 409, corsHeaders);
       }
       if (reason === "campaign_slots_exhausted") {
         return jsonResponse({ error: "campaign_slots_exhausted" }, 409, corsHeaders);
