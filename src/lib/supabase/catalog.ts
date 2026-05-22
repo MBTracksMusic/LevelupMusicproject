@@ -448,10 +448,6 @@ export async function fetchCatalogProducts({
       query = query.order('created_at', { ascending: false });
       break;
     default:
-      if (mode === 'beats') {
-        query = query.order('top_10_flag', { ascending: false });
-        query = query.order('performance_score', { ascending: false });
-      }
       query = query.order('created_at', { ascending: false });
       break;
   }
