@@ -92,7 +92,7 @@ export function HomePage() {
     let isCancelled = false;
 
     async function fetchProducerCampaignStatus() {
-      const campaignStatusRpc = supabase.rpc as unknown as ProducerCampaignStatusRpc;
+      const campaignStatusRpc = supabase.rpc.bind(supabase) as unknown as ProducerCampaignStatusRpc;
       const { data, error } = await campaignStatusRpc('get_public_producer_campaign_status', {
         p_campaign_type: promoCampaignType,
       });
