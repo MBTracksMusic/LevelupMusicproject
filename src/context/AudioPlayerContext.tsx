@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { trackBeatComplete, trackBeatPause, trackBeatPlay } from '../lib/analytics';
 import { buildResolvedAudioSourceCandidates, type AudioSourceFields } from '../lib/audio/sources';
+import { supabase } from '../lib/supabase/client';
 import { isTrackableBeatId, trackInteraction } from '../lib/tracking';
 
 export type Track = AudioSourceFields & {
@@ -231,6 +232,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       beatId: track.id,
       action: 'play',
     });
+    // 42501 = auth_required: anonymous listeners are skipped by design (anti-bot).
+    void supabase
+      .rpc('increment_play_count', { p_product_id: track.id })
+      .then(({ error }) => {
+        if (error && error.code !== '42501') {
+          console.error('increment_play_count failed', error);
+        }
+      });
   };
 
   const reportBeatPause = (track: Track | null) => {
