@@ -47,6 +47,7 @@ interface WaitlistRow {
   accepted_at: string | null;
   user_id: string | null;
   notes: string | null;
+  campaign_type: string | null;
 }
 
 interface WhitelistRow {
@@ -1169,57 +1170,67 @@ function WaitlistCard() {
 
   const updateStatus = async (id: string, status: 'accepted' | 'rejected') => {
     setActioningId(id);
-    const patch =
-      status === 'accepted'
-        ? { status, accepted_at: new Date().toISOString() }
-        : { status };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from('waitlist').update(patch).eq('id', id);
+    if (status === 'rejected') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('waitlist')
+        .update({ status })
+        .eq('id', id);
 
-    if (error) {
-      toast.error('Erreur lors de la mise à jour.');
-      console.error('[AdminLaunch] waitlist update error', error);
-      setActioningId(null);
-      return;
-    }
+      if (error) {
+        toast.error('Erreur lors de la mise à jour.');
+        console.error('[AdminLaunch] waitlist reject error', error);
+        setActioningId(null);
+        return;
+      }
 
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-    );
-
-    if (status !== 'accepted') {
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status } : r)),
+      );
       toast.success('Entrée refusée.');
       setActioningId(null);
       return;
     }
 
-    // After waitlist accept: also upsert access_whitelist so private mode works
-    const row = rows.find((r) => r.id === id);
-    if (!row) {
-      toast.success('Accès accordé.');
+    // Accept path: delegate to edge function. The function runs the
+    // accept_waitlist_entry RPC (waitlist update + access_whitelist upsert +
+    // immediate founding-producer promotion if user exists) and sends the
+    // confirmation email.
+    const { data, error } = await supabase.functions.invoke<{
+      ok: boolean;
+      result: {
+        waitlist_id: string;
+        email: string;
+        campaign_type: string | null;
+        user_existed: boolean;
+        founding_promoted: boolean;
+      };
+      email_sent: boolean;
+      email_error: string | null;
+    }>('accept-waitlist-entry', { body: { waitlist_id: id } });
+
+    if (error || !data?.ok) {
+      toast.error("Acceptation échouée. Réessaye ou vérifie les logs.");
+      console.error('[AdminLaunch] accept-waitlist-entry error', error ?? data);
       setActioningId(null);
       return;
     }
 
-    const normalizedEmail = row.email.toLowerCase().trim();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: wlError } = await (supabase as any)
-      .from('access_whitelist')
-      .upsert(
-        { email: normalizedEmail, is_active: true, granted_at: new Date().toISOString() },
-        { onConflict: 'email' },
-      );
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === id
+          ? { ...r, status: 'accepted', accepted_at: new Date().toISOString() }
+          : r,
+      ),
+    );
 
-    if (wlError) {
-      console.error('[AdminLaunch] whitelist upsert error', wlError);
-      toast.error(
-        "Demande acceptée, mais l'ajout à la whitelist a échoué. Vérifiez manuellement la whitelist.",
-        { duration: 8000 },
-      );
-    } else {
-      toast.success('Accès accordé et email ajouté à la whitelist.');
-    }
+    const r = data.result;
+    const parts: string[] = ['Acceptée, whitelist mise à jour'];
+    if (r.founding_promoted) parts.push('producteur fondateur activé');
+    if (data.email_sent) parts.push('email envoyé');
+    else if (data.email_error) parts.push(`email échoué (${data.email_error})`);
+    toast.success(parts.join(' · '));
 
     setActioningId(null);
   };
@@ -1297,6 +1308,11 @@ function WaitlistCard() {
                 <tr key={row.id} className="py-2">
                   <td className="px-5 py-3 text-zinc-200">
                     {row.email}
+                    {row.campaign_type === 'founding' && (
+                      <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+                        fondateur
+                      </span>
+                    )}
                     {row.user_id && (
                       <span className="ml-1.5 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
                         compte lié

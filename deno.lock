@@ -34,6 +34,7 @@
         "npm:eslint-plugin-react-hooks@^5.1.0",
         "npm:eslint-plugin-react-refresh@~0.4.26",
         "npm:eslint@^9.39.2",
+        "npm:framer-motion@^12.38.0",
         "npm:globals@^15.9.0",
         "npm:lucide-react@0.344",
         "npm:pdfkit@0.17",
