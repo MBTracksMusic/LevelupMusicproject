@@ -772,6 +772,7 @@ export function SettingsPage() {
                     { value: 'fr', label: t('settings.languageFrench') },
                     { value: 'en', label: t('settings.languageEnglish') },
                     { value: 'de', label: t('settings.languageGerman') },
+                    { value: 'es', label: t('settings.languageSpanish') },
                   ]}
                 />
               </div>

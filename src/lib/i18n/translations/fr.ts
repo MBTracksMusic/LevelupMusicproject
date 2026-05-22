@@ -472,6 +472,7 @@ export const fr = {
     languageFrench: 'Francais',
     languageEnglish: 'English',
     languageGerman: 'Deutsch',
+    languageSpanish: 'Espanol',
     dangerZoneTitle: 'Zone dangereuse',
     dangerZoneDescription:
       'La suppression du compte est irreversible. Votre profil sera anonymise. Vos achats, participations aux battles et contenus historiques pourront etre conserves pour l\'integrite de la plateforme.',
