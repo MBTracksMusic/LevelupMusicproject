@@ -434,14 +434,9 @@ export async function fetchCatalogProducts({
     query = query.or(`title.ilike.%${escaped}%,producer_username.ilike.%${escaped}%,tags.cs.{${escaped}}`);
   }
 
-  if (mode === 'beats') {
-    query = query.order('top_10_flag', { ascending: false });
-    query = query.order('performance_score', { ascending: false });
-  }
-
   switch (filters.sort) {
     case 'popular':
-      query = query.order('play_count', { ascending: false });
+      query = query.order('play_count', { ascending: false, nullsFirst: false });
       query = query.order('created_at', { ascending: false });
       break;
     case 'price_asc':
