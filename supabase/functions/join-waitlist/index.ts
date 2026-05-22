@@ -22,7 +22,17 @@ type JoinWaitlistBody = {
 type JoinWaitlistResponse =
   | { message: "success" }
   | { message: "already_registered" }
-  | { error: "invalid_email" | "method_not_allowed" | "server_error" | "rate_limit_exceeded" | "captcha_failed" };
+  | {
+      error:
+        | "invalid_email"
+        | "method_not_allowed"
+        | "server_error"
+        | "rate_limit_exceeded"
+        | "captcha_failed"
+        | "launch_public"
+        | "invalid_campaign_type"
+        | "campaign_slots_exhausted";
+    };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const jsonResponse = (
@@ -157,6 +167,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
       console.error("[join-waitlist] rate limit check error", {
         error: rateLimitError.message,
       });
+      return jsonResponse({ error: "server_error" }, 500, corsHeaders);
+    }
+
+    // Server-side preflight: launch-mode + campaign_type + slot capacity.
+    // Runs after captcha + rate-limit so the RPC is not enumerable by anons.
+    const { data: preflightData, error: preflightError } = await adminClient.rpc(
+      "rpc_join_waitlist_preflight",
+      { p_email: email, p_campaign_type: campaignType ?? null },
+    );
+
+    if (preflightError) {
+      console.error("[join-waitlist] preflight rpc error", {
+        code: preflightError.code,
+        message: preflightError.message,
+      });
+      return jsonResponse({ error: "server_error" }, 500, corsHeaders);
+    }
+
+    const preflight = preflightData as { ok?: unknown; reason?: unknown } | null;
+    if (preflight?.ok !== true) {
+      const reason = typeof preflight?.reason === "string" ? preflight.reason : "server_error";
+      console.warn("[join-waitlist] preflight rejected", {
+        email: email.substring(0, 3) + '***',
+        campaignType: campaignType ?? null,
+        reason,
+      });
+      if (reason === "launch_public") {
+        return jsonResponse({ error: "launch_public" }, 409, corsHeaders);
+      }
+      if (reason === "invalid_campaign_type") {
+        return jsonResponse({ error: "invalid_campaign_type" }, 400, corsHeaders);
+      }
+      if (reason === "campaign_slots_exhausted") {
+        return jsonResponse({ error: "campaign_slots_exhausted" }, 409, corsHeaders);
+      }
       return jsonResponse({ error: "server_error" }, 500, corsHeaders);
     }
 

@@ -101,6 +101,21 @@ export function ProducerPromoCard({
         setSubmitState('idle');
         return;
       }
+      if (msg?.error === 'launch_public') {
+        toast.error('Le lancement est ouvert : crée directement ton compte producteur.');
+        setSubmitState('idle');
+        return;
+      }
+      if (msg?.error === 'invalid_campaign_type') {
+        toast.error('Cette campagne n’est plus disponible.');
+        setSubmitState('idle');
+        return;
+      }
+      if (msg?.error === 'campaign_slots_exhausted') {
+        toast.error('Les 20 places fondateur sont déjà prises. Merci pour ton intérêt — reste à l’affût des prochaines vagues.');
+        setSubmitState('idle');
+        return;
+      }
 
       setSubmitState('done');
     } catch (err) {
