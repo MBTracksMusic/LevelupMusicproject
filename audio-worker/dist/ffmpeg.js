@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { asFfmpegGainDb, generateWatermarkPositions } from "./watermark.js";
 const MAX_LOG_LINES = 200;
 const MAX_CAPTURE_STDOUT_CHARS = 8_192;
+const MAX_CAPTURE_STDERR_CHARS = 64_000;
 const MIN_WATERMARK_PITCH = 0.995;
 const MAX_WATERMARK_PITCH = 1.005;
 const keepTail = (lines, chunk) => {
@@ -25,7 +26,7 @@ const toAbortError = (reason, fallbackMessage) => {
     return new Error(fallbackMessage);
 };
 const runCommand = async (command, args, options = {}) => {
-    const { timeoutMs, signal, captureStdout = false, stdoutMaxChars = MAX_CAPTURE_STDOUT_CHARS, } = options;
+    const { timeoutMs, signal, captureStdout = false, stdoutMaxChars = MAX_CAPTURE_STDOUT_CHARS, captureStderr = false, stderrMaxChars = MAX_CAPTURE_STDERR_CHARS, } = options;
     if (signal?.aborted) {
         throw toAbortError(signal.reason, `${command} aborted before start`);
     }
@@ -33,6 +34,7 @@ const runCommand = async (command, args, options = {}) => {
         stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     const tail = [];
     let timedOut = false;
     let aborted = false;
@@ -48,6 +50,12 @@ const runCommand = async (command, args, options = {}) => {
         keepTail(tail, chunk);
     });
     child.stderr?.on("data", (chunk) => {
+        if (captureStderr) {
+            stderr += chunk;
+            if (stderr.length > stderrMaxChars) {
+                stderr = stderr.slice(-stderrMaxChars);
+            }
+        }
         keepTail(tail, chunk);
     });
     const onAbort = () => {
@@ -88,7 +96,7 @@ const runCommand = async (command, args, options = {}) => {
             signal.removeEventListener("abort", onAbort);
         }
     }
-    return { stdout, tail };
+    return { stdout, stderr, tail };
 };
 const buildFilterComplex = (delayPositionsMs, gainDb, durationSec, sampleRate) => {
     const sourceLabels = delayPositionsMs.map((_, index) => `tagsrc${index}`);
@@ -175,4 +183,109 @@ export const renderWatermarkedPreview = async (params) => {
         positionsSec,
         outputPath: params.outputFilePath,
     };
+};
+const formatNumber = (value, fractionDigits = 2) => {
+    if (!Number.isFinite(value)) {
+        throw new Error(`loudnorm: non-finite numeric value: ${value}`);
+    }
+    return value.toFixed(fractionDigits);
+};
+const parseLoudnormJson = (raw) => {
+    if (!raw) {
+        throw new Error("loudnorm: empty ffmpeg stderr — could not locate measurement JSON");
+    }
+    // The loudnorm filter prints a JSON object at (or very near) the end of
+    // stderr. Slice from the last `{` to the matching closing `}` so we don't
+    // confuse ourselves with progress lines.
+    const lastOpen = raw.lastIndexOf("{");
+    const lastClose = raw.lastIndexOf("}");
+    if (lastOpen < 0 || lastClose < 0 || lastClose < lastOpen) {
+        throw new Error("loudnorm: could not locate JSON measurement block in ffmpeg output");
+    }
+    const jsonText = raw.slice(lastOpen, lastClose + 1);
+    let parsed;
+    try {
+        parsed = JSON.parse(jsonText);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`loudnorm: failed to parse JSON measurements: ${message}`);
+    }
+    const pickNumber = (key) => {
+        const raw = parsed[key];
+        if (raw === undefined || raw === null) {
+            throw new Error(`loudnorm: missing key '${key}' in measurement JSON`);
+        }
+        const value = typeof raw === "number" ? raw : Number.parseFloat(String(raw));
+        if (!Number.isFinite(value)) {
+            throw new Error(`loudnorm: non-numeric value for key '${key}': ${String(raw)}`);
+        }
+        return value;
+    };
+    return {
+        input_i: pickNumber("input_i"),
+        input_tp: pickNumber("input_tp"),
+        input_lra: pickNumber("input_lra"),
+        input_thresh: pickNumber("input_thresh"),
+        target_offset: pickNumber("target_offset"),
+    };
+};
+export const analyzeLoudness = async (inputPath, targets, options) => {
+    const I = formatNumber(targets.targetLufs);
+    const TP = formatNumber(targets.targetTruePeakDb);
+    const LRA = formatNumber(targets.targetLra);
+    const { stderr } = await runCommand(options.ffmpegBin, [
+        "-hide_banner",
+        "-nostats",
+        "-i",
+        inputPath,
+        "-af",
+        `loudnorm=I=${I}:TP=${TP}:LRA=${LRA}:print_format=json`,
+        "-f",
+        "null",
+        "-",
+    ], {
+        timeoutMs: options.ffmpegTimeoutMs,
+        captureStderr: true,
+        ...(options.signal ? { signal: options.signal } : {}),
+    });
+    return parseLoudnormJson(stderr);
+};
+export const applyLoudnorm = async (inputPath, outputPath, analysis, targets, options) => {
+    const I = formatNumber(targets.targetLufs);
+    const TP = formatNumber(targets.targetTruePeakDb);
+    const LRA = formatNumber(targets.targetLra);
+    const measuredI = formatNumber(analysis.input_i);
+    const measuredLra = formatNumber(analysis.input_lra);
+    const measuredTp = formatNumber(analysis.input_tp);
+    const measuredThresh = formatNumber(analysis.input_thresh);
+    const offset = formatNumber(analysis.target_offset);
+    const sampleRate = options.sampleRate && options.sampleRate > 0
+        ? Math.round(options.sampleRate)
+        : 44_100;
+    const filter = `loudnorm=I=${I}:TP=${TP}:LRA=${LRA}` +
+        `:measured_I=${measuredI}:measured_LRA=${measuredLra}` +
+        `:measured_TP=${measuredTp}:measured_thresh=${measuredThresh}` +
+        `:offset=${offset}:linear=true:print_format=summary`;
+    await runCommand(options.ffmpegBin, [
+        "-hide_banner",
+        "-nostats",
+        "-y",
+        "-i",
+        inputPath,
+        "-af",
+        filter,
+        "-ar",
+        String(sampleRate),
+        "-ac",
+        "2",
+        "-c:a",
+        "pcm_s16le",
+        "-f",
+        "wav",
+        outputPath,
+    ], {
+        timeoutMs: options.ffmpegTimeoutMs,
+        ...(options.signal ? { signal: options.signal } : {}),
+    });
 };

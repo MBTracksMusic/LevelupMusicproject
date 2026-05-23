@@ -25,6 +25,10 @@ const PRODUCT_SELECT = [
   "processing_status",
   "processing_error",
   "processed_at",
+  "measured_lufs",
+  "measured_true_peak_db",
+  "normalization_applied",
+  "normalization_error",
 ].join(", ");
 
 

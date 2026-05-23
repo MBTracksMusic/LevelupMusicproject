@@ -14,6 +14,10 @@ const DEFAULT_PREVIEW_AUDIO_BITRATE = "192k";
 const DEFAULT_PREVIEW_AUDIO_SAMPLE_RATE = 44_100;
 const DEFAULT_JOB_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_SHUTDOWN_GRACE_MS = 30_000;
+const DEFAULT_LOUDNORM_ENABLED = false;
+const DEFAULT_LOUDNORM_TARGET_LUFS = -12;
+const DEFAULT_LOUDNORM_TARGET_TRUE_PEAK_DB = -1;
+const DEFAULT_LOUDNORM_TARGET_LRA = 11;
 
 const readEnv = (name: string) => process.env[name]?.trim() ?? "";
 
@@ -46,6 +50,24 @@ const parsePositiveInt = (name: string, fallback: number) => {
 const parseNonEmpty = (name: string, fallback: string) => {
   const raw = readEnv(name);
   return raw || fallback;
+};
+
+const parseFiniteNumber = (name: string, fallback: number) => {
+  const raw = readEnv(name);
+  if (!raw) return fallback;
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid numeric value for ${name}: ${raw}`);
+  }
+  return parsed;
+};
+
+const parseBooleanFlag = (name: string, fallback: boolean) => {
+  const raw = readEnv(name).toLowerCase();
+  if (!raw) return fallback;
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  throw new Error(`Invalid boolean for ${name}: ${raw}`);
 };
 
 const resolveMasterBucket = () => {
@@ -90,6 +112,13 @@ export const config: WorkerConfig = {
   jobTimeoutMs: parsePositiveInt("JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
   tempRoot: parseNonEmpty("TMP_ROOT", path.join(os.tmpdir(), "levelup-audio-worker")),
   shutdownGraceMs: parsePositiveInt("SHUTDOWN_GRACE_MS", DEFAULT_SHUTDOWN_GRACE_MS),
+  loudnormEnabledDefault: parseBooleanFlag("LOUDNORM_ENABLED", DEFAULT_LOUDNORM_ENABLED),
+  loudnormTargetLufsDefault: parseFiniteNumber("TARGET_LUFS", DEFAULT_LOUDNORM_TARGET_LUFS),
+  loudnormTargetTruePeakDbDefault: parseFiniteNumber(
+    "TARGET_TRUE_PEAK_DB",
+    DEFAULT_LOUDNORM_TARGET_TRUE_PEAK_DB,
+  ),
+  loudnormTargetLraDefault: parseFiniteNumber("TARGET_LRA", DEFAULT_LOUDNORM_TARGET_LRA),
 };
 
 export const publicConfig = {
@@ -111,4 +140,8 @@ export const publicConfig = {
   jobTimeoutMs: config.jobTimeoutMs,
   tempRoot: config.tempRoot,
   shutdownGraceMs: config.shutdownGraceMs,
+  loudnormEnabledDefault: config.loudnormEnabledDefault,
+  loudnormTargetLufsDefault: config.loudnormTargetLufsDefault,
+  loudnormTargetTruePeakDbDefault: config.loudnormTargetTruePeakDbDefault,
+  loudnormTargetLraDefault: config.loudnormTargetLraDefault,
 };

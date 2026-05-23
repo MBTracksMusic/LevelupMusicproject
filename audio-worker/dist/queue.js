@@ -18,6 +18,10 @@ const PRODUCT_SELECT = [
     "processing_status",
     "processing_error",
     "processed_at",
+    "measured_lufs",
+    "measured_true_peak_db",
+    "normalization_applied",
+    "normalization_error",
 ].join(", ");
 export const claimAudioProcessingJobs = async (supabase, limit, workerId) => {
     const { data, error } = await supabase.rpc("claim_audio_processing_jobs", {

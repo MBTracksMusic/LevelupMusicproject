@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { renderWatermarkedPreview } from "./ffmpeg.js";
+import { analyzeLoudness, applyLoudnorm, renderWatermarkedPreview } from "./ffmpeg.js";
 import { claimAudioProcessingJobs, loadProductForProcessing, loadSiteAudioSettings, updateAudioProcessingJob, updateProductProcessingState, } from "./queue.js";
 import { downloadObjectToFile, getPublicObjectUrl, guessMasterExtension, loadWatermarkAsset, objectExists, resolveMasterDownloadSource, storageRefToString, uploadPreviewFile, } from "./storage.js";
 import { captureWorkerException } from "./sentry.js";
@@ -337,10 +337,21 @@ export class AudioWorkerService {
         const masterExt = guessMasterExtension(product, masterRef.path);
         const masterFilePath = path.join(tempDir, `master.${masterExt}`);
         const watermarkFilePath = path.join(tempDir, "watermark.mp3");
+        const normalizedFilePath = path.join(tempDir, `normalized_${job.id}.wav`);
         const firstLayerOutputFilePath = path.join(tempDir, "preview-layer1.mp3");
         const outputFilePath = path.join(tempDir, "preview.mp3");
         try {
             await downloadObjectToFile(this.supabase, downloadMasterRef, this.config.downloadMasterMaxBytes, masterFilePath, signal);
+            throwIfAborted(signal);
+            // ----- Loudness normalization (feature-flagged, master never touched) -----
+            const loudnormState = await this.maybeNormalizeMaster({
+                job,
+                product,
+                settings,
+                masterFilePath,
+                normalizedFilePath,
+                ...(signal ? { signal } : {}),
+            });
             throwIfAborted(signal);
             await fs.writeFile(watermarkFilePath, watermarkAsset.buffer);
             throwIfAborted(signal);
@@ -353,7 +364,7 @@ export class AudioWorkerService {
                 ? Number(settings.max_interval_sec)
                 : 45;
             const primaryRenderResult = await renderWatermarkedPreview({
-                masterFilePath,
+                masterFilePath: loudnormState.inputForWatermark,
                 watermarkFilePath,
                 outputFilePath: firstLayerOutputFilePath,
                 gainDb: primaryGainDb,
@@ -401,6 +412,7 @@ export class AudioWorkerService {
                 preview_version: targetVersion,
                 preview_signature: previewSignature,
                 last_watermark_hash: currentWatermarkHash,
+                ...loudnormState.productPatch,
             });
             await updateAudioProcessingJob(this.supabase, job.id, {
                 status: "done",
@@ -420,10 +432,118 @@ export class AudioWorkerService {
                 positionsSec: secondaryRenderResult.positionsSec,
                 primaryWatermarkPositionsSec: primaryRenderResult.positionsSec,
                 secondaryWatermarkGainDb: subtleGainDb,
+                loudnormApplied: loudnormState.applied,
+                loudnormError: loudnormState.errorMessage,
+                measuredLufs: loudnormState.measurement?.input_i ?? null,
+                measuredTruePeakDb: loudnormState.measurement?.input_tp ?? null,
             });
         }
         finally {
             await fs.rm(tempDir, { recursive: true, force: true });
+        }
+    }
+    /**
+     * Optionally normalize the master to a temp WAV before watermarking.
+     *
+     * Critical guarantees:
+     *   - Reads the feature flag and targets from site_audio_settings ONLY
+     *     (with config-level env var fallbacks if the row is missing them).
+     *   - Returns `inputForWatermark = masterFilePath` whenever loudnorm is
+     *     disabled OR fails, so the watermark pipeline always has something
+     *     to chew on.
+     *   - Never throws on loudnorm errors — they are surfaced via
+     *     `errorMessage` and persisted to `products.normalization_error`,
+     *     but the surrounding job continues.
+     *   - The master file on Supabase Storage is never read-back, modified,
+     *     or re-uploaded by this method.
+     */
+    async maybeNormalizeMaster(params) {
+        const { job, product, settings, masterFilePath, normalizedFilePath, signal } = params;
+        // site_audio_settings is the source of truth; env-derived defaults
+        // (from config) are only consulted when the column is null/undefined.
+        const enabled = settings.loudnorm_enabled === null || settings.loudnorm_enabled === undefined
+            ? this.config.loudnormEnabledDefault
+            : settings.loudnorm_enabled === true;
+        if (!enabled) {
+            // Feature flag OFF — pipeline behaves exactly as before this change.
+            // We DO NOT overwrite the existing measured_* / normalization_* columns,
+            // so prior measurements survive a flag toggle.
+            return {
+                inputForWatermark: masterFilePath,
+                applied: false,
+                measurement: null,
+                errorMessage: null,
+                productPatch: {},
+            };
+        }
+        const targets = {
+            targetLufs: Number.isFinite(settings.target_lufs)
+                ? Number(settings.target_lufs)
+                : this.config.loudnormTargetLufsDefault,
+            targetTruePeakDb: Number.isFinite(settings.target_true_peak_db)
+                ? Number(settings.target_true_peak_db)
+                : this.config.loudnormTargetTruePeakDbDefault,
+            targetLra: Number.isFinite(settings.target_lra)
+                ? Number(settings.target_lra)
+                : this.config.loudnormTargetLraDefault,
+        };
+        try {
+            const analysis = await analyzeLoudness(masterFilePath, targets, {
+                ffmpegBin: this.config.ffmpegBin,
+                ffmpegTimeoutMs: Math.min(this.config.ffmpegTimeoutMs, this.config.jobTimeoutMs),
+                ...(signal ? { signal } : {}),
+            });
+            throwIfAborted(signal);
+            await applyLoudnorm(masterFilePath, normalizedFilePath, analysis, targets, {
+                ffmpegBin: this.config.ffmpegBin,
+                ffmpegTimeoutMs: Math.min(this.config.ffmpegTimeoutMs, this.config.jobTimeoutMs),
+                sampleRate: this.config.previewAudioSampleRate,
+                ...(signal ? { signal } : {}),
+            });
+            throwIfAborted(signal);
+            log("info", "loudnorm_applied", {
+                workerId: this.config.workerId,
+                jobId: job.id,
+                productId: product.id,
+                measured: analysis,
+                targets,
+            });
+            return {
+                inputForWatermark: normalizedFilePath,
+                applied: true,
+                measurement: analysis,
+                errorMessage: null,
+                productPatch: {
+                    measured_lufs: Number(analysis.input_i.toFixed(2)),
+                    measured_true_peak_db: Number(analysis.input_tp.toFixed(2)),
+                    normalization_applied: true,
+                    normalization_error: null,
+                },
+            };
+        }
+        catch (error) {
+            // If the abort signal fired, re-throw — the surrounding job loop
+            // expects the abort error to bubble. Anything else is contained.
+            if (signal?.aborted) {
+                throw error;
+            }
+            const message = toErrorMessage(error);
+            log("warn", "loudnorm_failed_falling_back_to_master", {
+                workerId: this.config.workerId,
+                jobId: job.id,
+                productId: product.id,
+                error: message,
+            });
+            return {
+                inputForWatermark: masterFilePath,
+                applied: false,
+                measurement: null,
+                errorMessage: message,
+                productPatch: {
+                    normalization_applied: false,
+                    normalization_error: message,
+                },
+            };
         }
     }
     async failClaimedJob(job, error) {

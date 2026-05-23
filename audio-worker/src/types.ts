@@ -20,6 +20,16 @@ export interface WorkerConfig {
   jobTimeoutMs: number;
   tempRoot: string;
   shutdownGraceMs: number;
+  // Loudness normalization defaults.
+  //
+  // site_audio_settings is the source of truth (loudnorm_enabled, target_*)
+  // and those columns are NOT NULL with safe defaults. These env-derived
+  // fallbacks only kick in if a column is somehow NULL or unreadable —
+  // they MUST NOT silently turn loudnorm ON.
+  loudnormEnabledDefault: boolean;
+  loudnormTargetLufsDefault: number;
+  loudnormTargetTruePeakDbDefault: number;
+  loudnormTargetLraDefault: number;
 }
 
 export interface AudioProcessingJobRow {
@@ -56,6 +66,10 @@ export interface ProductRow {
   processing_status: string | null;
   processing_error: string | null;
   processed_at: string | null;
+  measured_lufs: number | null;
+  measured_true_peak_db: number | null;
+  normalization_applied: boolean | null;
+  normalization_error: string | null;
 }
 
 export interface SiteAudioSettingsRow {
@@ -65,8 +79,26 @@ export interface SiteAudioSettingsRow {
   gain_db: number | null;
   min_interval_sec: number | null;
   max_interval_sec: number | null;
+  loudnorm_enabled: boolean | null;
+  target_lufs: number | null;
+  target_true_peak_db: number | null;
+  target_lra: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface LoudnessTargets {
+  targetLufs: number;
+  targetTruePeakDb: number;
+  targetLra: number;
+}
+
+export interface LoudnessAnalysis {
+  input_i: number;
+  input_tp: number;
+  input_lra: number;
+  input_thresh: number;
+  target_offset: number;
 }
 
 export interface StorageObjectRef {
