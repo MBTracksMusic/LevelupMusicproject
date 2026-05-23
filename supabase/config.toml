@@ -70,6 +70,9 @@ verify_jwt = false
 [functions.collect-pipeline-metrics]
 verify_jwt = false
 
+[functions.enqueue-loudness-backfill]
+verify_jwt = false
+
 [functions.enqueue-preview-reprocess]
 verify_jwt = false
 

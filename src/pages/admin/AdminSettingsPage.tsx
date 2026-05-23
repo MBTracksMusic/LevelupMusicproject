@@ -77,6 +77,12 @@ interface ReprocessStats {
   skipped: number;
 }
 
+interface LoudnessBackfillStats {
+  enqueued: number;
+  skipped: number;
+  candidate: number;
+}
+
 interface WatermarkQueueStats {
   queued: number;
   processing: number;
@@ -229,6 +235,8 @@ export function AdminSettingsPage() {
   const [isEnqueueingReprocess, setIsEnqueueingReprocess] = useState(false);
   const [selectedWatermarkFile, setSelectedWatermarkFile] = useState<File | null>(null);
   const [reprocessStats, setReprocessStats] = useState<ReprocessStats | null>(null);
+  const [isEnqueueingLoudnessBackfill, setIsEnqueueingLoudnessBackfill] = useState(false);
+  const [loudnessBackfillStats, setLoudnessBackfillStats] = useState<LoudnessBackfillStats | null>(null);
   const [watermarkPreviewUrl, setWatermarkPreviewUrl] = useState<string | null>(null);
   const [watermarkQueueStats, setWatermarkQueueStats] = useState<WatermarkQueueStats>(EMPTY_WATERMARK_QUEUE_STATS);
   const [isWatermarkQueueLoading, setIsWatermarkQueueLoading] = useState(false);
@@ -729,6 +737,65 @@ export function AdminSettingsPage() {
     setIsEnqueueingReprocess(false);
   };
 
+  const handleEnqueueLoudnessBackfill = async () => {
+    if (isEnqueueingLoudnessBackfill) return;
+
+    const confirmMessage = t('admin.settingsPage.loudnessBackfillConfirm');
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsEnqueueingLoudnessBackfill(true);
+
+    try {
+      const { data, error } = await invokeWithAuth('enqueue-loudness-backfill', {});
+
+      if (error) {
+        console.error('enqueue-loudness-backfill invoke error', error);
+
+        // The edge function surfaces RPC errors as { code: 'loudnorm_disabled' | ... }.
+        // For these, we show a more helpful toast.
+        const rawDetails = (error as { context?: { responseBody?: string } }).context?.responseBody;
+        let knownCode: string | null = null;
+        if (typeof rawDetails === 'string' && rawDetails.length > 0) {
+          try {
+            const parsed = JSON.parse(rawDetails) as { code?: string };
+            if (typeof parsed.code === 'string') knownCode = parsed.code;
+          } catch {
+            // ignore JSON parse error, fall back to generic toast
+          }
+        }
+
+        if (knownCode === 'loudnorm_disabled') {
+          toast.error(t('admin.settingsPage.loudnessBackfillFlagRequired'));
+        } else if (knownCode === 'active_watermark_required') {
+          toast.error(t('admin.settingsPage.loudnessBackfillWatermarkRequired'));
+        } else {
+          toast.error(t('admin.settingsPage.loudnessBackfillError'));
+        }
+
+        setIsEnqueueingLoudnessBackfill(false);
+        return;
+      }
+
+      const payload = (data ?? {}) as {
+        enqueued_count?: number;
+        skipped_count?: number;
+        candidate_count?: number;
+      };
+      const count = Number.isFinite(payload.enqueued_count) ? Number(payload.enqueued_count) : 0;
+      const skipped = Number.isFinite(payload.skipped_count) ? Number(payload.skipped_count) : 0;
+      const candidate = Number.isFinite(payload.candidate_count) ? Number(payload.candidate_count) : 0;
+      setLoudnessBackfillStats({ enqueued: count, skipped, candidate });
+      void loadWatermarkQueueStats();
+      toast.success(t('admin.settingsPage.loudnessBackfillSuccess', { count, skipped }));
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : t('admin.settingsPage.loudnessBackfillError');
+      toast.error(errorMsg);
+    }
+    setIsEnqueueingLoudnessBackfill(false);
+  };
+
   const handleAiAutoExecSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsAiAutoExecSaving(true);
@@ -956,6 +1023,19 @@ export function AdminSettingsPage() {
                 </p>
               </>
             )}
+            {loudnessBackfillStats && (
+              <>
+                <p>
+                  <span className="text-zinc-500">{t('admin.settingsPage.loudnessBackfillCandidateLabel')}:</span> {loudnessBackfillStats.candidate}
+                </p>
+                <p>
+                  <span className="text-zinc-500">{t('admin.settingsPage.jobsEnqueuedLabel')}:</span> {loudnessBackfillStats.enqueued}
+                </p>
+                <p>
+                  <span className="text-zinc-500">{t('admin.settingsPage.jobsSkippedLabel')}:</span> {loudnessBackfillStats.skipped}
+                </p>
+              </>
+            )}
             <p>
               <span className="text-zinc-500">Queue previews:</span>{' '}
               {isWatermarkQueueLoading
@@ -1008,6 +1088,15 @@ export function AdminSettingsPage() {
               disabled={isEnqueueingReprocess}
             >
               {t('admin.settingsPage.reprocessAction')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleEnqueueLoudnessBackfill}
+              isLoading={isEnqueueingLoudnessBackfill}
+              disabled={isEnqueueingLoudnessBackfill}
+            >
+              {t('admin.settingsPage.loudnessBackfillAction')}
             </Button>
           </div>
         </form>
