@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_whitelist: {
+        Row: {
+          email: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          is_active: boolean
+          note: string | null
+          user_id: string | null
+        }
+        Insert: {
+          email: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          is_active?: boolean
+          note?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          email?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          is_active?: boolean
+          note?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       admin_action_audit_log: {
         Row: {
           action_type: string
@@ -70,13 +100,6 @@ export type Database = {
             columns: ["admin_user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_action_audit_log_admin_user_id_fkey"
-            columns: ["admin_user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -165,13 +188,6 @@ export type Database = {
             foreignKeyName: "admin_battle_applications_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_battle_applications_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -186,13 +202,6 @@ export type Database = {
             foreignKeyName: "admin_battle_applications_proposed_product_id_fkey"
             columns: ["proposed_product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "admin_battle_applications_proposed_product_id_fkey"
-            columns: ["proposed_product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -201,13 +210,6 @@ export type Database = {
             columns: ["proposed_product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "admin_battle_applications_proposed_product_id_fkey"
-            columns: ["proposed_product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -300,13 +302,6 @@ export type Database = {
             foreignKeyName: "admin_battle_campaigns_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_battle_campaigns_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -335,13 +330,6 @@ export type Database = {
             foreignKeyName: "admin_battle_campaigns_selected_producer1_id_fkey"
             columns: ["selected_producer1_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_battle_campaigns_selected_producer1_id_fkey"
-            columns: ["selected_producer1_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -364,13 +352,6 @@ export type Database = {
             columns: ["selected_producer2_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_battle_campaigns_selected_producer2_id_fkey"
-            columns: ["selected_producer2_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -427,13 +408,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "admin_notifications_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -520,13 +494,6 @@ export type Database = {
             foreignKeyName: "ai_admin_actions_executed_by_fkey"
             columns: ["executed_by"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "ai_admin_actions_executed_by_fkey"
-            columns: ["executed_by"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -587,13 +554,6 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "ai_training_feedback_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -705,13 +665,6 @@ export type Database = {
             foreignKeyName: "audio_processing_jobs_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "audio_processing_jobs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -720,13 +673,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "audio_processing_jobs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -791,13 +737,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "audit_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -883,13 +822,6 @@ export type Database = {
             foreignKeyName: "battle_comments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_comments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -962,13 +894,6 @@ export type Database = {
             foreignKeyName: "battle_product_snapshots_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_product_snapshots_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -983,13 +908,6 @@ export type Database = {
             foreignKeyName: "battle_product_snapshots_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_product_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -998,13 +916,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_product_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1080,13 +991,6 @@ export type Database = {
             foreignKeyName: "battle_quality_snapshots_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_quality_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1095,13 +999,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_quality_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1187,13 +1084,6 @@ export type Database = {
             foreignKeyName: "battle_suggestions_candidate_user_id_fkey"
             columns: ["candidate_user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_suggestions_candidate_user_id_fkey"
-            columns: ["candidate_user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1216,13 +1106,6 @@ export type Database = {
             columns: ["requester_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_suggestions_requester_id_fkey"
-            columns: ["requester_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -1295,13 +1178,6 @@ export type Database = {
             foreignKeyName: "battle_vote_feedback_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1323,13 +1199,6 @@ export type Database = {
             foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
             columns: ["winner_product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["winner_product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1338,13 +1207,6 @@ export type Database = {
             columns: ["winner_product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["winner_product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1404,13 +1266,6 @@ export type Database = {
             foreignKeyName: "battle_votes_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_votes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1433,13 +1288,6 @@ export type Database = {
             columns: ["voted_for_producer_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battle_votes_voted_for_producer_id_fkey"
-            columns: ["voted_for_producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -1565,13 +1413,6 @@ export type Database = {
             foreignKeyName: "battles_producer1_id_fkey"
             columns: ["producer1_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battles_producer1_id_fkey"
-            columns: ["producer1_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1600,13 +1441,6 @@ export type Database = {
             foreignKeyName: "battles_producer2_id_fkey"
             columns: ["producer2_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battles_producer2_id_fkey"
-            columns: ["producer2_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -1621,13 +1455,6 @@ export type Database = {
             foreignKeyName: "battles_product1_id_fkey"
             columns: ["product1_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battles_product1_id_fkey"
-            columns: ["product1_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1636,13 +1463,6 @@ export type Database = {
             columns: ["product1_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battles_product1_id_fkey"
-            columns: ["product1_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1656,13 +1476,6 @@ export type Database = {
             foreignKeyName: "battles_product2_id_fkey"
             columns: ["product2_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battles_product2_id_fkey"
-            columns: ["product2_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1671,13 +1484,6 @@ export type Database = {
             columns: ["product2_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battles_product2_id_fkey"
-            columns: ["product2_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1699,13 +1505,6 @@ export type Database = {
             columns: ["winner_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "battles_winner_id_fkey"
-            columns: ["winner_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -1761,13 +1560,6 @@ export type Database = {
             foreignKeyName: "cart_items_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cart_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -1776,13 +1568,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cart_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -1804,13 +1589,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "cart_items_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -2148,13 +1926,6 @@ export type Database = {
             foreignKeyName: "credit_purchase_claims_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "credit_purchase_claims_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -2163,13 +1934,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "credit_purchase_claims_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -2226,13 +1990,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "credit_purchase_claims_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -2311,13 +2068,6 @@ export type Database = {
             foreignKeyName: "download_logs_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "download_logs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -2326,13 +2076,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "download_logs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -2389,13 +2132,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "download_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -2568,13 +2304,6 @@ export type Database = {
             foreignKeyName: "entitlements_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "entitlements_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -2583,13 +2312,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "entitlements_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -2646,13 +2368,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "entitlements_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -2939,13 +2654,6 @@ export type Database = {
             foreignKeyName: "exclusive_locks_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: true
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "exclusive_locks_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: true
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -2954,13 +2662,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: true
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "exclusive_locks_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: true
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -2982,13 +2683,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "exclusive_locks_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -3196,100 +2890,11 @@ export type Database = {
             foreignKeyName: "forum_likes_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_likes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "forum_likes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "weekly_leaderboard"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      forum_post_attachments: {
-        Row: {
-          bucket: string
-          created_at: string
-          file_size: number
-          id: string
-          media_type: string
-          mime_type: string
-          original_filename: string | null
-          post_id: string
-          storage_path: string
-          user_id: string
-        }
-        Insert: {
-          bucket?: string
-          created_at?: string
-          file_size: number
-          id?: string
-          media_type: string
-          mime_type: string
-          original_filename?: string | null
-          post_id: string
-          storage_path: string
-          user_id: string
-        }
-        Update: {
-          bucket?: string
-          created_at?: string
-          file_size?: number
-          id?: string
-          media_type?: string
-          mime_type?: string
-          original_filename?: string | null
-          post_id?: string
-          storage_path?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "forum_post_attachments_post_id_fkey"
-            columns: ["post_id"]
-            isOneToOne: true
-            referencedRelation: "forum_posts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "forum_post_attachments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "forum_post_attachments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_post_attachments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_post_attachments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "forum_post_attachments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "weekly_leaderboard"
@@ -3366,13 +2971,6 @@ export type Database = {
             foreignKeyName: "forum_moderation_logs_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_moderation_logs_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -3389,6 +2987,81 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "forum_topics"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      forum_post_attachments: {
+        Row: {
+          bucket: string
+          created_at: string
+          file_size: number
+          id: string
+          media_type: string
+          mime_type: string
+          original_filename: string | null
+          post_id: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          bucket?: string
+          created_at?: string
+          file_size: number
+          id?: string
+          media_type: string
+          mime_type: string
+          original_filename?: string | null
+          post_id: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          file_size?: number
+          id?: string
+          media_type?: string
+          mime_type?: string
+          original_filename?: string | null
+          post_id?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forum_post_attachments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: true
+            referencedRelation: "forum_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_post_attachments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_post_attachments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "forum_post_attachments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forum_post_attachments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_leaderboard"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -3431,13 +3104,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_post_likes_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -3550,13 +3216,6 @@ export type Database = {
             foreignKeyName: "forum_posts_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_posts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -3647,13 +3306,6 @@ export type Database = {
             foreignKeyName: "forum_topics_deleted_by_fkey"
             columns: ["deleted_by"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_topics_deleted_by_fkey"
-            columns: ["deleted_by"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -3676,13 +3328,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "forum_topics_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -3853,13 +3498,6 @@ export type Database = {
             foreignKeyName: "label_requests_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "label_requests_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -3882,13 +3520,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "label_requests_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -4034,13 +3665,6 @@ export type Database = {
             columns: ["resolved_by"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "monitoring_alert_events_resolved_by_fkey"
-            columns: ["resolved_by"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -4267,13 +3891,6 @@ export type Database = {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "notifications_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -4340,13 +3957,6 @@ export type Database = {
             foreignKeyName: "play_events_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "play_events_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -4355,13 +3965,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "play_events_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -4383,13 +3986,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "play_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -4441,13 +4037,6 @@ export type Database = {
             foreignKeyName: "preview_access_logs_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "preview_access_logs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -4456,13 +4045,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "preview_access_logs_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -4484,13 +4066,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "preview_access_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -4536,6 +4111,33 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      producer_campaigns: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          label: string
+          max_slots: number | null
+          trial_duration: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          label: string
+          max_slots?: number | null
+          trial_duration?: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          label?: string
+          max_slots?: number | null
+          trial_duration?: string
+          type?: string
         }
         Relationships: []
       }
@@ -4612,6 +4214,7 @@ export type Database = {
           current_period_end: string
           id: string
           is_producer_active: boolean
+          producer_tier: Database["public"]["Enums"]["producer_tier_type"]
           stripe_customer_id: string
           stripe_subscription_id: string
           subscription_status: string
@@ -4624,6 +4227,7 @@ export type Database = {
           current_period_end: string
           id?: string
           is_producer_active?: boolean
+          producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           stripe_customer_id: string
           stripe_subscription_id: string
           subscription_status: string
@@ -4636,6 +4240,7 @@ export type Database = {
           current_period_end?: string
           id?: string
           is_producer_active?: boolean
+          producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           stripe_customer_id?: string
           stripe_subscription_id?: string
           subscription_status?: string
@@ -4680,13 +4285,6 @@ export type Database = {
             foreignKeyName: "product_files_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_files_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -4695,13 +4293,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_files_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -4765,13 +4356,6 @@ export type Database = {
             foreignKeyName: "product_licenses_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_licenses_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -4780,13 +4364,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_licenses_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -4812,8 +4389,8 @@ export type Database = {
           file_format: string | null
           genre_id: string | null
           id: string
-          is_exclusive: boolean
           is_elite: boolean
+          is_exclusive: boolean
           is_published: boolean
           is_sold: boolean
           key_signature: string | null
@@ -4821,7 +4398,11 @@ export type Database = {
           license_terms: Json | null
           master_path: string | null
           master_url: string | null
+          measured_lufs: number | null
+          measured_true_peak_db: number | null
           mood_id: string | null
+          normalization_applied: boolean
+          normalization_error: string | null
           original_beat_id: string | null
           parent_product_id: string | null
           play_count: number
@@ -4860,8 +4441,8 @@ export type Database = {
           file_format?: string | null
           genre_id?: string | null
           id?: string
-          is_exclusive?: boolean
           is_elite?: boolean
+          is_exclusive?: boolean
           is_published?: boolean
           is_sold?: boolean
           key_signature?: string | null
@@ -4869,7 +4450,11 @@ export type Database = {
           license_terms?: Json | null
           master_path?: string | null
           master_url?: string | null
+          measured_lufs?: number | null
+          measured_true_peak_db?: number | null
           mood_id?: string | null
+          normalization_applied?: boolean
+          normalization_error?: string | null
           original_beat_id?: string | null
           parent_product_id?: string | null
           play_count?: number
@@ -4908,8 +4493,8 @@ export type Database = {
           file_format?: string | null
           genre_id?: string | null
           id?: string
-          is_exclusive?: boolean
           is_elite?: boolean
+          is_exclusive?: boolean
           is_published?: boolean
           is_sold?: boolean
           key_signature?: string | null
@@ -4917,7 +4502,11 @@ export type Database = {
           license_terms?: Json | null
           master_path?: string | null
           master_url?: string | null
+          measured_lufs?: number | null
+          measured_true_peak_db?: number | null
           mood_id?: string | null
+          normalization_applied?: boolean
+          normalization_error?: string | null
           original_beat_id?: string | null
           parent_product_id?: string | null
           play_count?: number
@@ -4962,13 +4551,6 @@ export type Database = {
             foreignKeyName: "products_original_beat_id_fkey"
             columns: ["original_beat_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -4977,13 +4559,6 @@ export type Database = {
             columns: ["original_beat_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -4997,13 +4572,6 @@ export type Database = {
             foreignKeyName: "products_parent_product_id_fkey"
             columns: ["parent_product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -5012,13 +4580,6 @@ export type Database = {
             columns: ["parent_product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -5040,13 +4601,6 @@ export type Database = {
             columns: ["producer_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -5075,13 +4629,6 @@ export type Database = {
             columns: ["sold_to_user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_sold_to_user_id_fkey"
-            columns: ["sold_to_user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -5254,13 +4801,6 @@ export type Database = {
             foreignKeyName: "purchases_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "purchases_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -5275,13 +4815,6 @@ export type Database = {
             foreignKeyName: "purchases_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchases_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -5290,13 +4823,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchases_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -5318,13 +4844,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "purchases_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -5411,13 +4930,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "reputation_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -5554,13 +5066,6 @@ export type Database = {
             foreignKeyName: "rpc_rate_limit_hits_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "rpc_rate_limit_hits_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -5658,13 +5163,6 @@ export type Database = {
             foreignKeyName: "season_results_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "season_results_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -5718,13 +5216,6 @@ export type Database = {
             foreignKeyName: "security_events_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "security_events_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -5741,41 +5232,65 @@ export type Database = {
         Row: {
           id: string
           launch_date: string | null
+          launch_message_public: string | null
+          launch_message_waitlist_pending: string | null
+          launch_message_whitelist: string | null
           launch_video_url: string | null
           maintenance_mode: boolean
+          pricing_producer_promo: Json | null
           show_free_plan: boolean
+          show_homepage_badge: boolean
           show_homepage_stats: boolean
+          show_pricing_plans: boolean
           show_producer_elite_plan: boolean
           show_producer_plan: boolean
           show_user_premium_credits: boolean
           show_user_premium_plan: boolean
+          site_access_mode: string
           updated_at: string
+          waitlist_count_display: number
         }
         Insert: {
           id?: string
           launch_date?: string | null
+          launch_message_public?: string | null
+          launch_message_waitlist_pending?: string | null
+          launch_message_whitelist?: string | null
           launch_video_url?: string | null
           maintenance_mode?: boolean
+          pricing_producer_promo?: Json | null
           show_free_plan?: boolean
+          show_homepage_badge?: boolean
           show_homepage_stats?: boolean
+          show_pricing_plans?: boolean
           show_producer_elite_plan?: boolean
           show_producer_plan?: boolean
           show_user_premium_credits?: boolean
           show_user_premium_plan?: boolean
+          site_access_mode?: string
           updated_at?: string
+          waitlist_count_display?: number
         }
         Update: {
           id?: string
           launch_date?: string | null
+          launch_message_public?: string | null
+          launch_message_waitlist_pending?: string | null
+          launch_message_whitelist?: string | null
           launch_video_url?: string | null
           maintenance_mode?: boolean
+          pricing_producer_promo?: Json | null
           show_free_plan?: boolean
+          show_homepage_badge?: boolean
           show_homepage_stats?: boolean
+          show_pricing_plans?: boolean
           show_producer_elite_plan?: boolean
           show_producer_plan?: boolean
           show_user_premium_credits?: boolean
           show_user_premium_plan?: boolean
+          site_access_mode?: string
           updated_at?: string
+          waitlist_count_display?: number
         }
         Relationships: []
       }
@@ -5785,8 +5300,12 @@ export type Database = {
           enabled: boolean
           gain_db: number
           id: string
+          loudnorm_enabled: boolean
           max_interval_sec: number
           min_interval_sec: number
+          target_lra: number
+          target_lufs: number
+          target_true_peak_db: number
           updated_at: string
           watermark_audio_path: string | null
         }
@@ -5795,8 +5314,12 @@ export type Database = {
           enabled?: boolean
           gain_db?: number
           id?: string
+          loudnorm_enabled?: boolean
           max_interval_sec?: number
           min_interval_sec?: number
+          target_lra?: number
+          target_lufs?: number
+          target_true_peak_db?: number
           updated_at?: string
           watermark_audio_path?: string | null
         }
@@ -5805,8 +5328,12 @@ export type Database = {
           enabled?: boolean
           gain_db?: number
           id?: string
+          loudnorm_enabled?: boolean
           max_interval_sec?: number
           min_interval_sec?: number
+          target_lra?: number
+          target_lufs?: number
+          target_true_peak_db?: number
           updated_at?: string
           watermark_audio_path?: string | null
         }
@@ -5901,13 +5428,6 @@ export type Database = {
             foreignKeyName: "stripe_payout_failures_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "stripe_payout_failures_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -5974,13 +5494,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "user_badges_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -6185,13 +5698,6 @@ export type Database = {
             foreignKeyName: "user_interactions_beat_id_fkey"
             columns: ["beat_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_interactions_beat_id_fkey"
-            columns: ["beat_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -6200,13 +5706,6 @@ export type Database = {
             columns: ["beat_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_interactions_beat_id_fkey"
-            columns: ["beat_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -6256,13 +5755,6 @@ export type Database = {
             foreignKeyName: "user_music_preferences_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "user_music_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -6286,6 +5778,7 @@ export type Database = {
           battles_completed: number
           battles_participated: number
           bio: string | null
+          commission_rate_override: number | null
           confirmed_at: string | null
           created_at: string
           delete_reason: string | null
@@ -6294,13 +5787,16 @@ export type Database = {
           elo_rating: number
           email: string
           engagement_score: number
+          founding_trial_start: string | null
           full_name: string | null
           id: string
           is_confirmed: boolean
           is_deleted: boolean
+          is_founding_producer: boolean
           is_producer_active: boolean
           is_verified: boolean
           language: string | null
+          producer_campaign_type: string | null
           producer_tier: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -6329,6 +5825,7 @@ export type Database = {
           battles_completed?: number
           battles_participated?: number
           bio?: string | null
+          commission_rate_override?: number | null
           confirmed_at?: string | null
           created_at?: string
           delete_reason?: string | null
@@ -6337,13 +5834,16 @@ export type Database = {
           elo_rating?: number
           email: string
           engagement_score?: number
+          founding_trial_start?: string | null
           full_name?: string | null
           id: string
           is_confirmed?: boolean
           is_deleted?: boolean
+          is_founding_producer?: boolean
           is_producer_active?: boolean
           is_verified?: boolean
           language?: string | null
+          producer_campaign_type?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -6372,6 +5872,7 @@ export type Database = {
           battles_completed?: number
           battles_participated?: number
           bio?: string | null
+          commission_rate_override?: number | null
           confirmed_at?: string | null
           created_at?: string
           delete_reason?: string | null
@@ -6380,13 +5881,16 @@ export type Database = {
           elo_rating?: number
           email?: string
           engagement_score?: number
+          founding_trial_start?: string | null
           full_name?: string | null
           id?: string
           is_confirmed?: boolean
           is_deleted?: boolean
+          is_founding_producer?: boolean
           is_producer_active?: boolean
           is_verified?: boolean
           language?: string | null
+          producer_campaign_type?: string | null
           producer_tier?: Database["public"]["Enums"]["producer_tier_type"]
           producer_verified_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -6405,7 +5909,15 @@ export type Database = {
           username?: string | null
           website_url?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_producer_campaign_type_fkey"
+            columns: ["producer_campaign_type"]
+            isOneToOne: false
+            referencedRelation: "producer_campaigns"
+            referencedColumns: ["type"]
+          },
+        ]
       }
       user_reputation: {
         Row: {
@@ -6460,13 +5972,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "user_reputation_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -6547,19 +6052,37 @@ export type Database = {
       }
       waitlist: {
         Row: {
+          accepted_at: string | null
+          campaign_type: string | null
           created_at: string
           email: string
           id: string
+          notes: string | null
+          source: string
+          status: string
+          user_id: string | null
         }
         Insert: {
+          accepted_at?: string | null
+          campaign_type?: string | null
           created_at?: string
           email: string
           id?: string
+          notes?: string | null
+          source?: string
+          status?: string
+          user_id?: string | null
         }
         Update: {
+          accepted_at?: string | null
+          campaign_type?: string | null
           created_at?: string
           email?: string
           id?: string
+          notes?: string | null
+          source?: string
+          status?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -6653,13 +6176,6 @@ export type Database = {
             foreignKeyName: "wishlists_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "wishlists_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -6668,13 +6184,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "wishlists_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -6696,13 +6205,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "wishlists_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -6816,13 +6318,6 @@ export type Database = {
             foreignKeyName: "battle_quality_snapshots_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_quality_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -6831,13 +6326,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_quality_snapshots_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -6859,13 +6347,6 @@ export type Database = {
             columns: ["producer_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -6900,13 +6381,6 @@ export type Database = {
             foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -6915,13 +6389,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -6945,13 +6412,6 @@ export type Database = {
             foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -6960,13 +6420,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "battle_vote_feedback_winner_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -7015,6 +6468,53 @@ export type Database = {
           votes_today: number | null
           votes_total: number | null
           winner_id: string | null
+        }
+        Relationships: []
+      }
+      elite_catalog_products: {
+        Row: {
+          archived_at: string | null
+          bpm: number | null
+          cover_image_url: string | null
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          early_access_until: string | null
+          exclusive_preview_url: string | null
+          file_format: string | null
+          genre_id: string | null
+          id: string | null
+          is_elite: boolean | null
+          is_exclusive: boolean | null
+          is_published: boolean | null
+          is_sold: boolean | null
+          key_signature: string | null
+          license_terms: Json | null
+          mood_id: string | null
+          original_beat_id: string | null
+          parent_product_id: string | null
+          play_count: number | null
+          preview_url: string | null
+          price: number | null
+          producer_avatar_url: string | null
+          producer_id: string | null
+          producer_is_active: boolean | null
+          producer_raw_username: string | null
+          producer_username: string | null
+          product_type: Database["public"]["Enums"]["product_type"] | null
+          slug: string | null
+          sold_at: string | null
+          sold_to_user_id: string | null
+          status: string | null
+          tags: string[] | null
+          title: string | null
+          updated_at: string | null
+          version: number | null
+          version_number: number | null
+          watermark_profile_id: string | null
+          watermarked_bucket: string | null
+          watermarked_path: string | null
         }
         Relationships: []
       }
@@ -7113,13 +6613,6 @@ export type Database = {
             foreignKeyName: "purchases_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "purchases_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -7161,13 +6654,6 @@ export type Database = {
             foreignKeyName: "purchases_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "purchases_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -7179,23 +6665,6 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
-      }
-      forum_public_profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string | null
-          level: number | null
-          producer_tier:
-            | Database["public"]["Enums"]["producer_tier_type"]
-            | null
-          rank_tier: string | null
-          reputation_score: number | null
-          updated_at: string | null
-          user_id: string | null
-          username: string | null
-          xp: number | null
-        }
-        Relationships: []
       }
       forum_public_profiles_public: {
         Row: {
@@ -7233,7 +6702,7 @@ export type Database = {
           battles_completed: number | null
           battles_participated: number | null
           bio: string | null
-          campaign_trial_duration: unknown | null
+          campaign_trial_duration: string | null
           can_access_producer_features: boolean | null
           confirmed_at: string | null
           created_at: string | null
@@ -7266,87 +6735,15 @@ export type Database = {
           username: string | null
           website_url: string | null
         }
-        Insert: {
-          account_type?: string | null
-          avatar_url?: string | null
-          battle_refusal_count?: number | null
-          battles_completed?: number | null
-          battles_participated?: number | null
-          bio?: string | null
-          campaign_trial_duration?: unknown | null
-          can_access_producer_features?: boolean | null
-          confirmed_at?: string | null
-          created_at?: string | null
-          delete_reason?: string | null
-          deleted_at?: string | null
-          deleted_label?: string | null
-          engagement_score?: number | null
-          founding_trial_active?: boolean | null
-          founding_trial_end?: string | null
-          founding_trial_expired?: boolean | null
-          founding_trial_start?: string | null
-          full_name?: string | null
-          id?: string | null
-          is_deleted?: boolean | null
-          is_founding_producer?: boolean | null
-          is_producer_active?: boolean | null
-          is_verified?: boolean | null
-          language?: string | null
-          producer_campaign_label?: string | null
-          producer_campaign_type?: string | null
-          producer_tier?:
-            | Database["public"]["Enums"]["producer_tier_type"]
-            | null
-          producer_verified_at?: string | null
-          role?: Database["public"]["Enums"]["user_role"] | null
-          social_links?: Json | null
-          total_purchases?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-          username?: string | null
-          website_url?: string | null
-        }
-        Update: {
-          account_type?: string | null
-          avatar_url?: string | null
-          battle_refusal_count?: number | null
-          battles_completed?: number | null
-          battles_participated?: number | null
-          bio?: string | null
-          campaign_trial_duration?: unknown | null
-          can_access_producer_features?: boolean | null
-          confirmed_at?: string | null
-          created_at?: string | null
-          delete_reason?: string | null
-          deleted_at?: string | null
-          deleted_label?: string | null
-          engagement_score?: number | null
-          founding_trial_active?: boolean | null
-          founding_trial_end?: string | null
-          founding_trial_expired?: boolean | null
-          founding_trial_start?: string | null
-          full_name?: string | null
-          id?: string | null
-          is_deleted?: boolean | null
-          is_founding_producer?: boolean | null
-          is_producer_active?: boolean | null
-          is_verified?: boolean | null
-          language?: string | null
-          producer_campaign_label?: string | null
-          producer_campaign_type?: string | null
-          producer_tier?:
-            | Database["public"]["Enums"]["producer_tier_type"]
-            | null
-          producer_verified_at?: string | null
-          role?: Database["public"]["Enums"]["user_role"] | null
-          social_links?: Json | null
-          total_purchases?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-          username?: string | null
-          website_url?: string | null
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profiles_producer_campaign_type_fkey"
+            columns: ["producer_campaign_type"]
+            isOneToOne: false
+            referencedRelation: "producer_campaigns"
+            referencedColumns: ["type"]
+          },
+        ]
       }
       pipeline_health: {
         Row: {
@@ -7378,43 +6775,7 @@ export type Database = {
           top_10_flag: boolean | null
           updated_at: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "weekly_leaderboard"
-            referencedColumns: ["user_id"]
-          },
-        ]
+        Relationships: []
       }
       producer_revenue_view: {
         Row: {
@@ -7433,13 +6794,6 @@ export type Database = {
             foreignKeyName: "purchases_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchases_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -7448,13 +6802,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "purchases_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
             referencedColumns: ["id"]
           },
           {
@@ -7488,13 +6835,6 @@ export type Database = {
             columns: ["producer_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -7592,134 +6932,23 @@ export type Database = {
           watermarked_bucket: string | null
           watermarked_path: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "products_genre_id_fkey"
-            columns: ["genre_id"]
-            isOneToOne: false
-            referencedRelation: "genres"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_mood_id_fkey"
-            columns: ["mood_id"]
-            isOneToOne: false
-            referencedRelation: "moods"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_original_beat_id_fkey"
-            columns: ["original_beat_id"]
-            isOneToOne: false
-            referencedRelation: "public_products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "producer_beats_ranked"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "products_public"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "public_catalog_products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_parent_product_id_fkey"
-            columns: ["parent_product_id"]
-            isOneToOne: false
-            referencedRelation: "public_products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
-            referencedRelation: "weekly_leaderboard"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_watermark_profile_id_fkey"
-            columns: ["watermark_profile_id"]
-            isOneToOne: false
-            referencedRelation: "watermark_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      public_home_battles_preview: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          producer1_id: string | null
+          producer1_username: string | null
+          producer2_id: string | null
+          producer2_username: string | null
+          slug: string | null
+          status: Database["public"]["Enums"]["battle_status"] | null
+          title: string | null
+          votes_producer1: number | null
+          votes_producer2: number | null
+        }
+        Relationships: []
       }
       public_producer_profiles: {
         Row: {
@@ -7885,13 +7114,6 @@ export type Database = {
             foreignKeyName: "products_producer_id_fkey"
             columns: ["producer_id"]
             isOneToOne: false
-            referencedRelation: "public_producer_profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_producer_id_fkey"
-            columns: ["producer_id"]
-            isOneToOne: false
             referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
@@ -7914,13 +7136,6 @@ export type Database = {
             columns: ["sold_to_user_id"]
             isOneToOne: false
             referencedRelation: "my_user_profile"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "products_sold_to_user_id_fkey"
-            columns: ["sold_to_user_id"]
-            isOneToOne: false
-            referencedRelation: "public_producer_profiles"
             referencedColumns: ["user_id"]
           },
           {
@@ -7945,6 +7160,28 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      public_visible_producer_profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string | null
+          is_deleted: boolean | null
+          is_producer_active: boolean | null
+          level: number | null
+          producer_tier:
+            | Database["public"]["Enums"]["producer_tier_type"]
+            | null
+          rank_tier: string | null
+          raw_username: string | null
+          reputation_score: number | null
+          social_links: Json | null
+          updated_at: string | null
+          user_id: string | null
+          username: string | null
+          xp: number | null
+        }
+        Relationships: []
       }
       season_leaderboard: {
         Row: {
@@ -7981,13 +7218,10 @@ export type Database = {
       }
     }
     Functions: {
-      admin_approve_label_request: {
-        Args: { p_request_id: string; p_user_id: string }
-        Returns: boolean
-      }
-      admin_delete_rejected_label_request: {
-        Args: { p_request_id: string }
-        Returns: boolean
+      accept_waitlist_entry: { Args: { p_waitlist_id: string }; Returns: Json }
+      admin_activate_founding_producer: {
+        Args: { p_trial_start?: string; p_user_id: string }
+        Returns: undefined
       }
       admin_adjust_reputation: {
         Args: {
@@ -8009,7 +7243,23 @@ export type Database = {
           xp: number
         }[]
       }
+      admin_approve_label_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      admin_assign_producer_campaign: {
+        Args: {
+          p_campaign_type: string
+          p_trial_start?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       admin_cancel_battle: { Args: { p_battle_id: string }; Returns: boolean }
+      admin_delete_rejected_label_request: {
+        Args: { p_request_id: string }
+        Returns: boolean
+      }
       admin_extend_battle_duration: {
         Args: { p_battle_id: string; p_days: number; p_reason?: string }
         Returns: boolean
@@ -8030,10 +7280,6 @@ export type Database = {
           watermarked_path: string
         }[]
       }
-      admin_set_product_elite_status: {
-        Args: { p_is_elite: boolean; p_product_id: string }
-        Returns: boolean
-      }
       admin_launch_battle_campaign: {
         Args: { p_campaign_id: string }
         Returns: {
@@ -8041,6 +7287,32 @@ export type Database = {
           message: string
           status: string
           success: boolean
+        }[]
+      }
+      admin_list_campaign_producers: {
+        Args: { p_campaign_type: string }
+        Returns: {
+          days_remaining: number
+          email: string
+          slot_number: number
+          trial_active: boolean
+          trial_end: string
+          trial_start: string
+          user_id: string
+          username: string
+        }[]
+      }
+      admin_list_campaign_producers_safe: {
+        Args: { p_campaign_type: string }
+        Returns: {
+          days_remaining: number
+          email: string
+          slot_number: number
+          trial_active: boolean
+          trial_end: string
+          trial_start: string
+          user_id: string
+          username: string
         }[]
       }
       admin_request_campaign_application_update: {
@@ -8054,6 +7326,10 @@ export type Database = {
           status: string
           success: boolean
         }[]
+      }
+      admin_revoke_label_request: {
+        Args: { p_request_id: string; p_user_id: string }
+        Returns: boolean
       }
       admin_set_campaign_selection: {
         Args: {
@@ -8075,11 +7351,19 @@ export type Database = {
         }
         Returns: boolean
       }
-      admin_revoke_label_request: {
-        Args: { p_request_id: string; p_user_id: string }
+      admin_set_product_elite_status: {
+        Args: { p_is_elite: boolean; p_product_id: string }
         Returns: boolean
       }
+      admin_unassign_producer_campaign: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
       admin_validate_battle: { Args: { p_battle_id: string }; Returns: boolean }
+      agent_auto_execute_ai_battle_actions: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       agent_finalize_expired_battles: {
         Args: { p_limit?: number }
         Returns: number
@@ -8146,11 +7430,17 @@ export type Database = {
       can_create_battle: { Args: { p_user_id: string }; Returns: boolean }
       can_create_product: { Args: { p_user_id: string }; Returns: boolean }
       can_edit_product: { Args: { p_product_id: string }; Returns: Json }
+      can_email_register: { Args: { p_email: string }; Returns: boolean }
       can_publish_beat: {
         Args: { p_exclude_product_id?: string; p_user_id: string }
         Returns: boolean
       }
       check_and_assign_badges: { Args: { p_user_id: string }; Returns: number }
+      check_and_rotate_season: { Args: never; Returns: string }
+      check_battle_pair_active: {
+        Args: { p_producer_a: string; p_producer_b: string }
+        Returns: boolean
+      }
       check_daily_battle_refusals: {
         Args: { p_user_id: string }
         Returns: boolean
@@ -8381,6 +7671,16 @@ export type Database = {
         }
         Returns: string
       }
+      compute_watermark_hash_v2: {
+        Args: {
+          p_gain_db: number
+          p_max_interval_sec: number
+          p_min_interval_sec: number
+          p_updated_at: string
+          p_watermark_audio_path: string
+        }
+        Returns: string
+      }
       create_exclusive_lock: {
         Args: {
           p_checkout_session_id: string
@@ -8388,6 +7688,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: boolean
+      }
+      create_new_season: {
+        Args: { p_duration_days?: number; p_name?: string }
+        Returns: string
       }
       create_new_version_from_beat: {
         Args: { p_beat_id: string; p_new_data?: Json }
@@ -8404,6 +7708,7 @@ export type Database = {
           file_format: string | null
           genre_id: string | null
           id: string
+          is_elite: boolean
           is_exclusive: boolean
           is_published: boolean
           is_sold: boolean
@@ -8412,7 +7717,11 @@ export type Database = {
           license_terms: Json | null
           master_path: string | null
           master_url: string | null
+          measured_lufs: number | null
+          measured_true_peak_db: number | null
           mood_id: string | null
+          normalization_applied: boolean
+          normalization_error: string | null
           original_beat_id: string | null
           parent_product_id: string | null
           play_count: number
@@ -8445,6 +7754,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      current_product_is_elite: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
       delete_beat_if_no_sales: { Args: { p_beat_id: string }; Returns: Json }
       delete_my_account: {
         Args: { p_reason?: string }
@@ -8466,6 +7779,7 @@ export type Database = {
         Args: { p_purchase_id: string }
         Returns: string
       }
+      enqueue_loudness_normalization_backfill: { Args: never; Returns: Json }
       enqueue_reprocess_all_previews: { Args: never; Returns: Json }
       ensure_pipeline_scheduler_secrets: {
         Args: { p_project_url?: string; p_service_role_key?: string }
@@ -8512,6 +7826,14 @@ export type Database = {
       forum_admin_delete_category: {
         Args: { p_category_id: string }
         Returns: boolean
+      }
+      forum_admin_hard_delete_post: {
+        Args: { p_post_id: string }
+        Returns: undefined
+      }
+      forum_admin_hard_delete_topic: {
+        Args: { p_topic_id: string }
+        Returns: undefined
       }
       forum_admin_set_post_state: {
         Args: { p_action: string; p_post_id: string }
@@ -8637,26 +7959,6 @@ export type Database = {
       }
       get_admin_bootstrap_emails: { Args: never; Returns: string[] }
       get_admin_business_metrics: { Args: never; Returns: Json }
-      get_forum_categories_with_stats: {
-        Args: never
-        Returns: {
-          allow_links: boolean
-          allow_media: boolean
-          created_at: string
-          description: string | null
-          id: string
-          is_competitive: boolean
-          is_premium_only: boolean
-          moderation_strictness: string
-          name: string
-          position: number
-          post_count: number
-          required_rank_tier: string | null
-          slug: string
-          topic_count: number
-          xp_multiplier: number
-        }[]
-      }
       get_admin_metrics_timeseries: { Args: never; Returns: Json }
       get_admin_pilotage_deltas: { Args: never; Returns: Json }
       get_admin_pilotage_metrics: { Args: never; Returns: Json }
@@ -8669,6 +7971,14 @@ export type Database = {
           revenue_cents: number
           sales_per_published_beat: number
         }[]
+      }
+      get_battle_pair_cooldown_end: {
+        Args: {
+          p_cooldown_days?: number
+          p_producer_a: string
+          p_producer_b: string
+        }
+        Returns: string
       }
       get_battles_quota_status: {
         Args: never
@@ -8700,19 +8010,24 @@ export type Database = {
           top_10_flag: boolean
         }[]
       }
-      get_forum_public_profiles: {
+      get_forum_categories_with_stats: {
         Args: never
         Returns: {
-          avatar_url: string
+          allow_links: boolean
+          allow_media: boolean
           created_at: string
-          level: number
-          producer_tier: Database["public"]["Enums"]["producer_tier_type"]
-          rank_tier: string
-          reputation_score: number
-          updated_at: string
-          user_id: string
-          username: string
-          xp: number
+          description: string
+          id: string
+          is_competitive: boolean
+          is_premium_only: boolean
+          moderation_strictness: string
+          name: string
+          position: number
+          post_count: number
+          required_rank_tier: string
+          slug: string
+          topic_count: number
+          xp_multiplier: number
         }[]
       }
       get_forum_public_profiles_public: {
@@ -8726,18 +8041,6 @@ export type Database = {
         }[]
       }
       get_home_stats: { Args: never; Returns: Json }
-      get_user_battle_quota: {
-        Args: { p_user_id: string }
-        Returns: {
-          battle_limit: number
-          can_create: boolean
-          reason: string
-          remaining_this_month: number
-          reset_at: string
-          tier: string
-          used_this_month: number
-        }[]
-      }
       get_leaderboard_producers: {
         Args: never
         Returns: {
@@ -8788,6 +8091,8 @@ export type Database = {
           subscription_id: string
         }[]
       }
+      get_my_launch_access: { Args: never; Returns: Json }
+      get_my_trial_status: { Args: never; Returns: Json }
       get_my_user_subscription_status: {
         Args: never
         Returns: {
@@ -8831,7 +8136,6 @@ export type Database = {
           producer_rank: number
           recency_bonus: number
           sales_count: number
-          sales_tier: string
           slug: string
           title: string
           top_10_flag: boolean
@@ -8874,6 +8178,7 @@ export type Database = {
         Returns: {
           cover_image_url: string
           id: string
+          is_exclusive: boolean
           is_sold: boolean
           play_count: number
           price: number
@@ -8892,6 +8197,10 @@ export type Database = {
           username: string
           wins: number
         }[]
+      }
+      get_public_producer_campaign_status: {
+        Args: { p_campaign_type: string }
+        Returns: Json
       }
       get_public_producer_profiles: {
         Args: never
@@ -8970,6 +8279,18 @@ export type Database = {
         }[]
       }
       get_request_headers_jsonb: { Args: never; Returns: Json }
+      get_user_battle_quota: {
+        Args: { p_user_id: string }
+        Returns: {
+          battle_limit: number
+          can_create: boolean
+          reason: string
+          remaining_this_month: number
+          reset_at: string
+          tier: string
+          used_this_month: number
+        }[]
+      }
       get_user_subscription_type: { Args: never; Returns: string }
       get_weekly_leaderboard: {
         Args: { p_limit?: number }
@@ -8996,11 +8317,19 @@ export type Database = {
         Args: { p_min_age?: string; p_user_id?: string }
         Returns: boolean
       }
+      is_active_battle_opponent: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       is_active_producer: { Args: { p_user?: string }; Returns: boolean }
       is_admin: { Args: { p_user_id?: string }; Returns: boolean }
       is_confirmed_user: { Args: { p_user_id?: string }; Returns: boolean }
       is_current_user_active: { Args: { p_user_id?: string }; Returns: boolean }
       is_email_verified_user: { Args: { p_user_id?: string }; Returns: boolean }
+      is_founding_trial_active: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       is_valid_product_master_path: {
         Args: { p_path: string; p_producer_id: string; p_product_id: string }
         Returns: boolean
@@ -9116,6 +8445,18 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: boolean
       }
+      product_lineage_has_completed_sales: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
+      product_lineage_has_public_marketplace_history: {
+        Args: { p_product_id: string }
+        Returns: boolean
+      }
+      promote_founding_producer_if_eligible: {
+        Args: { p_email: string; p_user_id: string }
+        Returns: boolean
+      }
       publish_event: {
         Args: { p_event_type: string; p_payload?: Json; p_user_id: string }
         Returns: string
@@ -9200,6 +8541,7 @@ export type Database = {
           file_format: string | null
           genre_id: string | null
           id: string
+          is_elite: boolean
           is_exclusive: boolean
           is_published: boolean
           is_sold: boolean
@@ -9208,7 +8550,11 @@ export type Database = {
           license_terms: Json | null
           master_path: string | null
           master_url: string | null
+          measured_lufs: number | null
+          measured_true_peak_db: number | null
           mood_id: string | null
+          normalization_applied: boolean
+          normalization_error: string | null
           original_beat_id: string | null
           parent_product_id: string | null
           play_count: number
@@ -9343,6 +8689,7 @@ export type Database = {
           file_format: string | null
           genre_id: string | null
           id: string
+          is_elite: boolean
           is_exclusive: boolean
           is_published: boolean
           is_sold: boolean
@@ -9351,7 +8698,11 @@ export type Database = {
           license_terms: Json | null
           master_path: string | null
           master_url: string | null
+          measured_lufs: number | null
+          measured_true_peak_db: number | null
           mood_id: string | null
+          normalization_applied: boolean
+          normalization_error: string | null
           original_beat_id: string | null
           parent_product_id: string | null
           play_count: number
@@ -9395,6 +8746,19 @@ export type Database = {
       rpc_contact_submit_rate_limit: {
         Args: { p_ip_hash: string; p_scope?: string }
         Returns: boolean
+      }
+      rpc_create_battle: {
+        Args: {
+          p_battle_type?: string
+          p_cooldown_days?: number
+          p_description?: string
+          p_producer2_id: string
+          p_product1_id?: string
+          p_product2_id?: string
+          p_slug: string
+          p_title: string
+        }
+        Returns: string
       }
       rpc_create_battle_comment: {
         Args: { p_battle_id: string; p_content: string }
@@ -9499,6 +8863,10 @@ export type Database = {
           xp: number
         }[]
       }
+      rpc_join_waitlist_preflight: {
+        Args: { p_campaign_type: string; p_email: string }
+        Returns: Json
+      }
       rpc_like_forum_post: { Args: { p_post_id: string }; Returns: undefined }
       rpc_publish_product_version: {
         Args: { p_new_data?: Json; p_source_product_id: string }
@@ -9515,6 +8883,7 @@ export type Database = {
           file_format: string | null
           genre_id: string | null
           id: string
+          is_elite: boolean
           is_exclusive: boolean
           is_published: boolean
           is_sold: boolean
@@ -9523,7 +8892,11 @@ export type Database = {
           license_terms: Json | null
           master_path: string | null
           master_url: string | null
+          measured_lufs: number | null
+          measured_true_peak_db: number | null
           mood_id: string | null
+          normalization_applied: boolean
+          normalization_error: string | null
           original_beat_id: string | null
           parent_product_id: string | null
           play_count: number
@@ -9621,8 +8994,16 @@ export type Database = {
         Args: { p_battle_id: string; p_slot: string }
         Returns: undefined
       }
+      user_can_add_product_to_cart: {
+        Args: { p_product_id: string; p_user_id: string }
+        Returns: boolean
+      }
       user_has_active_buyer_subscription: {
         Args: { p_user_id?: string }
+        Returns: boolean
+      }
+      user_has_elite_catalog_access: {
+        Args: { p_user_id: string }
         Returns: boolean
       }
       user_has_entitlement: {

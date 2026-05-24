@@ -749,6 +749,8 @@ export const en: TranslationSchema = {
     invitedProducerRequired: 'Invited producer is required.',
     quotaReachedError: 'Limit reached ({used}/{limit} battles this month). Reset on {date}.',
     maxActiveBattlesReached: 'Maximum 3 active battles reached.',
+    pairAlreadyActiveError: 'You already have an ongoing battle with this producer. Finish it before starting another one.',
+    pairCooldownError: 'You already faced this producer recently. Next battle available on {date}.',
     planInsufficientError: 'Your plan does not allow battle creation.',
     rejectionReasonRequired: 'Rejection reason is required.',
     dailyRefusalLimitReached: 'Battle rejected too often today.',

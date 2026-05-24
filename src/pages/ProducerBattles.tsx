@@ -171,6 +171,25 @@ function slugifyBattleTitle(value: string) {
     .slice(0, 80);
 }
 
+function parseBattlePairCooldownDetails(raw: string | null | undefined): {
+  cooldownEndAt: string | null;
+  cooldownDays: number | null;
+} {
+  if (!raw) return { cooldownEndAt: null, cooldownDays: null };
+  try {
+    const parsed = JSON.parse(raw) as {
+      cooldown_end_at?: unknown;
+      cooldown_days?: unknown;
+    };
+    return {
+      cooldownEndAt: typeof parsed.cooldown_end_at === 'string' ? parsed.cooldown_end_at : null,
+      cooldownDays: typeof parsed.cooldown_days === 'number' ? parsed.cooldown_days : null,
+    };
+  } catch {
+    return { cooldownEndAt: null, cooldownDays: null };
+  }
+}
+
 function toBattleInsertErrorMessage(error: {
   code?: string;
   details?: string | null;
@@ -180,6 +199,24 @@ function toBattleInsertErrorMessage(error: {
   const message = error.message || 'Unknown error';
   const details = error.details ? ` (${error.details})` : '';
   const technical = `[${code}] ${message}${details}`;
+
+  if (code === 'P0002' || message.includes('BATTLE_PAIR_ALREADY_ACTIVE')) {
+    return t('producerBattles.pairAlreadyActiveError');
+  }
+
+  if (code === 'P0003' || message.includes('BATTLE_PAIR_COOLDOWN')) {
+    const { cooldownEndAt } = parseBattlePairCooldownDetails(error.details);
+    const formatted = cooldownEndAt ? formatDate(cooldownEndAt) : t('common.notAvailable');
+    return t('producerBattles.pairCooldownError', { date: formatted });
+  }
+
+  if (code === 'P0001' && message === 'BATTLE_QUOTA_REACHED') {
+    return getBattleQuotaBlockedMessage(quotaStatus, t);
+  }
+
+  if (code === 'P0001' && message === 'BATTLE_ACTIVE_CAP_REACHED') {
+    return t('producerBattles.maxActiveBattlesReached');
+  }
 
   const isRlsError =
     code === '42501'
@@ -733,38 +770,23 @@ export function ProducerBattlesPage() {
       return;
     }
 
-    const { data: createdBattle, error: insertError } = await supabase
-      .from('battles')
-      .insert({
-        title: form.title.trim(),
-        slug: `${slugifyBattleTitle(form.title.trim()) || 'battle'}-${crypto.randomUUID().slice(0, 8)}`,
-        description: form.description.trim() || null,
-        producer1_id: profile.id,
-        producer2_id: form.producer2Id,
-        product1_id: form.product1Id || null,
-        product2_id: form.product2Id || null,
-        status: 'pending_acceptance',
-        winner_id: undefined,
-        votes_producer1: 0,
-        votes_producer2: 0,
-      })
-      .select('id')
-      .single();
+    const { data: createdBattleId, error: rpcError } = await supabase.rpc('rpc_create_battle', {
+      p_title: form.title.trim(),
+      p_slug: `${slugifyBattleTitle(form.title.trim()) || 'battle'}-${crypto.randomUUID().slice(0, 8)}`,
+      p_producer2_id: form.producer2Id,
+      p_description: form.description.trim() || undefined,
+      p_product1_id: form.product1Id || undefined,
+      p_product2_id: form.product2Id || undefined,
+    });
 
-    if (insertError) {
+    if (rpcError) {
       console.error('Error creating battle:', {
-        code: insertError.code,
-        message: insertError.message,
-        details: insertError.details,
+        code: rpcError.code,
+        message: rpcError.message,
+        details: rpcError.details,
       });
-      const reachedAfterError = await hasReachedActiveBattlesLimit();
-      if (reachedAfterError) {
-        setError(t('producerBattles.maxActiveBattlesReached'));
-        setIsSaving(false);
-        return;
-      }
       const refreshedQuota = await loadQuotaStatus();
-      setError(toBattleInsertErrorMessage(insertError, refreshedQuota, t));
+      setError(toBattleInsertErrorMessage(rpcError, refreshedQuota, t));
       setIsSaving(false);
       return;
     }
@@ -776,7 +798,7 @@ export function ProducerBattlesPage() {
       product1Id: '',
       product2Id: '',
     });
-    trackJoinBattle((createdBattle as { id: string } | null)?.id);
+    trackJoinBattle(createdBattleId ?? undefined);
     setProducer2Products([]);
     setIsSaving(false);
     await loadBattles();

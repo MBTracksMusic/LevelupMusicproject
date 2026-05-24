@@ -748,6 +748,8 @@ export const fr = {
     invitedProducerRequired: 'Le producteur invite est requis.',
     quotaReachedError: 'Limite atteinte ({used}/{limit} battles ce mois). Reinitialisation le {date}.',
     maxActiveBattlesReached: 'Maximum 3 battles actives atteint.',
+    pairAlreadyActiveError: 'Tu as deja une battle en cours avec ce producteur. Termine-la avant d’en lancer une autre.',
+    pairCooldownError: 'Tu as deja affronte ce producteur recemment. Prochaine battle possible le {date}.',
     planInsufficientError: 'Votre plan ne permet pas de creer des battles.',
     rejectionReasonRequired: 'La raison du refus est obligatoire.',
     dailyRefusalLimitReached: "Battle refusee trop souvent aujourd'hui.",
