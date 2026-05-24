@@ -56,6 +56,28 @@ if [[ "$STRIPE_KEY" == sk_test* ]] && [[ "$STRIPE_KEY" != *_xxx* ]] && [[ "$STRI
 fi
 
 # =========================
+# 2.5 SYNC CHECK (refuse si main local en retard sur origin/main)
+# =========================
+# Évite le scénario où une PR a été mergée via GitHub UI mais le local n'a pas pull.
+# Sans ce check, supabase functions deploy uploaderait du code obsolète et écraserait
+# silencieusement le merge (cas réel: 24/05/2026 19:44 — patch kill-switch écrasé).
+echo "🔄 Fetch origin/main..."
+git fetch origin main
+LOCAL_MAIN=$(git rev-parse refs/heads/main 2>/dev/null || echo "")
+REMOTE_MAIN=$(git rev-parse origin/main)
+if [ -n "$LOCAL_MAIN" ] && [ "$LOCAL_MAIN" != "$REMOTE_MAIN" ]; then
+  BEHIND=$(git rev-list --count "$LOCAL_MAIN..$REMOTE_MAIN" 2>/dev/null || echo "0")
+  if [ "$BEHIND" -gt 0 ]; then
+    echo "❌ main local en retard sur origin/main de $BEHIND commit(s)"
+    echo "   → Lance: git checkout main && git pull origin main"
+    echo "   → Cause probable: PR mergée via GitHub UI sans pull local."
+    echo "   → Sans pull, ce script déploierait du code obsolète."
+    exit 1
+  fi
+fi
+echo "✅ main local à jour avec origin/main"
+
+# =========================
 # 3. GIT FLOW (PROD DEPUIS MAIN)
 # =========================
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)

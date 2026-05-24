@@ -54,6 +54,26 @@ if [[ "${STRIPE_SECRET_KEY:-}" == sk_live* ]]; then
 fi
 
 # =========================
+# 2.5 SYNC CHECK (refuse si staging local en retard sur origin/staging)
+# =========================
+# Évite que ce script écrase du code mergé via GitHub UI mais pas pull localement.
+echo "🔄 Fetch origin/staging..."
+git fetch origin staging
+LOCAL_STAGING=$(git rev-parse refs/heads/staging 2>/dev/null || echo "")
+REMOTE_STAGING=$(git rev-parse origin/staging)
+if [ -n "$LOCAL_STAGING" ] && [ "$LOCAL_STAGING" != "$REMOTE_STAGING" ]; then
+  BEHIND=$(git rev-list --count "$LOCAL_STAGING..$REMOTE_STAGING" 2>/dev/null || echo "0")
+  if [ "$BEHIND" -gt 0 ]; then
+    echo "❌ staging local en retard sur origin/staging de $BEHIND commit(s)"
+    echo "   → Lance: git checkout staging && git pull origin staging"
+    echo "   → Cause probable: PR mergée via GitHub UI sans pull local."
+    echo "   → Sans pull, ce script déploierait du code obsolète."
+    exit 1
+  fi
+fi
+echo "✅ staging local à jour avec origin/staging"
+
+# =========================
 # 3. GIT FLOW (AUTO MERGE → STAGING)
 # =========================
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)

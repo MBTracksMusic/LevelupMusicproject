@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -5787,6 +5787,7 @@ export type Database = {
           elo_rating: number
           email: string
           engagement_score: number
+          founding_note: string | null
           founding_trial_start: string | null
           full_name: string | null
           id: string
@@ -5834,6 +5835,7 @@ export type Database = {
           elo_rating?: number
           email: string
           engagement_score?: number
+          founding_note?: string | null
           founding_trial_start?: string | null
           full_name?: string | null
           id: string
@@ -5881,6 +5883,7 @@ export type Database = {
           elo_rating?: number
           email?: string
           engagement_score?: number
+          founding_note?: string | null
           founding_trial_start?: string | null
           full_name?: string | null
           id?: string
@@ -7248,6 +7251,14 @@ export type Database = {
         Returns: boolean
       }
       admin_assign_producer_campaign: {
+        Args: {
+          p_campaign_type: string
+          p_trial_start?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      admin_assign_producer_campaign_service: {
         Args: {
           p_campaign_type: string
           p_trial_start?: string

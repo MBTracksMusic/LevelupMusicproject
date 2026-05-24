@@ -32,6 +32,60 @@ const JSON_HEADERS = {
 const MAX_BATCH_SIZE = 20;
 const MAX_ERROR_LENGTH = 500;
 
+// Phase 0 safeguards (see migration 264 and docs/phase0-backlog-drain-2026-05-24.md).
+// Defaults are used if the app_settings row is absent or malformed.
+const DEFAULT_MAX_PER_HOUR = 200;
+const DEFAULT_MAX_PER_BATCH = 50;
+
+type EmailPipelineSettings = {
+  enabled: boolean;
+  maxPerHour: number;
+  maxPerBatch: number;
+};
+
+async function loadEmailPipelineSettings(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<EmailPipelineSettings> {
+  const { data, error } = await supabaseAdmin
+    .from("app_settings")
+    .select("value")
+    .eq("key", "email_pipeline_settings")
+    .maybeSingle();
+  if (error || !data) {
+    return {
+      enabled: true,
+      maxPerHour: DEFAULT_MAX_PER_HOUR,
+      maxPerBatch: DEFAULT_MAX_PER_BATCH,
+    };
+  }
+  const v = (data.value ?? {}) as Record<string, unknown>;
+  return {
+    enabled: v.enabled !== false,
+    maxPerHour: typeof v.max_per_hour === "number" && v.max_per_hour > 0
+      ? Math.floor(v.max_per_hour)
+      : DEFAULT_MAX_PER_HOUR,
+    maxPerBatch: typeof v.max_per_batch === "number" && v.max_per_batch > 0
+      ? Math.floor(v.max_per_batch)
+      : DEFAULT_MAX_PER_BATCH,
+  };
+}
+
+async function countSentInLastHour(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<number> {
+  const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const { count, error } = await supabaseAdmin
+    .from("email_queue")
+    .select("id", { head: true, count: "exact" })
+    .eq("send_state", "sent")
+    .gte("sent_at", oneHourAgo);
+  if (error) {
+    console.warn("[process-email-queue] failed to count sent_in_last_hour", error);
+    return 0;
+  }
+  return count ?? 0;
+}
+
 type EmailQueueRow = {
   id: string;
   source_event_id: string | null;
@@ -643,8 +697,51 @@ serveWithErrorHandling("process-email-queue", async (req: Request) => {
     });
   }
 
+  // Phase 0 safeguards: kill-switch and rolling hourly cap.
+  // Configured via app_settings row `email_pipeline_settings` (migration 264).
+  const pipelineSettings = await loadEmailPipelineSettings(supabaseAdmin);
+
+  if (!pipelineSettings.enabled) {
+    await finalizeRun({
+      status: "success",
+      processedCount: 0,
+      errorCount: 0,
+      extraLabels: { reason: "kill_switch_off" },
+      skipZeroProcessedAlert: true,
+    });
+    return jsonResponse(200, { skipped: true, reason: "kill_switch_off" });
+  }
+
+  const sentInLastHour = await countSentInLastHour(supabaseAdmin);
+  const hourlyBudgetRemaining = Math.max(0, pipelineSettings.maxPerHour - sentInLastHour);
+  if (hourlyBudgetRemaining <= 0) {
+    await finalizeRun({
+      status: "success",
+      processedCount: 0,
+      errorCount: 0,
+      extraLabels: {
+        reason: "hourly_quota_reached",
+        sent_last_hour: sentInLastHour,
+        max_per_hour: pipelineSettings.maxPerHour,
+      },
+      skipZeroProcessedAlert: true,
+    });
+    return jsonResponse(200, {
+      skipped: true,
+      reason: "hourly_quota_reached",
+      sentLastHour: sentInLastHour,
+      maxPerHour: pipelineSettings.maxPerHour,
+    });
+  }
+
+  const effectiveBatchLimit = Math.min(
+    MAX_BATCH_SIZE,
+    pipelineSettings.maxPerBatch,
+    hourlyBudgetRemaining,
+  );
+
   const { data: claimedRows, error: claimError } = await supabaseAdmin.rpc("claim_email_queue_batch", {
-    p_limit: MAX_BATCH_SIZE,
+    p_limit: effectiveBatchLimit,
     p_reclaim_after_seconds: PIPELINE_RECLAIM_AFTER_SECONDS,
   });
 
