@@ -60,15 +60,19 @@ export function ProducersPage() {
     const sorted = [...filtered];
     sorted.sort((a, b) => {
       switch (sortKey) {
-        case 'oldest':
-          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        case 'oldest': {
+          const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          return diff !== 0 ? diff : a.user_id.localeCompare(b.user_id);
+        }
         case 'alpha_asc':
           return (a.username ?? '').localeCompare(b.username ?? '');
         case 'alpha_desc':
           return (b.username ?? '').localeCompare(a.username ?? '');
         case 'newest':
-        default:
-          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        default: {
+          const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return diff !== 0 ? diff : a.user_id.localeCompare(b.user_id);
+        }
       }
     });
     return sorted;
@@ -121,7 +125,8 @@ export function ProducersPage() {
           .from('public_visible_producer_profiles' as any)
           .select('user_id, raw_username, username, avatar_url, producer_tier, bio, social_links, is_deleted, is_producer_active, created_at, updated_at')
           .eq('is_deleted', false)
-          .order('updated_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .order('user_id', { ascending: true });
 
         if (error) throw error;
 
