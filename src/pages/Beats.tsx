@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import { SearchSortFilterBar } from '../components/ui/SearchSortFilterBar';
 import { ProductCard } from '../components/products/ProductCard';
 import type { Track } from '../context/AudioPlayerContext';
 import { hasPlayableTrackSource, toTrack } from '../lib/audio/track';
@@ -203,44 +203,23 @@ export function BeatsPage({ mode = 'beats' }: BeatsPageProps) {
           </p>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-4 mb-8">
-          <div className="flex-1">
-            <Input
-              type="text"
-              placeholder={t('home.searchPlaceholder')}
-              value={filters.search}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-              leftIcon={<Search className="w-5 h-5" />}
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <Select
-              value={filters.sort}
-              onChange={(e) => handleFilterChange('sort', e.target.value)}
-              options={[
-                { value: 'newest', label: t('products.sortByNewest') },
-                { value: 'popular', label: t('products.sortByPopular') },
-                { value: 'price_asc', label: `${t('products.sortByPrice')} (croissant)` },
-                { value: 'price_desc', label: `${t('products.sortByPrice')} (decroissant)` },
-              ]}
-            />
-
-            <Button
-              variant={showFilters ? 'primary' : 'outline'}
-              onClick={() => setShowFilters(!showFilters)}
-              leftIcon={<SlidersHorizontal className="w-4 h-4" />}
-            >
-              {t('common.filter')}
-            </Button>
-
-            {hasActiveFilters && (
-              <Button variant="ghost" onClick={clearFilters} leftIcon={<X className="w-4 h-4" />}>
-                {t('products.clearFilters')}
-              </Button>
-            )}
-          </div>
-        </div>
+        <SearchSortFilterBar
+          searchValue={filters.search}
+          searchPlaceholder={t('home.searchPlaceholder')}
+          onSearchChange={(value) => handleFilterChange('search', value)}
+          sortValue={filters.sort}
+          sortOptions={[
+            { value: 'newest', label: t('products.sortByNewest') },
+            { value: 'popular', label: t('products.sortByPopular') },
+            { value: 'price_asc', label: `${t('products.sortByPrice')} (croissant)` },
+            { value: 'price_desc', label: `${t('products.sortByPrice')} (decroissant)` },
+          ]}
+          onSortChange={(value) => handleFilterChange('sort', value)}
+          showFilters={showFilters}
+          onToggleFilters={() => setShowFilters(!showFilters)}
+          hasActiveFilters={Boolean(hasActiveFilters)}
+          onClearFilters={clearFilters}
+        />
 
         {showFilters && (
           <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mb-8">
