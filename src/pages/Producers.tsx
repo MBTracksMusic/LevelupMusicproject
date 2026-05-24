@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { useTranslation } from '../lib/i18n';
+import { SearchSortFilterBar } from '../components/ui/SearchSortFilterBar';
+import { Select } from '../components/ui/Select';
 
 interface ProducerListItem {
   user_id: string;
@@ -18,15 +20,84 @@ interface ProducerListItem {
   updated_at: string;
 }
 
+type SortKey = 'newest' | 'oldest' | 'alpha_asc' | 'alpha_desc';
+
 export function ProducersPage() {
   const PAGE_SIZE = 12;
   const { t } = useTranslation();
   const [allProducers, setAllProducers] = useState<ProducerListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('newest');
+  const [tierFilter, setTierFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
-  const totalPages = Math.ceil(allProducers.length / PAGE_SIZE);
-  const producers = allProducers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const availableTiers = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allProducers) {
+      if (p.producer_tier) set.add(p.producer_tier);
+    }
+    return Array.from(set).sort();
+  }, [allProducers]);
+
+  const filteredProducers = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const filtered = allProducers.filter((p) => {
+      if (tierFilter) {
+        if (tierFilter === '__none__') {
+          if (p.producer_tier) return false;
+        } else if (p.producer_tier !== tierFilter) {
+          return false;
+        }
+      }
+      if (!term) return true;
+      const name = (p.username ?? p.raw_username ?? '').toLowerCase();
+      const bio = (p.bio ?? '').toLowerCase();
+      return name.includes(term) || bio.includes(term);
+    });
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sortKey) {
+        case 'oldest':
+          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        case 'alpha_asc':
+          return (a.username ?? '').localeCompare(b.username ?? '');
+        case 'alpha_desc':
+          return (b.username ?? '').localeCompare(a.username ?? '');
+        case 'newest':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+    return sorted;
+  }, [allProducers, searchTerm, sortKey, tierFilter]);
+
+  const hasActiveFilters = Boolean(tierFilter);
+
+  const totalPages = Math.ceil(filteredProducers.length / PAGE_SIZE);
+  const producers = filteredProducers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value: string) => {
+    setSortKey(value as SortKey);
+    setCurrentPage(1);
+  };
+
+  const handleTierChange = (value: string) => {
+    setTierFilter(value);
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setTierFilter('');
+    setCurrentPage(1);
+  };
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -77,6 +148,41 @@ export function ProducersPage() {
           <h1 className="text-3xl font-bold text-white mb-2">{t('producersPage.title')}</h1>
           <p className="text-zinc-400">{t('producersPage.subtitle')}</p>
         </div>
+
+        <SearchSortFilterBar
+          searchValue={searchTerm}
+          searchPlaceholder={t('producersPage.searchPlaceholder')}
+          onSearchChange={handleSearchChange}
+          sortValue={sortKey}
+          sortOptions={[
+            { value: 'newest', label: t('producersPage.sortByNewest') },
+            { value: 'oldest', label: t('producersPage.sortByOldest') },
+            { value: 'alpha_asc', label: t('producersPage.sortByAlphaAsc') },
+            { value: 'alpha_desc', label: t('producersPage.sortByAlphaDesc') },
+          ]}
+          onSortChange={handleSortChange}
+          showFilters={showFilters}
+          onToggleFilters={availableTiers.length > 0 ? () => setShowFilters(!showFilters) : undefined}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+        />
+
+        {showFilters && availableTiers.length > 0 && (
+          <div className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Select
+                label={t('producersPage.filterByTier')}
+                value={tierFilter}
+                onChange={(e) => handleTierChange(e.target.value)}
+                options={[
+                  { value: '', label: t('producersPage.allTiers') },
+                  ...availableTiers.map((tier) => ({ value: tier, label: tier })),
+                  { value: '__none__', label: t('producersPage.noTier') },
+                ]}
+              />
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
