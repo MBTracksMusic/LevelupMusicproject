@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Check, Share2 } from 'lucide-react';
 import { supabase } from '../lib/supabase/client';
 import {
   BattleScoreRadar,
@@ -8,6 +9,7 @@ import {
 } from '../components/battles/feedback/BattleScoreRadar';
 import { useAuth, useUserRole } from '../lib/auth/hooks';
 import { deriveRole, type ViewerRole } from '../lib/feedback/deriveRole';
+import { trackBattleShare } from '../lib/analytics';
 
 interface FeedbackBattle {
   id: string;
@@ -163,17 +165,21 @@ function splitSnapshots(payload: FeedbackPayloadOk) {
   return { winner: winner ?? snapshots[0], opponent: opponent ?? snapshots[1] };
 }
 
-function buildShareText(payload: FeedbackPayloadOk, url: string): string {
+function buildShareText(payload: FeedbackPayloadOk): string {
   const { battle } = payload;
   if (battle.is_tie) {
     const [p1, p2] = payload.snapshots;
     const n1 = p1?.producer.display_name ?? 'Producer 1';
     const n2 = p2?.producer.display_name ?? 'Producer 2';
-    return `🤝 Match nul entre ${n1} et ${n2} sur "${battle.title}" sur Beatelion → ${url}`;
+    return `🤝 Match nul entre ${n1} et ${n2} dans "${battle.title}" sur Beatelion`;
   }
   const winner = payload.snapshots.find((s) => s.product_id === battle.winner_product_id);
   const winnerName = winner?.producer.display_name ?? 'Le gagnant';
-  return `🏆 ${winnerName} remporte la battle "${battle.title}" sur Beatelion → ${url}`;
+  return `🏆 ${winnerName} remporte la battle "${battle.title}" sur Beatelion`;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 function ProducerCard({
@@ -253,26 +259,72 @@ function TopCriteria({ items }: { items: FeedbackTopCriterion[] }) {
 
 function RoleCTA({
   role,
+  battleId,
+  shareTitle,
   shareText,
+  shareUrl,
   slug,
 }: {
   role: ViewerRole;
+  battleId: string;
+  shareTitle: string;
   shareText: string;
+  shareUrl: string;
   slug: string;
 }) {
-  const onShare = () => {
-    // Placeholder until /share/battle/:slug + navigator.share lands in session +1.
-    console.log('[feedback:share]', shareText);
+  const [shareState, setShareState] = useState<'idle' | 'sharing' | 'copied'>('idle');
+  const isSharing = shareState === 'sharing';
+  const isCopied = shareState === 'copied';
+
+  const copyShareText = async () => {
+    await navigator.clipboard.writeText(`${shareText} → ${shareUrl}`);
+    trackBattleShare({ battleId, method: 'clipboard' });
+    setShareState('copied');
+    toast.success('Lien de partage copié.');
+    window.setTimeout(() => setShareState('idle'), 2000);
+  };
+
+  const onShare = async () => {
+    if (isSharing) return;
+    setShareState('sharing');
+
+    try {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: shareTitle,
+            text: shareText,
+            url: shareUrl,
+          });
+          trackBattleShare({ battleId, method: 'native' });
+          setShareState('idle');
+          return;
+        } catch (shareError) {
+          if (isAbortError(shareError)) {
+            setShareState('idle');
+            return;
+          }
+        }
+      }
+
+      await copyShareText();
+    } catch (shareError) {
+      console.error('Unable to share battle feedback:', shareError);
+      toast.error('Partage indisponible pour le moment.');
+      setShareState('idle');
+    }
   };
 
   if (role === 'winner' || role === 'admin') {
     return (
       <button
         type="button"
-        onClick={onShare}
-        className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white shadow hover:opacity-90"
+        onClick={() => void onShare()}
+        disabled={isSharing}
+        className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white shadow hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Partager ma victoire
+        {isCopied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+        {isCopied ? 'Lien copié' : 'Partager ma victoire'}
       </button>
     );
   }
@@ -291,10 +343,12 @@ function RoleCTA({
       <div className="flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          onClick={onShare}
-          className="inline-flex items-center justify-center rounded-md bg-amber-500/90 px-5 py-3 text-sm font-semibold text-zinc-950 hover:opacity-90"
+          onClick={() => void onShare()}
+          disabled={isSharing}
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-amber-500/90 px-5 py-3 text-sm font-semibold text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Match nul honorable
+          {isCopied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+          {isCopied ? 'Lien copié' : 'Match nul honorable'}
         </button>
         <Link
           to={`/battles/${slug}`}
@@ -470,7 +524,8 @@ export function BattleFeedbackPage() {
   }
 
   const { winner, opponent } = splitSnapshots(payload);
-  const shareText = buildShareText(payload, window.location.href);
+  const shareUrl = `${window.location.origin}/battles/${slug}/feedback`;
+  const shareText = buildShareText(payload);
 
   return (
     <div className="min-h-screen bg-[var(--brand-bg)] text-zinc-100">
@@ -522,13 +577,27 @@ export function BattleFeedbackPage() {
         )}
 
         <section className="mb-8 flex flex-col items-center gap-3">
-          <RoleCTA role={viewerRole} shareText={shareText} slug={slug} />
+          <RoleCTA
+            role={viewerRole}
+            battleId={battle.id}
+            shareTitle={battle.title}
+            shareText={shareText}
+            shareUrl={shareUrl}
+            slug={slug}
+          />
         </section>
 
         {(viewerRole === 'winner' || viewerRole === 'tie_participant') && (
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur md:hidden">
             <div className="mx-auto flex max-w-5xl items-center justify-center">
-              <RoleCTA role={viewerRole} shareText={shareText} slug={slug} />
+              <RoleCTA
+                role={viewerRole}
+                battleId={battle.id}
+                shareTitle={battle.title}
+                shareText={shareText}
+                shareUrl={shareUrl}
+                slug={slug}
+              />
             </div>
           </div>
         )}
