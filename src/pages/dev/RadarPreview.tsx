@@ -48,6 +48,8 @@ type FixturePayload = {
     producer: { id: string; display_name: string; avatar_url: string | null };
     win_rate: number | string;
     scores: BattleScoreRadarScores;
+    /** Per-product coherence sufficiency (≥5 feedback rows for this product). */
+    coherence_data_sufficient: boolean;
     quality_index: number | string;
     rank: number;
   }>;
@@ -134,7 +136,11 @@ function FixtureRow({ slug, label, note, size }: { slug: string; label: string; 
                 scores={snap.scores}
                 size={size}
                 variant={idx === 0 ? 'primary' : 'secondary'}
-                coherenceDataSufficient={state.payload.meta.coherence_data_sufficient}
+                // Prefer per-product flag (≥5 feedbacks for this product)
+                // over the global meta flag — fixes the false-negative case
+                // where one producer has plenty of feedback but the other
+                // is under the cutoff (coherence_score=0).
+                coherenceDataSufficient={snap.coherence_data_sufficient}
                 credibilityDynamic={state.payload.meta.credibility_dynamic}
                 ariaLabel={`Radar ${snap.producer.display_name}`}
               />
@@ -219,8 +225,9 @@ export function RadarPreviewPage() {
         Validation checklist:
         <br />□ #1 dominant : polygone primary nettement plus grand
         <br />□ #4 tie : les 2 polygones identiques en taille + label "égalité"
-        <br />□ #3 insufficient : axe coherence à 0 avec marqueur "·" + tooltip
-        <br />□ tous : axe credibility à 50 plat avec marqueur "·" + tooltip
+        <br />□ #3 insufficient : axe coherence à 0 avec dot ambre + tooltip
+        <br />□ #1 producer2 : axe coherence à 0 avec dot ambre (cutoff per-product)
+        <br />□ tous : axe credibility à 50 plat avec dot gris + tooltip
         <br />□ couleurs primary (orange) vs secondary (rouge) distinctes
         <br />□ dark mode lisible
         <br />□ 200px reste lisible (mobile-like)
