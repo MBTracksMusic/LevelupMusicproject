@@ -119,6 +119,45 @@ export function classifyAuthError(error: unknown): AuthErrorKind {
   return 'unknown';
 }
 
+export type AuthErrorTranslationKey =
+  | 'auth.resetPasswordErrorSamePassword'
+  | 'auth.resetPasswordErrorWeakPassword'
+  | 'auth.resetPasswordErrorSessionMissing'
+  | 'auth.resetPasswordErrorRateLimit'
+  | 'auth.resetPasswordErrorCaptcha'
+  | 'auth.resetPasswordInvalidLink'
+  | 'auth.resetPasswordErrorNetwork'
+  | 'auth.resetPasswordUpdateError';
+
+/**
+ * Maps a classified auth error to the i18n key best describing it for the user.
+ * Caller passes the result to t(). Generic enough to be reused by both the
+ * recovery flow and the authenticated change-password flow in Settings.
+ */
+export function getAuthErrorTranslationKey(error: unknown): AuthErrorTranslationKey {
+  const kind = classifyAuthError(error);
+  switch (kind) {
+    case 'same_password':
+      return 'auth.resetPasswordErrorSamePassword';
+    case 'weak_password':
+      return 'auth.resetPasswordErrorWeakPassword';
+    case 'session_missing':
+    case 'session_not_found':
+      return 'auth.resetPasswordErrorSessionMissing';
+    case 'rate_limited':
+      return 'auth.resetPasswordErrorRateLimit';
+    case 'captcha_required':
+      return 'auth.resetPasswordErrorCaptcha';
+    case 'expired_token':
+    case 'invalid_token':
+      return 'auth.resetPasswordInvalidLink';
+    case 'network':
+      return 'auth.resetPasswordErrorNetwork';
+    default:
+      return 'auth.resetPasswordUpdateError';
+  }
+}
+
 /**
  * Stable client-side password policy. Mirrors what we want the Supabase project
  * to require server-side; if Supabase is stricter, the server error message
@@ -130,9 +169,30 @@ export const PASSWORD_POLICY = {
   requireDigit: true,
 } as const;
 
-export function validatePasswordPolicy(password: string): { ok: boolean; reason?: 'too_short' | 'missing_upper' | 'missing_digit' } {
+export type PasswordPolicyReason = 'too_short' | 'missing_upper' | 'missing_digit';
+
+export function validatePasswordPolicy(password: string): { ok: boolean; reason?: PasswordPolicyReason } {
   if (password.length < PASSWORD_POLICY.minLength) return { ok: false, reason: 'too_short' };
   if (PASSWORD_POLICY.requireUppercase && !/[A-Z]/.test(password)) return { ok: false, reason: 'missing_upper' };
   if (PASSWORD_POLICY.requireDigit && !/\d/.test(password)) return { ok: false, reason: 'missing_digit' };
   return { ok: true };
+}
+
+export type PasswordPolicyTranslationKey =
+  | 'auth.weakPassword'
+  | 'auth.resetPasswordPolicyMissingUpper'
+  | 'auth.resetPasswordPolicyMissingDigit';
+
+/**
+ * Maps a password-policy failure reason to the appropriate i18n key.
+ */
+export function getPasswordPolicyTranslationKey(reason: PasswordPolicyReason): PasswordPolicyTranslationKey {
+  switch (reason) {
+    case 'too_short':
+      return 'auth.weakPassword';
+    case 'missing_upper':
+      return 'auth.resetPasswordPolicyMissingUpper';
+    case 'missing_digit':
+      return 'auth.resetPasswordPolicyMissingDigit';
+  }
 }

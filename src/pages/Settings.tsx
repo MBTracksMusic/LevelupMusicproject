@@ -4,6 +4,12 @@ import { useAuth } from '../lib/auth/hooks';
 import { useCreditBalance } from '../lib/credits/useCreditBalance';
 import { useTranslation } from '../lib/i18n';
 import { updateProfile, updatePassword } from '../lib/auth/service';
+import {
+  classifyAuthError,
+  getAuthErrorTranslationKey,
+  getPasswordPolicyTranslationKey,
+  validatePasswordPolicy,
+} from '../lib/auth/errors';
 import { supabase } from '@/lib/supabase/client';
 import { invokeProtectedEdgeFunction } from '../lib/supabase/edgeAuth';
 import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
@@ -314,8 +320,9 @@ export function SettingsPage() {
       return;
     }
 
-    if (passwordData.newPassword.length < 8) {
-      toast.error(t('auth.weakPassword'));
+    const policy = validatePasswordPolicy(passwordData.newPassword);
+    if (!policy.ok && policy.reason) {
+      toast.error(t(getPasswordPolicyTranslationKey(policy.reason)));
       return;
     }
 
@@ -327,7 +334,14 @@ export function SettingsPage() {
       setPasswordData({ newPassword: '', confirmPassword: '' });
     } catch (error) {
       console.error('Error updating password', error);
-      toast.error(t('settings.passwordUpdateError'));
+      const kind = classifyAuthError(error);
+      // Default-case from getAuthErrorTranslationKey routes to the recovery
+      // toast wording; here we want the Settings-specific generic message so
+      // we fall back to it ourselves when nothing more specific matched.
+      const key = kind === 'unknown'
+        ? 'settings.passwordUpdateError'
+        : getAuthErrorTranslationKey(error);
+      toast.error(t(key));
     } finally {
       setIsLoading(false);
     }
@@ -706,17 +720,23 @@ export function SettingsPage() {
                   {t('user.changePassword')}
                 </h2>
                 <div className="space-y-4">
-                  <Input
-                    type="password"
-                    label={t('settings.newPasswordLabel')}
-                    value={passwordData.newPassword}
-                    onChange={(e) =>
-                      setPasswordData({ ...passwordData, newPassword: e.target.value })
-                    }
-                    leftIcon={<Lock className="w-5 h-5" />}
-                    placeholder="••••••••"
-                    required
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      type="password"
+                      label={t('settings.newPasswordLabel')}
+                      value={passwordData.newPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, newPassword: e.target.value })
+                      }
+                      leftIcon={<Lock className="w-5 h-5" />}
+                      placeholder="••••••••"
+                      required
+                      autoComplete="new-password"
+                    />
+                    <p className="text-xs text-zinc-500 px-1">
+                      {t('auth.resetPasswordPolicyHint')}
+                    </p>
+                  </div>
                   <Input
                     type="password"
                     label={t('auth.confirmPassword')}
@@ -727,6 +747,7 @@ export function SettingsPage() {
                     leftIcon={<Lock className="w-5 h-5" />}
                     placeholder="••••••••"
                     required
+                    autoComplete="new-password"
                   />
                 </div>
               </div>

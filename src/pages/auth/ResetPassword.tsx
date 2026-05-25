@@ -5,7 +5,12 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
 import { updatePassword } from '../../lib/auth/service';
-import { classifyAuthError, validatePasswordPolicy } from '../../lib/auth/errors';
+import {
+  classifyAuthError,
+  getAuthErrorTranslationKey,
+  getPasswordPolicyTranslationKey,
+  validatePasswordPolicy,
+} from '../../lib/auth/errors';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase/client';
 
@@ -227,14 +232,8 @@ export function ResetPasswordPage() {
       newErrors.password = t('errors.requiredField');
     } else {
       const policy = validatePasswordPolicy(formData.password);
-      if (!policy.ok) {
-        if (policy.reason === 'too_short') {
-          newErrors.password = t('auth.weakPassword');
-        } else if (policy.reason === 'missing_upper') {
-          newErrors.password = t('auth.resetPasswordPolicyMissingUpper');
-        } else if (policy.reason === 'missing_digit') {
-          newErrors.password = t('auth.resetPasswordPolicyMissingDigit');
-        }
+      if (!policy.ok && policy.reason) {
+        newErrors.password = t(getPasswordPolicyTranslationKey(policy.reason));
       }
     }
 
@@ -244,30 +243,6 @@ export function ResetPasswordPage() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  const mapUpdateErrorToMessage = (error: unknown): string => {
-    const kind = classifyAuthError(error);
-    switch (kind) {
-      case 'same_password':
-        return t('auth.resetPasswordErrorSamePassword');
-      case 'weak_password':
-        return t('auth.resetPasswordErrorWeakPassword');
-      case 'session_missing':
-      case 'session_not_found':
-        return t('auth.resetPasswordErrorSessionMissing');
-      case 'rate_limited':
-        return t('auth.resetPasswordErrorRateLimit');
-      case 'captcha_required':
-        return t('auth.resetPasswordErrorCaptcha');
-      case 'expired_token':
-      case 'invalid_token':
-        return t('auth.resetPasswordInvalidLink');
-      case 'network':
-        return t('auth.resetPasswordErrorNetwork');
-      default:
-        return t('auth.resetPasswordUpdateError');
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -289,7 +264,7 @@ export function ResetPasswordPage() {
     } catch (error) {
       console.error('Reset password error:', error);
       const kind = classifyAuthError(error);
-      const message = mapUpdateErrorToMessage(error);
+      const message = t(getAuthErrorTranslationKey(error));
 
       // Recovery session is dead — flip the form to error state and let the user
       // request a new link instead of retrying with no session.
