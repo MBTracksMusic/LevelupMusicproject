@@ -352,12 +352,12 @@ function RoleCTA({
     };
   }, [isMenuOpen]);
 
-  const copyShareText = async () => {
-    await navigator.clipboard.writeText(`${shareText} → ${shareUrl}`);
+  const copyShareLink = async () => {
+    await navigator.clipboard.writeText(shareUrl);
     trackBattleShare({ battleId, method: 'clipboard' });
     setIsMenuOpen(false);
     setShareState('copied');
-    toast.success('Lien de partage copié.');
+    toast.success('Lien copié.');
     window.setTimeout(() => setShareState('idle'), 2000);
   };
 
@@ -367,7 +367,7 @@ function RoleCTA({
 
     try {
       if (!nativeShare) {
-        await copyShareText();
+        await copyShareLink();
         return;
       }
 
@@ -436,7 +436,7 @@ function RoleCTA({
 
         <button
           type="button"
-          onClick={() => void copyShareText()}
+          onClick={() => void copyShareLink()}
           className="inline-flex min-h-11 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm font-semibold text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
         >
           {isCopied ? (
@@ -444,7 +444,7 @@ function RoleCTA({
           ) : (
             <Copy className="h-5 w-5 text-zinc-300" />
           )}
-          Copier
+          Copier le lien
         </button>
       </div>
     </div>
