@@ -1,0 +1,550 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase/client';
+import {
+  BattleScoreRadar,
+  type BattleScoreRadarScores,
+} from '../components/battles/feedback/BattleScoreRadar';
+import { useAuth, useUserRole } from '../lib/auth/hooks';
+import { deriveRole, type ViewerRole } from '../lib/feedback/deriveRole';
+
+interface FeedbackBattle {
+  id: string;
+  slug: string;
+  title: string;
+  status: string;
+  battle_tier: string;
+  winner_product_id: string | null;
+  is_tie: boolean;
+  finalized_at: string | null;
+  voting_started_at: string | null;
+  voting_ended_at: string | null;
+  voting_duration_seconds: number | null;
+}
+
+interface FeedbackSnapshot {
+  product_id: string;
+  producer: { id: string; display_name: string | null; avatar_url: string | null };
+  votes_total: number;
+  votes_for_product: number;
+  win_rate: number | string;
+  scores: BattleScoreRadarScores;
+  coherence_data_sufficient: boolean;
+  quality_index: number | string;
+  computed_at: string;
+  rank: number;
+}
+
+interface FeedbackTopCriterion {
+  criterion_key: string;
+  count: number;
+  share: number;
+}
+
+interface FeedbackViewer {
+  is_authenticated: boolean;
+  voted: boolean;
+  vote: { criteria: string[] | null; preferred_product_id: string | null } | null;
+}
+
+interface FeedbackMeta {
+  total_feedback: number;
+  total_voters: number;
+  battle_size: 'small' | 'medium' | 'large';
+  coherence_data_sufficient: boolean;
+  credibility_dynamic: boolean;
+}
+
+interface FeedbackPayloadOk {
+  battle: FeedbackBattle;
+  snapshots: FeedbackSnapshot[];
+  top_criteria: FeedbackTopCriterion[];
+  ranking: Array<{ product_id: string; rank: number; quality_index: number | string }>;
+  viewer: FeedbackViewer;
+  meta: FeedbackMeta;
+}
+
+interface FeedbackPayloadErr {
+  error: 'battle_required' | 'battle_not_found' | 'not_finalized' | string;
+  status?: string;
+}
+
+type FeedbackPayload = FeedbackPayloadOk | FeedbackPayloadErr;
+
+type LoadState =
+  | { kind: 'loading' }
+  | { kind: 'not_found' }
+  | { kind: 'not_finalized'; status: string | undefined }
+  | { kind: 'error'; message: string }
+  | { kind: 'ok'; payload: FeedbackPayloadOk };
+
+const CACHE_TTL_MS = 60_000;
+const cache = new Map<string, { expires: number; state: LoadState }>();
+
+function isErr(p: FeedbackPayload): p is FeedbackPayloadErr {
+  return typeof (p as FeedbackPayloadErr).error === 'string';
+}
+
+async function fetchFeedback(slug: string): Promise<LoadState> {
+  const { data: battle, error: battleErr } = await supabase
+    .from('battles')
+    .select('id')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (battleErr) {
+    return { kind: 'error', message: battleErr.message };
+  }
+  if (!battle) {
+    return { kind: 'not_found' };
+  }
+
+  // RPC name cast: get_battle_feedback_payload was added in migrations 266/268
+  // and is not yet present in generated database.types.ts. Regen via `npm run supabase:types`.
+  const { data, error } = await supabase.rpc(
+    'get_battle_feedback_payload' as never,
+    { p_battle_id: battle.id } as never,
+  );
+
+  if (error) {
+    return { kind: 'error', message: error.message };
+  }
+
+  const payload = data as unknown as FeedbackPayload;
+  if (isErr(payload)) {
+    if (payload.error === 'not_finalized') {
+      return { kind: 'not_finalized', status: payload.status };
+    }
+    if (payload.error === 'battle_not_found') {
+      return { kind: 'not_found' };
+    }
+    return { kind: 'error', message: payload.error };
+  }
+  return { kind: 'ok', payload };
+}
+
+function useFeedbackPayload(slug: string | undefined): { state: LoadState; refetch: () => void } {
+  const cached = slug ? cache.get(slug) : undefined;
+  const initial: LoadState =
+    cached && cached.expires > Date.now() ? cached.state : { kind: 'loading' };
+  const [state, setState] = useState<LoadState>(initial);
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    if (!slug) return;
+    const hit = cache.get(slug);
+    if (hit && hit.expires > Date.now() && nonce === 0) {
+      setState(hit.state);
+      return;
+    }
+    let cancelled = false;
+    setState({ kind: 'loading' });
+    fetchFeedback(slug).then((next) => {
+      if (cancelled) return;
+      cache.set(slug, { state: next, expires: Date.now() + CACHE_TTL_MS });
+      setState(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, nonce]);
+
+  return { state, refetch: () => setNonce((n) => n + 1) };
+}
+
+function splitSnapshots(payload: FeedbackPayloadOk) {
+  const { battle, snapshots } = payload;
+  if (battle.is_tie || battle.winner_product_id == null) {
+    return { winner: snapshots[0], opponent: snapshots[1] };
+  }
+  const winner = snapshots.find((s) => s.product_id === battle.winner_product_id);
+  const opponent = snapshots.find((s) => s.product_id !== battle.winner_product_id);
+  return { winner: winner ?? snapshots[0], opponent: opponent ?? snapshots[1] };
+}
+
+function buildShareText(payload: FeedbackPayloadOk, url: string): string {
+  const { battle } = payload;
+  if (battle.is_tie) {
+    const [p1, p2] = payload.snapshots;
+    const n1 = p1?.producer.display_name ?? 'Producer 1';
+    const n2 = p2?.producer.display_name ?? 'Producer 2';
+    return `🤝 Match nul entre ${n1} et ${n2} sur "${battle.title}" sur Beatelion → ${url}`;
+  }
+  const winner = payload.snapshots.find((s) => s.product_id === battle.winner_product_id);
+  const winnerName = winner?.producer.display_name ?? 'Le gagnant';
+  return `🏆 ${winnerName} remporte la battle "${battle.title}" sur Beatelion → ${url}`;
+}
+
+function ProducerCard({
+  snapshot,
+  variant,
+  highlight,
+  credibilityDynamic,
+  size,
+}: {
+  snapshot: FeedbackSnapshot;
+  variant: 'primary' | 'secondary';
+  highlight: 'winner' | 'loser' | 'tie' | 'none';
+  credibilityDynamic: boolean;
+  size: number;
+}) {
+  const name = snapshot.producer.display_name ?? 'Producer';
+  const badge =
+    highlight === 'winner' ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-primary)] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+        Gagnant
+      </span>
+    ) : highlight === 'tie' ? (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-300">
+        Match nul
+      </span>
+    ) : null;
+
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4">
+      <BattleScoreRadar
+        scores={snapshot.scores}
+        size={size}
+        variant={variant}
+        coherenceDataSufficient={snapshot.coherence_data_sufficient}
+        credibilityDynamic={credibilityDynamic}
+        ariaLabel={`Radar ${name}`}
+      />
+      <div className="text-center">
+        <p className="flex flex-wrap items-center justify-center gap-2 text-sm font-medium text-zinc-100">
+          <span>{name}</span>
+          {badge}
+        </p>
+        <p className="mt-1 text-xs text-zinc-500 font-mono">
+          quality {Number(snapshot.quality_index).toFixed(1)} · {snapshot.votes_for_product}/
+          {snapshot.votes_total} votes
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TopCriteria({ items }: { items: FeedbackTopCriterion[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-4">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-300">
+        Top critères qui ont fait la différence
+      </h3>
+      <ul className="space-y-2">
+        {items.map((c) => (
+          <li
+            key={c.criterion_key}
+            className="flex items-center justify-between text-sm text-zinc-200"
+          >
+            <span className="font-mono text-xs uppercase tracking-wider text-zinc-400">
+              {c.criterion_key}
+            </span>
+            <span className="text-zinc-300">
+              {c.count} <span className="text-zinc-500">({Math.round(c.share * 100)}%)</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RoleCTA({
+  role,
+  shareText,
+  slug,
+}: {
+  role: ViewerRole;
+  shareText: string;
+  slug: string;
+}) {
+  const onShare = () => {
+    // Placeholder until /share/battle/:slug + navigator.share lands in session +1.
+    console.log('[feedback:share]', shareText);
+  };
+
+  if (role === 'winner' || role === 'admin') {
+    return (
+      <button
+        type="button"
+        onClick={onShare}
+        className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white shadow hover:opacity-90"
+      >
+        Partager ma victoire
+      </button>
+    );
+  }
+  if (role === 'loser') {
+    return (
+      <Link
+        to="/battles"
+        className="inline-flex items-center justify-center rounded-md border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 hover:border-zinc-500"
+      >
+        Recommencer une battle
+      </Link>
+    );
+  }
+  if (role === 'tie_participant') {
+    return (
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={onShare}
+          className="inline-flex items-center justify-center rounded-md bg-amber-500/90 px-5 py-3 text-sm font-semibold text-zinc-950 hover:opacity-90"
+        >
+          Match nul honorable
+        </button>
+        <Link
+          to={`/battles/${slug}`}
+          className="inline-flex items-center justify-center rounded-md border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-100 hover:border-zinc-500"
+        >
+          Rejouer
+        </Link>
+      </div>
+    );
+  }
+  if (role === 'visitor_auth') {
+    return (
+      <Link
+        to="/battles"
+        className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+      >
+        Voter sur la prochaine battle
+      </Link>
+    );
+  }
+  return (
+    <Link
+      to="/register"
+      className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+    >
+      Inscris-toi pour voter
+    </Link>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl px-4 pb-20 pt-8 md:px-8">
+      <div className="mb-6 h-7 w-2/3 animate-pulse rounded bg-zinc-800/60" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className="flex flex-col items-center gap-4 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-6"
+          >
+            <div className="h-[280px] w-[280px] animate-pulse rounded-full bg-zinc-800/40" />
+            <div className="h-4 w-32 animate-pulse rounded bg-zinc-800/60" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MessageState({
+  title,
+  body,
+  cta,
+}: {
+  title: string;
+  body: string;
+  cta: { label: string; to: string } | { label: string; onClick: () => void };
+}) {
+  return (
+    <div className="mx-auto max-w-xl px-4 pb-20 pt-16 text-center md:px-8">
+      <h1 className="mb-3 text-2xl font-bold text-zinc-100">{title}</h1>
+      <p className="mb-6 text-zinc-400">{body}</p>
+      {'to' in cta ? (
+        <Link
+          to={cta.to}
+          className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+        >
+          {cta.label}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={cta.onClick}
+          className="inline-flex items-center justify-center rounded-md bg-[var(--brand-primary)] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+        >
+          {cta.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function BattleFeedbackPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const { user } = useAuth();
+  const userRole = useUserRole();
+  const { state, refetch } = useFeedbackPayload(slug);
+
+  const [radarSize, setRadarSize] = useState<number>(280);
+  useEffect(() => {
+    const apply = () => setRadarSize(window.matchMedia('(min-width: 768px)').matches ? 320 : 280);
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
+
+  const viewerRole: ViewerRole = useMemo(() => {
+    if (state.kind !== 'ok') return user ? 'visitor_auth' : 'visitor_anon';
+    return deriveRole({
+      userId: user?.id,
+      userRole,
+      battle: state.payload.battle,
+      snapshots: state.payload.snapshots,
+    });
+  }, [state, user, userRole]);
+
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  useEffect(() => {
+    if (viewerRole !== 'admin') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        setShowAdminPanel((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewerRole]);
+
+  if (!slug) {
+    return (
+      <MessageState
+        title="Battle introuvable"
+        body="L'URL ne contient pas de slug de battle."
+        cta={{ label: 'Voir les battles', to: '/battles' }}
+      />
+    );
+  }
+
+  if (state.kind === 'loading') return <LoadingSkeleton />;
+
+  if (state.kind === 'not_found') {
+    return (
+      <MessageState
+        title="Battle introuvable"
+        body="Cette battle n'existe pas ou n'est plus accessible."
+        cta={{ label: 'Voir les battles', to: '/battles' }}
+      />
+    );
+  }
+
+  if (state.kind === 'not_finalized') {
+    return (
+      <MessageState
+        title="Battle en cours"
+        body="Les résultats détaillés seront disponibles à la fin du vote."
+        cta={{ label: 'Voir la battle', to: `/battles/${slug}` }}
+      />
+    );
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <MessageState
+        title="Une erreur est survenue"
+        body={state.message}
+        cta={{ label: 'Réessayer', onClick: refetch }}
+      />
+    );
+  }
+
+  const { payload } = state;
+  const { battle, snapshots, top_criteria, meta } = payload;
+
+  if (snapshots.length === 0) {
+    return (
+      <MessageState
+        title="Pas encore de données"
+        body="Les statistiques de cette battle ne sont pas encore disponibles."
+        cta={{ label: 'Voir la battle', to: `/battles/${slug}` }}
+      />
+    );
+  }
+
+  const { winner, opponent } = splitSnapshots(payload);
+  const shareText = buildShareText(payload, window.location.href);
+
+  return (
+    <div className="min-h-screen bg-[var(--brand-bg)] text-zinc-100">
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 md:px-8">
+        <header className="mb-6">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-300">
+              {battle.is_tie ? 'Match nul' : 'Terminée'}
+            </span>
+            <span className="text-xs text-zinc-500">
+              {meta.total_voters} votes · {meta.total_feedback} feedbacks
+            </span>
+          </div>
+          <h1 className="text-2xl font-bold text-zinc-50 md:text-3xl">{battle.title}</h1>
+        </header>
+
+        <section className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {winner && (
+            <ProducerCard
+              snapshot={winner}
+              variant="primary"
+              highlight={battle.is_tie ? 'tie' : 'winner'}
+              credibilityDynamic={meta.credibility_dynamic}
+              size={radarSize}
+            />
+          )}
+          {opponent && (
+            <ProducerCard
+              snapshot={opponent}
+              variant="secondary"
+              highlight={battle.is_tie ? 'tie' : 'loser'}
+              credibilityDynamic={meta.credibility_dynamic}
+              size={radarSize}
+            />
+          )}
+        </section>
+
+        {(viewerRole === 'loser' || viewerRole === 'admin') && (
+          <div className="mb-8">
+            <TopCriteria items={top_criteria} />
+          </div>
+        )}
+
+        <section className="mb-8 flex flex-col items-center gap-3">
+          <RoleCTA role={viewerRole} shareText={shareText} slug={slug} />
+        </section>
+
+        {(viewerRole === 'winner' || viewerRole === 'tie_participant') && (
+          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur md:hidden">
+            <div className="mx-auto flex max-w-5xl items-center justify-center">
+              <RoleCTA role={viewerRole} shareText={shareText} slug={slug} />
+            </div>
+          </div>
+        )}
+
+        {viewerRole === 'admin' && showAdminPanel && (
+          <aside className="fixed bottom-4 right-4 z-30 max-h-[70vh] w-[min(420px,calc(100vw-2rem))] overflow-auto rounded-lg border border-amber-500/40 bg-zinc-950/95 p-4 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                Admin debug · Cmd+Shift+D
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAdminPanel(false)}
+                className="text-xs text-zinc-500 hover:text-zinc-200"
+              >
+                close
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap break-all text-[10px] text-zinc-400">
+              {JSON.stringify(payload, null, 2)}
+            </pre>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}

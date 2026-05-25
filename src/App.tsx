@@ -44,6 +44,7 @@ const HomePage = lazyNamed(() => import('./pages/Home'), 'HomePage');
 const BeatsPage = lazyNamed(() => import('./pages/Beats'), 'BeatsPage');
 const BattlesPage = lazyNamed(() => import('./pages/Battles'), 'BattlesPage');
 const BattleDetailPage = lazyNamed(() => import('./pages/BattleDetail'), 'BattleDetailPage');
+const BattleFeedbackPage = lazyNamed(() => import('./pages/BattleFeedback'), 'BattleFeedbackPage');
 const BattleCampaignPage = lazyNamed(() => import('./pages/BattleCampaign'), 'BattleCampaignPage');
 const PricingPage = lazyNamed(() => import('./pages/Pricing'), 'PricingPage');
 const LoginPage = lazyNamed(() => import('./pages/auth/Login'), 'LoginPage');
@@ -171,6 +172,7 @@ function AppContent() {
           <Route path="kits/:slug" element={<Navigate to="/beats" replace />} />
           <Route path="battles" element={<BattlesPage />} />
           <Route path="battles/:slug" element={<BattleDetailPage />} />
+          <Route path="battles/:slug/feedback" element={<BattleFeedbackPage />} />
           <Route path="battle-campaign/:slug" element={<BattleCampaignPage />} />
           <Route path="leaderboard" element={<LeaderboardPage />} />
           <Route path="leaderboard-weekly" element={<LeaderboardWeeklyPage />} />

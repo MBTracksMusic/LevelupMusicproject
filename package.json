@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test:contracts": "node --test tests/integration/contracts-immutability.test.mjs",
     "test:contract-runtime": "node --test tests/unit/contract-generation-runtime.test.mjs",
+    "test:unit": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/unit/deriveRole.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts.tmp && mv src/lib/supabase/database.types.ts.tmp src/lib/supabase/database.types.ts && echo 'Types generated successfully'",
     "supabase:deploy:get-producer-plans:public": "supabase functions deploy get-producer-plans --no-verify-jwt",
