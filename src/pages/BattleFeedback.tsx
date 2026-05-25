@@ -667,7 +667,7 @@ export function BattleFeedbackPage() {
   }
 
   const { winner, opponent } = splitSnapshots(payload);
-  const shareUrl = `${window.location.origin}/battles/${slug}/feedback`;
+  const shareUrl = `${window.location.origin}/share/battle/${slug}/feedback`;
   const shareText = buildShareText(payload);
 
   return (

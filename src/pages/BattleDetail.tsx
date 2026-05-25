@@ -317,8 +317,8 @@ export function BattleDetailPage() {
   const shareUrl = useMemo(() => {
     if (!battleSlug) return null;
     return user?.id
-      ? `${window.location.origin}/battles/${battleSlug}?ref=${user.id}`
-      : `${window.location.origin}/battles/${battleSlug}`;
+      ? `${window.location.origin}/share/battle/${battleSlug}?ref=${user.id}`
+      : `${window.location.origin}/share/battle/${battleSlug}`;
   }, [battleSlug, user?.id]);
 
   const shareText = battleTitle ? `${battleTitle} sur Beatelion` : '';
