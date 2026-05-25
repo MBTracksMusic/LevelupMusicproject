@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, BarChart3, Check, Clock, Copy, Share2, Trophy, Users } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
@@ -18,6 +18,46 @@ import { getReferrer, storeReferrer, trackBattleShare, trackBattleVote, trackBat
 
 type BattleSnapshotSlot = 'producer1' | 'producer2';
 type BattleSnapshotMap = Partial<Record<BattleSnapshotSlot, BattleProductSnapshot>>;
+type SocialShareMethod = 'x' | 'facebook' | 'linkedin' | 'whatsapp';
+type SocialShareTarget = {
+  method: SocialShareMethod;
+  label: string;
+  marker: string;
+  href: string;
+};
+
+function buildSocialShareTargets(shareText: string, shareUrl: string): SocialShareTarget[] {
+  const text = encodeURIComponent(shareText);
+  const url = encodeURIComponent(shareUrl);
+  const textWithUrl = encodeURIComponent(`${shareText} ${shareUrl}`);
+
+  return [
+    {
+      method: 'x',
+      label: 'X',
+      marker: 'X',
+      href: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
+    },
+    {
+      method: 'facebook',
+      label: 'Facebook',
+      marker: 'f',
+      href: `https://www.facebook.com/sharer/sharer.php?u=${url}&quote=${text}`,
+    },
+    {
+      method: 'linkedin',
+      label: 'LinkedIn',
+      marker: 'in',
+      href: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
+    },
+    {
+      method: 'whatsapp',
+      label: 'WhatsApp',
+      marker: 'WA',
+      href: `https://wa.me/?text=${textWithUrl}`,
+    },
+  ];
+}
 
 function getStatusVariant(status: BattleWithRelations['status']) {
   if (status === 'active' || status === 'voting') return 'success';
@@ -57,6 +97,8 @@ export function BattleDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [historyWarning, setHistoryWarning] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
 
   const fetchBattle = useCallback(async () => {
     if (!slug) {
@@ -215,19 +257,23 @@ export function BattleDetailPage() {
     void fetchBattle();
   }, [fetchBattle]);
 
+  const battleId = battle?.id ?? null;
+  const battleSlug = battle?.slug ?? null;
+  const battleTitle = battle?.title ?? null;
+
   // Realtime subscription — met à jour uniquement les compteurs de votes
   useEffect(() => {
-    if (!battle?.id) return;
+    if (!battleId) return;
 
     const channel = supabase
-      .channel(`battle-votes:${battle.id}`)
+      .channel(`battle-votes:${battleId}`)
       .on(
         'postgres_changes',
         {
           event: 'UPDATE',
           schema: 'public',
           table: 'battles',
-          filter: `id=eq.${battle.id}`,
+          filter: `id=eq.${battleId}`,
         },
         (payload) => {
           const updated = payload.new as { votes_producer1?: number; votes_producer2?: number };
@@ -246,7 +292,7 @@ export function BattleDetailPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [battle?.id]);
+  }, [battleId]);
 
   // Lit le paramètre ?ref= à l'arrivée et le stocke une seule fois
   useEffect(() => {
@@ -256,41 +302,80 @@ export function BattleDetailPage() {
 
   // Met à jour le titre de la page quand la battle est chargée
   useEffect(() => {
-    if (!battle) return;
+    if (!battleTitle) return;
     const prev = document.title;
-    document.title = `${battle.title} – Beatelion`;
+    document.title = `${battleTitle} – Beatelion`;
     return () => { document.title = prev; };
-  }, [battle?.title]);
+  }, [battleTitle]);
 
   // Track la vue battle une fois que l'ID est connu
   useEffect(() => {
-    if (!battle) return;
-    trackBattleView({ battleId: battle.id, slug: battle.slug, referrer: getReferrer() });
-  }, [battle?.id]);
+    if (!battleId || !battleSlug) return;
+    trackBattleView({ battleId, slug: battleSlug, referrer: getReferrer() });
+  }, [battleId, battleSlug]);
 
-  const handleShare = useCallback(async () => {
-    if (!battle) return;
-    const shareUrl = user?.id
-      ? `${window.location.origin}/battles/${battle.slug}?ref=${user.id}`
-      : `${window.location.origin}/battles/${battle.slug}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: battle.title, url: shareUrl });
-        trackBattleShare({ battleId: battle.id, method: 'native' });
-        return;
-      } catch {
-        // annulé par l'utilisateur ou non supporté — fallback clipboard
+  const shareUrl = useMemo(() => {
+    if (!battleSlug) return null;
+    return user?.id
+      ? `${window.location.origin}/battles/${battleSlug}?ref=${user.id}`
+      : `${window.location.origin}/battles/${battleSlug}`;
+  }, [battleSlug, user?.id]);
+
+  const shareText = battleTitle ? `${battleTitle} sur Beatelion` : '';
+  const socialShareTargets = useMemo(
+    () => (shareUrl ? buildSocialShareTargets(shareText, shareUrl) : []),
+    [shareText, shareUrl],
+  );
+
+  useEffect(() => {
+    if (!isShareMenuOpen) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (shareMenuRef.current?.contains(event.target as Node)) return;
+      setIsShareMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsShareMenuOpen(false);
       }
-    }
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isShareMenuOpen]);
+
+  const copyShareLink = useCallback(async () => {
+    if (!battleId || !shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
+      setIsShareMenuOpen(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      trackBattleShare({ battleId: battle.id, method: 'clipboard' });
+      trackBattleShare({ battleId, method: 'clipboard' });
     } catch {
       // clipboard non disponible (HTTP sans HTTPS) — aucune action
     }
-  }, [battle, user?.id]);
+  }, [battleId, shareUrl]);
+
+  const handleSocialShare = useCallback((target: SocialShareTarget) => {
+    if (!battleId) return;
+    setIsShareMenuOpen(false);
+    trackBattleShare({ battleId, method: target.method });
+
+    const opened = window.open('', '_blank', 'width=720,height=640');
+    if (opened) {
+      opened.opener = null;
+      opened.location.href = target.href;
+      opened.focus();
+      return;
+    }
+
+    window.location.assign(target.href);
+  }, [battleId]);
 
   // Mise à jour optimiste locale après vote (sans re-fetch)
   const handleVoteSuccess = useCallback((votedForProducerId: string) => {
@@ -405,25 +490,61 @@ export function BattleDetailPage() {
                 <span className="hidden sm:inline">{t('battleDetail.viewFeedbackReport')}</span>
               </Link>
             )}
-            <button
-              type="button"
-              onClick={handleShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-              title={t('battleDetail.shareButton')}
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span className="text-green-400">{t('battleDetail.linkCopied')}</span>
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-4 h-4 sm:hidden" />
-                  <Copy className="w-4 h-4 hidden sm:block" />
-                  <span className="hidden sm:inline">{t('battleDetail.copyLink')}</span>
-                </>
+            <div ref={shareMenuRef} className="relative inline-flex">
+              <button
+                type="button"
+                onClick={() => setIsShareMenuOpen((open) => !open)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                title={t('battleDetail.shareButton')}
+                aria-expanded={isShareMenuOpen}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400">{t('battleDetail.linkCopied')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4 sm:hidden" />
+                    <Copy className="w-4 h-4 hidden sm:block" />
+                    <span className="hidden sm:inline">{t('battleDetail.copyLink')}</span>
+                  </>
+                )}
+              </button>
+
+              {isShareMenuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-zinc-700 bg-zinc-950 p-2 shadow-2xl">
+                  <div className="grid grid-cols-2 gap-2">
+                    {socialShareTargets.map((target) => (
+                      <button
+                        key={target.method}
+                        type="button"
+                        onClick={() => handleSocialShare(target)}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm font-semibold text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
+                      >
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[11px] font-black text-zinc-950">
+                          {target.marker}
+                        </span>
+                        {target.label}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => void copyShareLink()}
+                      className="col-span-2 inline-flex min-h-11 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm font-semibold text-zinc-100 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
+                    >
+                      {copied ? (
+                        <Check className="h-5 w-5 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-5 w-5 text-zinc-300" />
+                      )}
+                      {t('battleDetail.copyLink')}
+                    </button>
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
             <Badge variant={getStatusVariant(battle.status)}>{t(getStatusLabelKey(battle.status) as 'battleDetail.statusActive' | 'battleDetail.statusPendingAcceptance' | 'battleDetail.statusAwaitingAdmin' | 'battleDetail.statusApproved' | 'battleDetail.statusRejected' | 'battleDetail.statusCompleted' | 'battleDetail.statusCancelled' | 'battleDetail.statusPending')}</Badge>
           </div>
         </div>
