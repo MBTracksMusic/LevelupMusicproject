@@ -44,6 +44,7 @@ const HomePage = lazyNamed(() => import('./pages/Home'), 'HomePage');
 const BeatsPage = lazyNamed(() => import('./pages/Beats'), 'BeatsPage');
 const BattlesPage = lazyNamed(() => import('./pages/Battles'), 'BattlesPage');
 const BattleDetailPage = lazyNamed(() => import('./pages/BattleDetail'), 'BattleDetailPage');
+const BattleFeedbackPage = lazyNamed(() => import('./pages/BattleFeedback'), 'BattleFeedbackPage');
 const BattleCampaignPage = lazyNamed(() => import('./pages/BattleCampaign'), 'BattleCampaignPage');
 const PricingPage = lazyNamed(() => import('./pages/Pricing'), 'PricingPage');
 const LoginPage = lazyNamed(() => import('./pages/auth/Login'), 'LoginPage');
@@ -72,6 +73,9 @@ const LabelAccessPage = lazyNamed(() => import('./pages/LabelAccess'), 'LabelAcc
 const LeaderboardPage = lazyNamed(() => import('./pages/Leaderboard'), 'LeaderboardPage');
 const LeaderboardWeeklyPage = lazyNamed(() => import('./pages/LeaderboardWeekly'), 'LeaderboardWeeklyPage');
 const NotificationsPage = lazyNamed(() => import('./pages/Notifications'), 'NotificationsPage');
+// Dev-only preview lab (Phase 1 feedback radar). Page does its own DEV guard
+// as defense in depth; the Route below is also gated on import.meta.env.DEV.
+const RadarPreviewPage = lazyNamed(() => import('./pages/dev/RadarPreview'), 'RadarPreviewPage');
 const AdminLayout = lazyNamed(() => import('./pages/admin/AdminLayout'), 'AdminLayout');
 const AdminDashboardPage = lazyNamed(() => import('./pages/admin/AdminDashboard'), 'AdminDashboardPage');
 const AdminNewsPage = lazyNamed(() => import('./pages/admin/AdminNews'), 'AdminNewsPage');
@@ -154,6 +158,9 @@ function AppContent() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        {import.meta.env.DEV && (
+          <Route path="/dev/radar-preview" element={<RadarPreviewPage />} />
+        )}
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />
           <Route path="beats" element={<BeatsPage mode="beats" />} />
@@ -165,6 +172,7 @@ function AppContent() {
           <Route path="kits/:slug" element={<Navigate to="/beats" replace />} />
           <Route path="battles" element={<BattlesPage />} />
           <Route path="battles/:slug" element={<BattleDetailPage />} />
+          <Route path="battles/:slug/feedback" element={<BattleFeedbackPage />} />
           <Route path="battle-campaign/:slug" element={<BattleCampaignPage />} />
           <Route path="leaderboard" element={<LeaderboardPage />} />
           <Route path="leaderboard-weekly" element={<LeaderboardWeeklyPage />} />
