@@ -30,6 +30,11 @@ const LAUNCH_BYPASS_PATHS = new Set([
   '/auth/callback',
 ]);
 
+/** Public-by-design routes that must bypass the launch gate (e.g. shareable URLs). */
+const LAUNCH_BYPASS_PATTERNS: RegExp[] = [
+  /^\/battles\/[^/]+\/feedback$/,
+];
+
 function lazyNamed(
   loader: () => Promise<Record<string, unknown>>,
   exportName: string,
@@ -349,8 +354,11 @@ function AppShell() {
   const location = useLocation();
   const { accessLevel, messages, isLoading } = useLaunchAccess();
 
-  // Auth paths are always reachable regardless of launch phase
-  if (LAUNCH_BYPASS_PATHS.has(location.pathname)) {
+  // Auth paths and public-by-design routes always reachable regardless of launch phase
+  if (
+    LAUNCH_BYPASS_PATHS.has(location.pathname) ||
+    LAUNCH_BYPASS_PATTERNS.some((p) => p.test(location.pathname))
+  ) {
     return <AppContent />;
   }
 
