@@ -289,7 +289,7 @@ const fetchLegacyCatalogProducts = async ({
       ${PRODUCT_SAFE_COLUMNS},
       genre:genres(${GENRE_SAFE_COLUMNS}),
       mood:moods(${MOOD_SAFE_COLUMNS})
-    ` as any)
+    `)
     .eq('is_published', true)
     .eq('is_elite', false);
 
@@ -364,7 +364,7 @@ const fetchLegacyCatalogProductBySlug = async ({
       ${PRODUCT_SAFE_COLUMNS},
       genre:genres(${GENRE_SAFE_COLUMNS}),
       mood:moods(${MOOD_SAFE_COLUMNS})
-    ` as any)
+    `)
     .eq('slug', slug)
     .eq('is_published', true)
     .eq('is_elite', false);
@@ -466,6 +466,27 @@ export async function fetchCatalogProducts({
   const products = rows.map(toProduct);
   const visibleProducts = await applyProducerVisibility(products, restrictToActiveProducers);
   return { products: visibleProducts, total: count ?? visibleProducts.length };
+}
+
+export async function fetchCatalogProductsByIds(productIds: Array<string | null | undefined>): Promise<Map<string, ProductWithRelations>> {
+  const ids = Array.from(new Set(productIds.filter((id): id is string => Boolean(id))));
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('public_catalog_products')
+    .select(CATALOG_SELECT_COLUMNS)
+    .in('id', ids);
+
+  if (error) {
+    console.warn('public_catalog_products lookup failed', error);
+    return new Map();
+  }
+
+  const rows = (data as unknown as CatalogProductRow[] | null) ?? [];
+  return new Map(rows.map((row) => {
+    const product = toProduct(row);
+    return [product.id, product];
+  }));
 }
 
 export async function fetchCatalogProductBySlug({

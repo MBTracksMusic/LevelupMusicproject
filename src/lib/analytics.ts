@@ -381,9 +381,17 @@ export function trackBattleView(params: {
   });
 }
 
+export type BattleShareMethod =
+  | 'native'
+  | 'clipboard'
+  | 'x'
+  | 'facebook'
+  | 'linkedin'
+  | 'whatsapp';
+
 export function trackBattleShare(params: {
   battleId: string;
-  method: 'native' | 'clipboard';
+  method: BattleShareMethod;
 }) {
   trackEvent('battle_share', {
     battle_id: params.battleId,

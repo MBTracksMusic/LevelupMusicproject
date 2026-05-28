@@ -1010,6 +1010,88 @@ export type Database = {
           },
         ]
       }
+      battle_share_events: {
+        Row: {
+          battle_id: string
+          created_at: string
+          id: string
+          metadata: Json
+          producer_id: string
+          reputation_event_id: string | null
+          share_channel: string
+          template_used: string
+          xp_applied: boolean
+          xp_delta: number
+        }
+        Insert: {
+          battle_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          producer_id: string
+          reputation_event_id?: string | null
+          share_channel: string
+          template_used: string
+          xp_applied?: boolean
+          xp_delta?: number
+        }
+        Update: {
+          battle_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          producer_id?: string
+          reputation_event_id?: string | null
+          share_channel?: string
+          template_used?: string
+          xp_applied?: boolean
+          xp_delta?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "battle_share_events_battle_id_fkey"
+            columns: ["battle_id"]
+            isOneToOne: false
+            referencedRelation: "battles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "battle_share_events_producer_id_fkey"
+            columns: ["producer_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "battle_share_events_producer_id_fkey"
+            columns: ["producer_id"]
+            isOneToOne: false
+            referencedRelation: "my_user_profile"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "battle_share_events_producer_id_fkey"
+            columns: ["producer_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "battle_share_events_producer_id_fkey"
+            columns: ["producer_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_leaderboard"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "battle_share_events_reputation_event_id_fkey"
+            columns: ["reputation_event_id"]
+            isOneToOne: false
+            referencedRelation: "reputation_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       battle_suggestions: {
         Row: {
           accepted_at: string | null
@@ -7991,6 +8073,10 @@ export type Database = {
         }
         Returns: string
       }
+      get_battle_feedback_payload: {
+        Args: { p_battle_id: string; p_viewer_id?: string }
+        Returns: Json
+      }
       get_battles_quota_status: {
         Args: never
         Returns: {
@@ -8068,6 +8154,7 @@ export type Database = {
           win_rate: number
         }[]
       }
+      get_loser_share_data: { Args: { p_battle_id: string }; Returns: Json }
       get_matchmaking_opponents: {
         Args: never
         Returns: {
@@ -8641,6 +8728,14 @@ export type Database = {
           votes_total: number
           win_rate: number
         }[]
+      }
+      record_loser_battle_share: {
+        Args: {
+          p_battle_id: string
+          p_share_channel: string
+          p_template_used: string
+        }
+        Returns: Json
       }
       rpc_admin_get_reputation_overview: {
         Args: { p_limit?: number; p_search?: string }

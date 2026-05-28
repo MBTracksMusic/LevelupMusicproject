@@ -1,6 +1,14 @@
 {
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
+    {
+      "source": "/share/battle/:slug/feedback",
+      "destination": "/api/og/battle?slug=:slug&target=feedback"
+    },
+    {
+      "source": "/share/battle/:slug",
+      "destination": "/api/og/battle?slug=:slug&target=battle"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "redirects": [

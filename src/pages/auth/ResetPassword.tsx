@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { AuthApiError } from '@supabase/supabase-js';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Music } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useTranslation } from '../../lib/i18n';
 import { updatePassword } from '../../lib/auth/service';
+import {
+  classifyAuthError,
+  getAuthErrorTranslationKey,
+  getPasswordPolicyTranslationKey,
+  validatePasswordPolicy,
+} from '../../lib/auth/errors';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase/client';
 
@@ -159,6 +164,16 @@ export function ResetPasswordPage() {
 
     const bootstrapRecoverySession = async () => {
       try {
+        // Pre-check: with detectSessionInUrl=true the Supabase client may have
+        // already consumed the recovery params and established the session.
+        // Calling exchangeCodeForSession / verifyOtp a second time on an already
+        // used token throws — bail early if the session is already there.
+        const { data: { session: preexistingSession } } = await supabase.auth.getSession();
+        if (preexistingSession) {
+          settleReady();
+          return;
+        }
+
         if (initialRecoveryContext.code) {
           const { error } = await supabase.auth.exchangeCodeForSession(initialRecoveryContext.code);
           if (error) throw error;
@@ -169,18 +184,11 @@ export function ResetPasswordPage() {
           });
           if (error) throw error;
         } else if (initialRecoveryContext.accessToken && initialRecoveryContext.refreshToken) {
-          const { data: { session: existingSession } } = await supabase.auth.getSession();
-          const hasSameSession =
-            existingSession?.access_token === initialRecoveryContext.accessToken &&
-            existingSession?.refresh_token === initialRecoveryContext.refreshToken;
-
-          if (!hasSameSession) {
-            const { error } = await supabase.auth.setSession({
-              access_token: initialRecoveryContext.accessToken,
-              refresh_token: initialRecoveryContext.refreshToken,
-            });
-            if (error) throw error;
-          }
+          const { error } = await supabase.auth.setSession({
+            access_token: initialRecoveryContext.accessToken,
+            refresh_token: initialRecoveryContext.refreshToken,
+          });
+          if (error) throw error;
         }
 
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -188,12 +196,14 @@ export function ResetPasswordPage() {
 
         if (session) {
           settleReady();
+        } else {
+          settleValidationError(t('auth.resetPasswordInvalidLink'));
         }
       } catch (error) {
         console.error('Reset password link validation error:', error);
-        const apiError = error as AuthApiError;
+        const kind = classifyAuthError(error);
         const invalidLinkMessage =
-          apiError?.status === 400 || apiError?.status === 401 || apiError?.status === 403
+          kind === 'expired_token' || kind === 'invalid_token' || kind === 'session_missing'
             ? t('auth.resetPasswordInvalidLink')
             : t('auth.resetPasswordLinkValidationFailed');
         settleValidationError(invalidLinkMessage);
@@ -220,8 +230,11 @@ export function ResetPasswordPage() {
 
     if (!formData.password) {
       newErrors.password = t('errors.requiredField');
-    } else if (formData.password.length < 8) {
-      newErrors.password = t('auth.weakPassword');
+    } else {
+      const policy = validatePasswordPolicy(formData.password);
+      if (!policy.ok && policy.reason) {
+        newErrors.password = t(getPasswordPolicyTranslationKey(policy.reason));
+      }
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -250,7 +263,17 @@ export function ResetPasswordPage() {
       setTimeout(() => navigate('/login'), 0);
     } catch (error) {
       console.error('Reset password error:', error);
-      toast.error(t('auth.resetPasswordUpdateError'));
+      const kind = classifyAuthError(error);
+      const message = t(getAuthErrorTranslationKey(error));
+
+      // Recovery session is dead — flip the form to error state and let the user
+      // request a new link instead of retrying with no session.
+      if (kind === 'session_missing' || kind === 'session_not_found' || kind === 'expired_token' || kind === 'invalid_token') {
+        setStatus('error');
+        setStatusMessage(message);
+      }
+
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -275,18 +298,24 @@ export function ResetPasswordPage() {
 
         <div className="bg-zinc-900 rounded-2xl p-8 border border-zinc-800">
           <form onSubmit={handleSubmit} className="space-y-5">
-            <Input
-              type="password"
-              name="password"
-              label={t('auth.password')}
-              value={formData.password}
-              onChange={handleChange}
-              leftIcon={<Lock className="w-5 h-5" />}
-              placeholder={t('auth.passwordPlaceholder')}
-              error={errors.password}
-              required
-              autoComplete="new-password"
-            />
+            <div className="space-y-1">
+              <Input
+                type="password"
+                name="password"
+                label={t('auth.password')}
+                value={formData.password}
+                onChange={handleChange}
+                leftIcon={<Lock className="w-5 h-5" />}
+                placeholder={t('auth.passwordPlaceholder')}
+                error={errors.password}
+                required
+                autoComplete="new-password"
+                disabled={status !== 'ready'}
+              />
+              <p className="text-xs text-zinc-500 px-1">
+                {t('auth.resetPasswordPolicyHint')}
+              </p>
+            </div>
 
             <Input
               type="password"
@@ -299,6 +328,7 @@ export function ResetPasswordPage() {
               error={errors.confirmPassword}
               required
               autoComplete="new-password"
+              disabled={status !== 'ready'}
             />
 
             <Button
@@ -310,8 +340,16 @@ export function ResetPasswordPage() {
             >
               {t('auth.resetPasswordButton')}
             </Button>
+
             {status === 'error' && (
-              <p className="text-sm text-red-400 text-center">{statusMessage}</p>
+              <div className="space-y-3">
+                <p className="text-sm text-red-400 text-center">{statusMessage}</p>
+                <Link to="/forgot-password">
+                  <Button type="button" variant="secondary" className="w-full">
+                    {t('auth.resetPasswordRequestNewLink')}
+                  </Button>
+                </Link>
+              </div>
             )}
           </form>
         </div>

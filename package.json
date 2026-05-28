@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test:contracts": "node --test tests/integration/contracts-immutability.test.mjs",
     "test:contract-runtime": "node --test tests/unit/contract-generation-runtime.test.mjs",
+    "test:unit": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/unit/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "supabase:types": "supabase gen types typescript --linked --schema public > src/lib/supabase/database.types.ts.tmp && mv src/lib/supabase/database.types.ts.tmp src/lib/supabase/database.types.ts && echo 'Types generated successfully'",
     "supabase:deploy:get-producer-plans:public": "supabase functions deploy get-producer-plans --no-verify-jwt",
@@ -37,6 +38,8 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.13.0",
     "resend": "^6.9.3",
+    "satori": "^0.26.0",
+    "sharp": "^0.34.5",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.10"
   },

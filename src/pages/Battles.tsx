@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Clock, Users } from 'lucide-react';
+import { BarChart3, Clock, ExternalLink, Trophy, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
@@ -8,6 +8,7 @@ import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
+import { fetchCatalogProductsByIds } from '../lib/supabase/catalog';
 import { useAuth, useIsEmailVerified } from '../lib/auth/hooks';
 import type { BattleWithRelations } from '../lib/supabase/types';
 
@@ -59,6 +60,12 @@ export function BattlesPage() {
             product1_id,
             product2_id,
             status,
+            accepted_at,
+            rejected_at,
+            admin_validated_at,
+            rejection_reason,
+            response_deadline,
+            submission_deadline,
             starts_at,
             voting_ends_at,
             winner_id,
@@ -66,10 +73,10 @@ export function BattlesPage() {
             votes_producer2,
             featured,
             prize_description,
+            custom_duration_days,
+            extension_count,
             created_at,
-            updated_at,
-            product1:products!battles_product1_id_fkey(id, title, slug, product_type, cover_image_url, price),
-            product2:products!battles_product2_id_fkey(id, title, slug, product_type, cover_image_url, price)
+            updated_at
           `)
           .eq('status', filter)
           .order('created_at', { ascending: false })
@@ -80,17 +87,24 @@ export function BattlesPage() {
         let nextBattles: BattleWithRelations[] = rows;
 
         try {
-          const producerProfilesMap = await fetchPublicProducerProfilesMap(
-            rows.flatMap((row) => [row.producer1_id, row.producer2_id, row.winner_id])
-          );
+          const [producerProfilesMap, productsMap] = await Promise.all([
+            fetchPublicProducerProfilesMap(
+              rows.flatMap((row) => [row.producer1_id, row.producer2_id, row.winner_id])
+            ),
+            fetchCatalogProductsByIds(rows.flatMap((row) => [row.product1_id, row.product2_id])),
+          ]);
 
           nextBattles = rows.map((row) => {
             const producer1 = producerProfilesMap.get(row.producer1_id);
             const producer2 = row.producer2_id ? producerProfilesMap.get(row.producer2_id) : undefined;
             const winner = row.winner_id ? producerProfilesMap.get(row.winner_id) : undefined;
+            const product1 = row.product1_id ? productsMap.get(row.product1_id) : undefined;
+            const product2 = row.product2_id ? productsMap.get(row.product2_id) : undefined;
 
             return {
               ...row,
+              product1,
+              product2,
               producer1: producer1
                 ? {
                     id: producer1.user_id,
@@ -279,8 +293,7 @@ function BattleCard({ battle }: BattleCardProps) {
   };
 
   return (
-    <Link to={`/battles/${battle.slug}`}>
-      <Card variant="interactive" padding="lg" className="hover:border-rose-500/50">
+    <Card padding="lg" className="hover:border-rose-500/30 transition-colors">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-bold text-white">{battle.title}</h3>
           <div className="flex items-center gap-3">
@@ -407,7 +420,25 @@ function BattleCard({ battle }: BattleCardProps) {
             </div>
           </div>
         )}
+
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-zinc-800 pt-4">
+          <Link
+            to={`/battles/${battle.slug}`}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {t('common.open')}
+          </Link>
+          {battle.status === 'completed' && (
+            <Link
+              to={`/battles/${battle.slug}/feedback`}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500/15 px-3 py-1.5 text-sm font-semibold text-amber-300 transition-colors hover:bg-amber-500/25 hover:text-amber-100"
+            >
+              <BarChart3 className="h-4 w-4" />
+              {t('battleDetail.viewFeedbackReport')}
+            </Link>
+          )}
+        </div>
       </Card>
-    </Link>
   );
 }
