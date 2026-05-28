@@ -49,3 +49,6 @@ audio-worker/.env.production
 contract-service/.env
 contract-service/.env.staging
 contract-service/.env.production
+.gstack/
+.claude/
+og-loser-preview.png
