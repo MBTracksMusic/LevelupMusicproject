@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Headphones, ShoppingCart } from 'lucide-react';
+import { ArrowRight, Headphones, Pause, Play, ShoppingCart } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { useAudioPlayer, type Track } from '../../context/AudioPlayerContext';
@@ -262,16 +262,19 @@ export function HomeFeaturedBeats() {
           <div className="flex flex-col gap-2">
             {[...Array(10)].map((_, index) => (
               <div key={index} className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-3 animate-pulse">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-zinc-800" />
                     <div className="h-12 w-12 rounded bg-zinc-800" />
-                    <div className="min-w-0 space-y-2">
+                    <div className="min-w-0 flex-1 space-y-2">
                       <div className="h-4 w-40 rounded bg-zinc-800" />
                       <div className="h-3 w-28 rounded bg-zinc-800" />
                     </div>
                   </div>
-                  <div className="h-8 w-32 rounded bg-zinc-800" />
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+                    <div className="h-4 w-14 rounded bg-zinc-800" />
+                    <div className="h-8 min-w-40 flex-1 rounded bg-zinc-800 sm:w-32 sm:flex-none" />
+                  </div>
                 </div>
               </div>
             ))}
@@ -306,8 +309,8 @@ export function HomeFeaturedBeats() {
                     : ''
                 }`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex items-center gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3 sm:flex-1">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -317,8 +320,17 @@ export function HomeFeaturedBeats() {
                       }}
                       disabled={!hasPreview}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rose-500/40 text-rose-400 transition-all duration-150 hover:bg-rose-500 hover:text-black active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={
+                        hasPreview
+                          ? isPlayingCurrent ? t('common.pause') : t('common.play')
+                          : t('products.previewUnavailable')
+                      }
                     >
-                      {isPlayingCurrent ? '⏸' : '▶'}
+                      {isPlayingCurrent ? (
+                        <Pause className="h-4 w-4" fill="currentColor" />
+                      ) : (
+                        <Play className="ml-0.5 h-4 w-4" fill="currentColor" />
+                      )}
                     </button>
 
                     {beat.cover_image_url ? (
@@ -331,7 +343,7 @@ export function HomeFeaturedBeats() {
                       <div className="h-12 w-12 shrink-0 rounded border border-zinc-800 bg-zinc-900" />
                     )}
 
-                    <div className="min-w-0 transition-all duration-150 group-hover:translate-x-[2px]">
+                    <div className="min-w-0 flex-1 transition-all duration-150 group-hover:translate-x-[2px]">
                       <p className="truncate text-sm font-semibold text-white transition-colors group-hover:text-rose-300">
                         {beat.title}
                       </p>
@@ -355,9 +367,9 @@ export function HomeFeaturedBeats() {
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-3">
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-rose-400">
+                  <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:shrink-0 sm:justify-end">
+                    <div className="shrink-0 text-left sm:text-right">
+                      <span className="whitespace-nowrap text-sm font-semibold text-rose-400">
                         {formatPrice(beat.price)}
                       </span>
                     </div>
@@ -372,6 +384,7 @@ export function HomeFeaturedBeats() {
                         isLoading={addingBeatId === beat.id}
                         leftIcon={<ShoppingCart className="w-4 h-4" />}
                         variant={isAuthenticated ? 'primary' : 'outline'}
+                        className="min-h-9 min-w-0 flex-1 whitespace-nowrap px-3 text-[13px] sm:flex-none sm:text-sm"
                       >
                         {isEarlyAccessPurchaseLocked
                           ? t('products.availableSoon')
