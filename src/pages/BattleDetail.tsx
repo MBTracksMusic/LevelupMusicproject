@@ -26,7 +26,7 @@ type SocialShareTarget = {
   href: string;
 };
 
-const SHARE_PREVIEW_VERSION = '3';
+const SHARE_PREVIEW_VERSION = '4';
 
 function buildSocialShareTargets(shareText: string, shareUrl: string): SocialShareTarget[] {
   const text = encodeURIComponent(shareText);
