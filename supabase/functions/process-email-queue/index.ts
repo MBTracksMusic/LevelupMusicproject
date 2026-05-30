@@ -428,6 +428,126 @@ const getTemplateContent = (params: {
     };
   }
 
+  if (template === "battle_request_accepted") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const producer2Name = asNonEmptyString(payload?.producer2_name);
+    const actorLine = producer2Name ? `${producer2Name} a accepte ton invitation.` : "Le producteur invite a accepte ton invitation.";
+    const metaLines = [
+      battleTitle ? `Battle : ${battleTitle}` : null,
+      producer2Name ? `Producteur invite : ${producer2Name}` : null,
+      `Reference : ${battleId}`,
+    ].filter((line): line is string => line !== null);
+
+    return {
+      subject: battleTitle
+        ? `Invitation acceptee pour "${battleTitle}"`
+        : "Ton invitation battle a ete acceptee",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Invitation acceptee",
+        preheader: "Ta battle attend maintenant la validation admin",
+        bodyLines: [
+          actorLine,
+          "La battle attend maintenant la validation administrateur avant de demarrer.",
+        ],
+        ctaLabel: "Voir mes battles",
+        ctaUrl: `${safeAppUrl}/producer/battles`,
+        metaLines,
+      }),
+    };
+  }
+
+  if (template === "battle_request_rejected") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const producer2Name = asNonEmptyString(payload?.producer2_name);
+    const rejectionReason = asNonEmptyString(payload?.rejection_reason);
+    const actorLine = producer2Name ? `${producer2Name} a refuse ton invitation.` : "Le producteur invite a refuse ton invitation.";
+    const metaLines = [
+      battleTitle ? `Battle : ${battleTitle}` : null,
+      producer2Name ? `Producteur invite : ${producer2Name}` : null,
+      rejectionReason ? `Raison : ${rejectionReason}` : null,
+      `Reference : ${battleId}`,
+    ].filter((line): line is string => line !== null);
+
+    return {
+      subject: battleTitle
+        ? `Invitation refusee pour "${battleTitle}"`
+        : "Ton invitation battle a ete refusee",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Invitation refusee",
+        preheader: "Ton invitation battle a ete refusee",
+        bodyLines: [
+          actorLine,
+          rejectionReason ? `Raison indiquee : ${rejectionReason}` : "Aucune raison n'a ete indiquee.",
+        ],
+        ctaLabel: "Voir mes battles",
+        ctaUrl: `${safeAppUrl}/producer/battles`,
+        metaLines,
+      }),
+    };
+  }
+
+  if (template === "battle_admin_approved") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const battleSlug = asNonEmptyString(payload?.battle_slug);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const battleUrl = battleSlug ? `${safeAppUrl}/battles/${battleSlug}` : `${safeAppUrl}/producer/battles`;
+    const votingEndsAt = asNonEmptyString(payload?.voting_ends_at);
+    const metaLines = [
+      battleTitle ? `Battle : ${battleTitle}` : null,
+      votingEndsAt ? `Fin du vote : ${votingEndsAt}` : null,
+      `Reference : ${battleId}`,
+    ].filter((line): line is string => line !== null);
+
+    return {
+      subject: battleTitle
+        ? `Battle validee: "${battleTitle}"`
+        : "Ta battle a ete validee",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Battle validee",
+        preheader: "Ta battle est maintenant ouverte",
+        bodyLines: [
+          "L'administration a valide la battle.",
+          "Elle est maintenant ouverte au vote sur Beatelion.",
+        ],
+        ctaLabel: "Voir la battle",
+        ctaUrl: battleUrl,
+        metaLines,
+      }),
+    };
+  }
+
+  if (template === "battle_admin_rejected") {
+    const battleTitle = asNonEmptyString(payload?.battle_title);
+    const battleId = asNonEmptyString(payload?.battle_id) ?? "N/A";
+    const metaLines = [
+      battleTitle ? `Battle : ${battleTitle}` : null,
+      `Reference : ${battleId}`,
+    ].filter((line): line is string => line !== null);
+
+    return {
+      subject: battleTitle
+        ? `Battle non validee: "${battleTitle}"`
+        : "Ta battle n'a pas ete validee",
+      ...buildBrandedEmailContent({
+        appUrl: safeAppUrl,
+        title: "Battle non validee",
+        preheader: "La battle a ete refusee ou annulee",
+        bodyLines: [
+          "L'administration a refuse ou annule la battle.",
+          "Elle ne sera pas ouverte au vote dans son etat actuel.",
+        ],
+        ctaLabel: "Voir mes battles",
+        ctaUrl: `${safeAppUrl}/producer/battles`,
+        metaLines,
+      }),
+    };
+  }
+
   if (template === "comment_received") {
     const battleId = asNonEmptyString(payload?.battle_id);
     const metaLines = battleId ? [`Battle: ${battleId}`] : [];
