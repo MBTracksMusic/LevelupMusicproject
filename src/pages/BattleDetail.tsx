@@ -477,12 +477,12 @@ export function BattleDetailPage() {
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <Link to="/battles" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link to="/battles" className="inline-flex min-w-0 items-center gap-2 text-zinc-400 hover:text-white">
             <ArrowLeft className="w-4 h-4" />
             {t('battleDetail.backToBattles')}
           </Link>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end">
             {battle.status === 'completed' && (
               <Link
                 to={`/battles/${battle.slug}/feedback`}
@@ -554,7 +554,7 @@ export function BattleDetailPage() {
 
         <Card className="space-y-5">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">{battle.title}</h1>
+            <h1 className="mb-2 text-2xl font-bold leading-tight text-white sm:text-3xl">{battle.title}</h1>
             {battle.description ? (
               <p className="text-zinc-400">{battle.description}</p>
             ) : (
@@ -562,10 +562,10 @@ export function BattleDetailPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-            <div className="bg-zinc-800/50 rounded-lg p-4">
-              <p className="text-zinc-500 text-xs uppercase mb-1">{t('battleDetail.producer1Label')}</p>
-              <p className="text-white font-semibold">{battle.producer1?.username || t('battleDetail.producer1Fallback')}</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+            <div className="min-w-0 rounded-lg bg-zinc-800/50 p-4">
+              <p className="mb-1 text-xs uppercase text-zinc-500">{t('battleDetail.producer1Label')}</p>
+              <p className="break-words font-semibold leading-tight text-white">{battle.producer1?.username || t('battleDetail.producer1Fallback')}</p>
               {battle.producer1 && (
                 <ReputationBadge
                   compact
@@ -574,9 +574,9 @@ export function BattleDetailPage() {
                   xp={battle.producer1.xp}
                 />
               )}
-              <p className="text-rose-400 text-sm mt-1">{battle.votes_producer1} {t('battles.votes')}</p>
+              <p className="mt-2 text-sm text-rose-400">{battle.votes_producer1} {t('battles.votes')}</p>
               {battle.product1 && product1Url && (
-                <Link to={product1Url} className="text-xs text-zinc-400 hover:text-white mt-2 inline-block">
+                <Link to={product1Url} className="mt-2 block truncate text-xs text-zinc-400 hover:text-white">
                   {battle.product1.title}
                 </Link>
               )}
@@ -585,27 +585,31 @@ export function BattleDetailPage() {
               )}
             </div>
 
-            <div className="text-center">
-              <p className="text-zinc-500 uppercase tracking-wide text-xs">{t('battles.vs')}</p>
+            <div className="flex min-w-0 flex-col items-center gap-2 py-1 text-center md:px-3 md:py-0">
+              <div className="flex w-full items-center gap-3 md:block">
+                <div className="h-px flex-1 bg-zinc-800 md:hidden" />
+                <p className="shrink-0 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs uppercase tracking-wide text-zinc-500 md:border-0 md:bg-transparent md:p-0">{t('battles.vs')}</p>
+                <div className="h-px flex-1 bg-zinc-800 md:hidden" />
+              </div>
               {battle.status === 'completed' && battle.winner?.username && (
-                <div className="inline-flex items-center gap-2 text-amber-400 mt-2">
+                <div className="inline-flex max-w-full items-center gap-2 text-amber-400">
                   <Trophy className="w-4 h-4" />
-                  <span className="text-sm">{battle.winner.username}</span>
+                  <span className="truncate text-sm">{battle.winner.username}</span>
                 </div>
               )}
               {battle.voting_ends_at && (
-                <p className="text-zinc-400 text-xs mt-2 inline-flex items-center gap-1">
+                <p className="inline-flex max-w-full items-center gap-1 text-xs text-zinc-400">
                   <Clock className="w-3 h-3" />
-                  {formatDateTime(battle.voting_ends_at)}
+                  <span className="truncate">{formatDateTime(battle.voting_ends_at)}</span>
                 </p>
               )}
             </div>
 
-            <div className="bg-zinc-800/50 rounded-lg p-4 text-right">
-              <p className="text-zinc-500 text-xs uppercase mb-1">{t('battleDetail.producer2Label')}</p>
-              <p className="text-white font-semibold">{battle.producer2?.username || t('battleDetail.producer2Fallback')}</p>
+            <div className="min-w-0 rounded-lg bg-zinc-800/50 p-4 text-left md:text-right">
+              <p className="mb-1 text-xs uppercase text-zinc-500">{t('battleDetail.producer2Label')}</p>
+              <p className="break-words font-semibold leading-tight text-white">{battle.producer2?.username || t('battleDetail.producer2Fallback')}</p>
               {battle.producer2 && (
-                <div className="flex justify-end">
+                <div className="flex justify-start md:justify-end">
                   <ReputationBadge
                     compact
                     rankTier={battle.producer2.rank_tier}
@@ -614,9 +618,9 @@ export function BattleDetailPage() {
                   />
                 </div>
               )}
-              <p className="text-orange-400 text-sm mt-1">{battle.votes_producer2} {t('battles.votes')}</p>
+              <p className="mt-2 text-sm text-orange-400">{battle.votes_producer2} {t('battles.votes')}</p>
               {battle.product2 && product2Url && (
-                <Link to={product2Url} className="text-xs text-zinc-400 hover:text-white mt-2 inline-block">
+                <Link to={product2Url} className="mt-2 block truncate text-xs text-zinc-400 hover:text-white">
                   {battle.product2.title}
                 </Link>
               )}
@@ -655,10 +659,10 @@ export function BattleDetailPage() {
                 style={{ width: `${producer2Percent}%` }}
               />
             </div>
-            <div className="flex justify-between mt-2 text-sm text-zinc-500">
-              <span>{producer1Percent.toFixed(0)}%</span>
-              <span>{t('battleDetail.totalVotes', { count: totalVotes })}</span>
-              <span>{producer2Percent.toFixed(0)}%</span>
+            <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm text-zinc-500">
+              <span className="text-left">{producer1Percent.toFixed(0)}%</span>
+              <span className="min-w-0 truncate text-center">{t('battleDetail.totalVotes', { count: totalVotes })}</span>
+              <span className="text-right">{producer2Percent.toFixed(0)}%</span>
             </div>
           </div>
 
