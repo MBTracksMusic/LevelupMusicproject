@@ -1,0 +1,499 @@
+/*
+  # Battle create validation gate
+
+  Phase 2 integrity fix:
+  - Stop delegating user battle creation business rules to INSERT RLS.
+  - Move active-producer, opponent, product eligibility, and ELO gap checks into
+    SECURITY DEFINER helpers called by every battle creation entry point.
+  - Close direct authenticated INSERT on battles so the user path is the RPC.
+
+  Decision:
+  - Source of truth is the RPC/helper layer, not FORCE ROW LEVEL SECURITY.
+  - Admin campaign launch is privileged, but it calls the same validation helper
+    before inserting the awaiting_admin battle.
+*/
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.is_battle_product_eligible(
+  p_product_id uuid,
+  p_producer_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT p_product_id IS NOT NULL
+    AND p_producer_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.products p
+      WHERE p.id = p_product_id
+        AND p.producer_id = p_producer_id
+        AND p.product_type = 'beat'::public.product_type
+        AND p.status = 'active'
+        AND p.is_published = true
+        AND p.deleted_at IS NULL
+    );
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.is_battle_product_eligible(uuid, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.is_battle_product_eligible(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.is_battle_product_eligible(uuid, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.is_battle_product_eligible(uuid, uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.assert_battle_create_validations(
+  p_producer1_id uuid,
+  p_producer2_id uuid,
+  p_product1_id uuid DEFAULT NULL,
+  p_product2_id uuid DEFAULT NULL,
+  p_require_products boolean DEFAULT false,
+  p_max_elo_diff integer DEFAULT 400
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_producer1_active boolean := false;
+  v_producer2_active boolean := false;
+  v_producer1_elo integer := 1200;
+  v_producer2_elo integer := 1200;
+  v_max_elo_diff integer := 400;
+BEGIN
+  IF p_producer1_id IS NULL THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCER1_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_producer2_id IS NULL THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCER2_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_producer1_id = p_producer2_id THEN
+    RAISE EXCEPTION 'BATTLE_CANNOT_BATTLE_SELF' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_product1_id IS NOT NULL
+     AND p_product2_id IS NOT NULL
+     AND p_product1_id = p_product2_id THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCT_DUPLICATE_IN_BATTLE'
+      USING ERRCODE = '23505',
+            DETAIL = jsonb_build_object(
+              'product_id', p_product1_id,
+              'producer1_id', p_producer1_id,
+              'producer2_id', p_producer2_id
+            )::text;
+  END IF;
+
+  SELECT
+    (
+      up.role IN ('producer'::public.user_role, 'admin'::public.user_role)
+      AND up.is_producer_active = true
+      AND COALESCE(up.is_deleted, false) = false
+      AND up.deleted_at IS NULL
+    ),
+    COALESCE(up.elo_rating, 1200)
+  INTO v_producer1_active, v_producer1_elo
+  FROM public.user_profiles up
+  WHERE up.id = p_producer1_id
+  LIMIT 1;
+
+  IF NOT FOUND OR COALESCE(v_producer1_active, false) = false THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCER1_NOT_ACTIVE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('producer1_id', p_producer1_id)::text;
+  END IF;
+
+  SELECT
+    (
+      up.role IN ('producer'::public.user_role, 'admin'::public.user_role)
+      AND up.is_producer_active = true
+      AND COALESCE(up.is_deleted, false) = false
+      AND up.deleted_at IS NULL
+    ),
+    COALESCE(up.elo_rating, 1200)
+  INTO v_producer2_active, v_producer2_elo
+  FROM public.user_profiles up
+  WHERE up.id = p_producer2_id
+  LIMIT 1;
+
+  IF NOT FOUND OR COALESCE(v_producer2_active, false) = false THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCER2_NOT_ACTIVE'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object('producer2_id', p_producer2_id)::text;
+  END IF;
+
+  v_max_elo_diff := CASE
+    WHEN p_max_elo_diff IS NULL OR p_max_elo_diff < 0 THEN 400
+    ELSE p_max_elo_diff
+  END;
+
+  IF abs(v_producer1_elo - v_producer2_elo) > v_max_elo_diff THEN
+    RAISE EXCEPTION 'BATTLE_SKILL_GAP_TOO_HIGH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'producer1_id', p_producer1_id,
+              'producer2_id', p_producer2_id,
+              'producer1_elo', v_producer1_elo,
+              'producer2_elo', v_producer2_elo,
+              'max_elo_diff', v_max_elo_diff,
+              'elo_diff', abs(v_producer1_elo - v_producer2_elo)
+            )::text;
+  END IF;
+
+  IF p_require_products AND p_product1_id IS NULL THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCT1_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_require_products AND p_product2_id IS NULL THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCT2_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_product1_id IS NOT NULL
+     AND NOT public.is_battle_product_eligible(p_product1_id, p_producer1_id) THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCT1_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'product1_id', p_product1_id,
+              'producer1_id', p_producer1_id,
+              'required_product_type', 'beat',
+              'required_status', 'active',
+              'required_is_published', true
+            )::text;
+  END IF;
+
+  IF p_product2_id IS NOT NULL
+     AND NOT public.is_battle_product_eligible(p_product2_id, p_producer2_id) THEN
+    RAISE EXCEPTION 'BATTLE_PRODUCT2_INVALID'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'product2_id', p_product2_id,
+              'producer2_id', p_producer2_id,
+              'required_product_type', 'beat',
+              'required_status', 'active',
+              'required_is_published', true
+            )::text;
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.assert_battle_create_validations(uuid, uuid, uuid, uuid, boolean, integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.assert_battle_create_validations(uuid, uuid, uuid, uuid, boolean, integer) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.assert_battle_create_validations(uuid, uuid, uuid, uuid, boolean, integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.assert_battle_create_validations(uuid, uuid, uuid, uuid, boolean, integer) TO service_role;
+
+-- The user battle creation path is public.rpc_create_battle. Direct INSERT by
+-- authenticated users is intentionally closed so RLS is no longer the main
+-- validation surface for battle creation.
+DROP POLICY IF EXISTS "Active producers can create battles" ON public.battles;
+REVOKE INSERT ON TABLE public.battles FROM anon;
+REVOKE INSERT ON TABLE public.battles FROM authenticated;
+
+DROP FUNCTION IF EXISTS public.rpc_create_battle(text, text, uuid, text, uuid, uuid, text, int);
+CREATE FUNCTION public.rpc_create_battle(
+  p_title         text,
+  p_slug          text,
+  p_producer2_id  uuid,
+  p_description   text DEFAULT NULL,
+  p_product1_id   uuid DEFAULT NULL,
+  p_product2_id   uuid DEFAULT NULL,
+  p_battle_type   text DEFAULT 'user',
+  p_cooldown_days int  DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_actor          uuid := auth.uid();
+  v_title          text := NULLIF(trim(COALESCE(p_title, '')), '');
+  v_slug           text := NULLIF(trim(COALESCE(p_slug, '')), '');
+  v_description    text := NULLIF(trim(COALESCE(p_description, '')), '');
+  v_cooldown_days  int;
+  v_cooldown_end   timestamptz;
+  v_new_battle_id  uuid;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'auth_required' USING ERRCODE = '42501';
+  END IF;
+
+  IF v_title IS NULL THEN
+    RAISE EXCEPTION 'title_required' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_slug IS NULL THEN
+    RAISE EXCEPTION 'slug_required' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_battle_type IS NULL OR p_battle_type NOT IN ('user') THEN
+    RAISE EXCEPTION 'unsupported_battle_type' USING ERRCODE = 'P0001';
+  END IF;
+
+  PERFORM public.assert_battle_create_validations(
+    v_actor,
+    p_producer2_id,
+    p_product1_id,
+    p_product2_id,
+    false,
+    400
+  );
+
+  v_cooldown_days := COALESCE(
+    p_cooldown_days,
+    CASE
+      WHEN p_battle_type = 'title' THEN 7
+      ELSE 30
+    END
+  );
+
+  IF NOT public.can_create_battle(v_actor) THEN
+    RAISE EXCEPTION 'BATTLE_QUOTA_REACHED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF NOT public.can_create_active_battle(v_actor) THEN
+    RAISE EXCEPTION 'BATTLE_ACTIVE_CAP_REACHED' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF public.check_battle_pair_active(v_actor, p_producer2_id) THEN
+    RAISE EXCEPTION 'BATTLE_PAIR_ALREADY_ACTIVE' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_cooldown_end := public.get_battle_pair_cooldown_end(
+    v_actor,
+    p_producer2_id,
+    v_cooldown_days
+  );
+
+  IF v_cooldown_end IS NOT NULL THEN
+    RAISE EXCEPTION 'BATTLE_PAIR_COOLDOWN'
+      USING ERRCODE = 'P0003',
+            DETAIL = jsonb_build_object(
+              'cooldown_end_at', to_char(v_cooldown_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+              'cooldown_days',   v_cooldown_days,
+              'opponent_id',     p_producer2_id
+            )::text;
+  END IF;
+
+  INSERT INTO public.battles (
+    title,
+    slug,
+    description,
+    producer1_id,
+    producer2_id,
+    product1_id,
+    product2_id,
+    status,
+    winner_id,
+    votes_producer1,
+    votes_producer2
+  )
+  VALUES (
+    v_title,
+    v_slug,
+    v_description,
+    v_actor,
+    p_producer2_id,
+    p_product1_id,
+    p_product2_id,
+    'pending_acceptance',
+    NULL,
+    0,
+    0
+  )
+  RETURNING id INTO v_new_battle_id;
+
+  RETURN v_new_battle_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.rpc_create_battle(text, text, uuid, text, uuid, uuid, text, int) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.rpc_create_battle(text, text, uuid, text, uuid, uuid, text, int) FROM anon;
+GRANT EXECUTE ON FUNCTION public.rpc_create_battle(text, text, uuid, text, uuid, uuid, text, int) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_create_battle(text, text, uuid, text, uuid, uuid, text, int) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.admin_launch_battle_campaign(
+  p_campaign_id uuid
+)
+RETURNS TABLE (
+  success boolean,
+  status text,
+  message text,
+  battle_id uuid
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_campaign public.admin_battle_campaigns%ROWTYPE;
+  v_slug_base text;
+  v_slug text;
+  v_counter integer := 0;
+  v_battle_id uuid;
+  v_product1_id uuid;
+  v_product2_id uuid;
+BEGIN
+  IF NOT public.is_admin(v_actor) THEN
+    RAISE EXCEPTION 'admin_required';
+  END IF;
+
+  SELECT *
+  INTO v_campaign
+  FROM public.admin_battle_campaigns
+  WHERE id = p_campaign_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'campaign_not_found';
+  END IF;
+
+  IF v_campaign.status = 'launched' AND v_campaign.battle_id IS NOT NULL THEN
+    RETURN QUERY
+    SELECT true, 'already_launched'::text, 'Campaign already launched.'::text, v_campaign.battle_id;
+    RETURN;
+  END IF;
+
+  IF v_campaign.selected_producer1_id IS NULL OR v_campaign.selected_producer2_id IS NULL THEN
+    RAISE EXCEPTION 'campaign_selection_missing';
+  END IF;
+
+  IF v_campaign.selected_producer1_id = v_campaign.selected_producer2_id THEN
+    RAISE EXCEPTION 'campaign_selection_invalid';
+  END IF;
+
+  IF v_campaign.status <> 'selection_locked' THEN
+    RAISE EXCEPTION 'campaign_selection_not_locked';
+  END IF;
+
+  IF v_campaign.submission_deadline <= now() THEN
+    RAISE EXCEPTION 'submission_deadline_in_past';
+  END IF;
+
+  SELECT a.proposed_product_id
+  INTO v_product1_id
+  FROM public.admin_battle_applications a
+  WHERE a.campaign_id = p_campaign_id
+    AND a.producer_id = v_campaign.selected_producer1_id
+  LIMIT 1;
+
+  IF v_product1_id IS NULL THEN
+    SELECT p.id
+    INTO v_product1_id
+    FROM public.products p
+    WHERE p.producer_id = v_campaign.selected_producer1_id
+      AND p.product_type = 'beat'
+      AND p.status = 'active'
+      AND p.deleted_at IS NULL
+      AND p.is_published = true
+    ORDER BY p.created_at DESC
+    LIMIT 1;
+  END IF;
+
+  SELECT a.proposed_product_id
+  INTO v_product2_id
+  FROM public.admin_battle_applications a
+  WHERE a.campaign_id = p_campaign_id
+    AND a.producer_id = v_campaign.selected_producer2_id
+  LIMIT 1;
+
+  IF v_product2_id IS NULL THEN
+    SELECT p.id
+    INTO v_product2_id
+    FROM public.products p
+    WHERE p.producer_id = v_campaign.selected_producer2_id
+      AND p.product_type = 'beat'
+      AND p.status = 'active'
+      AND p.deleted_at IS NULL
+      AND p.is_published = true
+    ORDER BY p.created_at DESC
+    LIMIT 1;
+  END IF;
+
+  PERFORM public.assert_battle_create_validations(
+    v_campaign.selected_producer1_id,
+    v_campaign.selected_producer2_id,
+    v_product1_id,
+    v_product2_id,
+    true,
+    400
+  );
+
+  v_slug_base := lower(regexp_replace(COALESCE(v_campaign.share_slug, v_campaign.title, 'official-battle'), '[^a-z0-9]+', '-', 'g'));
+  v_slug_base := regexp_replace(v_slug_base, '(^-+|-+$)', '', 'g');
+
+  IF v_slug_base IS NULL OR v_slug_base = '' THEN
+    v_slug_base := 'official-battle';
+  END IF;
+
+  v_slug := v_slug_base;
+  LOOP
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM public.battles b WHERE b.slug = v_slug);
+    v_counter := v_counter + 1;
+    v_slug := v_slug_base || '-' || v_counter::text;
+    IF v_counter > 1000 THEN
+      RAISE EXCEPTION 'unable_to_generate_battle_slug';
+    END IF;
+  END LOOP;
+
+  INSERT INTO public.battles (
+    title,
+    slug,
+    description,
+    producer1_id,
+    producer2_id,
+    product1_id,
+    product2_id,
+    status,
+    submission_deadline,
+    voting_ends_at,
+    accepted_at,
+    winner_id,
+    votes_producer1,
+    votes_producer2,
+    battle_type
+  )
+  VALUES (
+    COALESCE(NULLIF(btrim(v_campaign.title), ''), 'Official Battle'),
+    v_slug,
+    NULLIF(btrim(COALESCE(v_campaign.description, v_campaign.social_description, '')), ''),
+    v_campaign.selected_producer1_id,
+    v_campaign.selected_producer2_id,
+    v_product1_id,
+    v_product2_id,
+    'awaiting_admin',
+    v_campaign.submission_deadline,
+    v_campaign.submission_deadline,
+    now(),
+    NULL,
+    0,
+    0,
+    'admin'
+  )
+  RETURNING id INTO v_battle_id;
+
+  PERFORM public.admin_validate_battle(v_battle_id);
+
+  UPDATE public.admin_battle_campaigns
+  SET battle_id = v_battle_id,
+      status = 'launched',
+      launched_at = now(),
+      updated_at = now()
+  WHERE id = p_campaign_id;
+
+  RETURN QUERY
+  SELECT true, 'launched'::text, 'Battle launched and activated from campaign.'::text, v_battle_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.admin_launch_battle_campaign(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.admin_launch_battle_campaign(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.admin_launch_battle_campaign(uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_launch_battle_campaign(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_launch_battle_campaign(uuid) TO service_role;
+
+COMMIT;
