@@ -5,7 +5,6 @@ import {
   Play,
   ArrowRight,
   TrendingUp,
-  Star,
   Users,
   Zap,
   Shield,
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { ProducerPromoCard } from '../components/ProducerPromoCard';
-import { ProductCard } from '../components/products/ProductCard';
 import { HomeBattlesPreview } from '../components/home/HomeBattlesPreview';
 import { HomeBattleOfTheDay } from '../components/home/HomeBattleOfTheDay';
 import { HomeFeaturedBeats } from '../components/home/HomeFeaturedBeats';
@@ -23,11 +21,8 @@ import { HomeNewsVideos } from '../components/home/HomeNewsVideos';
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '../lib/auth/hooks';
-import { useUserSubscriptionStatus } from '../lib/subscriptions/useUserSubscriptionStatus';
 import { useWishlistStore } from '../lib/stores/wishlist';
-import { fetchCatalogProducts } from '../lib/supabase/catalog';
 import { useMaintenanceModeContext } from '../lib/supabase/MaintenanceModeContext';
-import type { ProductWithRelations } from '../lib/supabase/types';
 import { formatNumber } from '../lib/utils/format';
 
 interface HomeStatsPayload {
@@ -53,16 +48,11 @@ type ProducerCampaignStatusRpc = (
 export function HomePage() {
   const { t } = useTranslation();
   const { user, profile } = useAuth();
-  const { isActive: hasPremiumAccess, subscription: userSubStatus } = useUserSubscriptionStatus(user?.id);
-  const isUserPremium = hasPremiumAccess && userSubStatus?.plan_code === 'user_monthly';
   const { showHomepageStats, showHomepageBadge, pricingProducerPromo } = useMaintenanceModeContext();
   const hasActiveProducerSubscription = Boolean(user && profile?.is_producer_active === true);
   const isProducerPromoEnabled = Boolean(pricingProducerPromo?.enabled);
   const promoCampaignType = pricingProducerPromo?.campaign_type?.trim() ?? '';
-  const { productIds: wishlistProductIds, fetchWishlist, toggleWishlist, clearWishlist } = useWishlistStore();
-  // TODO(levelup): reactiver cette section quand les categories Exclusifs/Kits reviennent.
-  const isExclusiveSectionEnabled = false;
-  const [exclusives, setExclusives] = useState<ProductWithRelations[]>([]);
+  const { fetchWishlist, clearWishlist } = useWishlistStore();
   const [homeStats, setHomeStats] = useState<{
     beatsPublished: number | null;
     activeProducers: number | null;
@@ -114,43 +104,6 @@ export function HomePage() {
       isCancelled = true;
     };
   }, [isProducerPromoEnabled, promoCampaignType]);
-
-  const handleWishlistToggle = async (productId: string) => {
-    try {
-      await toggleWishlist(productId);
-    } catch (error) {
-      console.error('Error toggling wishlist:', error);
-    }
-  };
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const { products: nextExclusives } = await fetchCatalogProducts({
-          mode: 'exclusives',
-          filters: {
-            search: '',
-            genre: '',
-            mood: '',
-            bpmMin: '',
-            bpmMax: '',
-            priceMin: '',
-            priceMax: '',
-            sort: 'newest',
-          },
-          limit: 4,
-          restrictToActiveProducers: false,
-          hasPremiumAccess: false,
-        });
-
-        setExclusives(nextExclusives as ProductWithRelations[]);
-      } catch (error) {
-        console.error('Error fetching home data:', error);
-      }
-    }
-
-    fetchData();
-  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -326,43 +279,6 @@ export function HomePage() {
       <HomeWeeklyTopProducers />
       <HomeBattlesPreview />
       <HomeFeaturedBeats />
-
-      {isExclusiveSectionEnabled && exclusives.length > 0 && (
-        <section className="py-20 bg-gradient-to-b from-zinc-950 to-zinc-900">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-10">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Star className="w-5 h-5 text-rose-400" />
-                  <h2 className="text-3xl font-bold text-white">
-                    {t('home.exclusiveDrops')}
-                  </h2>
-                </div>
-                <p className="text-zinc-400">
-                  {t('home.exclusiveDropsDesc')}
-                </p>
-              </div>
-              <Link to="/exclusives">
-                <Button variant="ghost" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                  {t('common.viewAll')}
-                </Button>
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {exclusives.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  isUserPremium={isUserPremium}
-                  isWishlisted={wishlistProductIds.includes(product.id)}
-                  onWishlistToggle={handleWishlistToggle}
-                />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       <section className="py-12 md:py-20 bg-zinc-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

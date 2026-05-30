@@ -26,6 +26,15 @@ const normalizeOrigin = (value: string): string | null => {
   }
 };
 
+const isLocalDevelopmentOrigin = (origin: string) => {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === "http:" && (hostname === "localhost" || hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+};
+
 const resolveAllowedCorsOrigins = () => {
   const allowed = new Set<string>(DEFAULT_ALLOWED_CORS_ORIGINS);
 
@@ -62,6 +71,7 @@ const resolveRequestOrigin = (req: Request) => {
   if (!rawOrigin) return null;
   const normalized = normalizeOrigin(rawOrigin);
   if (!normalized) return null;
+  if (isLocalDevelopmentOrigin(normalized)) return normalized;
   return ALLOWED_CORS_ORIGINS.has(normalized) ? normalized : null;
 };
 
