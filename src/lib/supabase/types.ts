@@ -292,6 +292,7 @@ export interface Battle {
   producer2_id: string | null;
   product1_id: string | null;
   product2_id: string | null;
+  genre_id: string | null;
   status: BattleStatus;
   accepted_at: string | null;
   rejected_at: string | null;
@@ -317,6 +318,7 @@ export interface BattleWithRelations extends Battle {
   producer2?: UserProfile;
   product1?: Product;
   product2?: Product;
+  genre?: Genre;
   winner?: UserProfile;
 }
 

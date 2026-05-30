@@ -4,26 +4,30 @@ import { BarChart3, Clock, ExternalLink, Trophy, Users } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Card } from '../components/ui/Card';
+import { Select } from '../components/ui/Select';
 import { ReputationBadge } from '../components/reputation/ReputationBadge';
 import { useTranslation } from '../lib/i18n';
+import { getLocalizedName } from '../lib/i18n/localized';
 import { supabase } from '@/lib/supabase/client';
 import { fetchPublicProducerProfilesMap } from '../lib/supabase/publicProfiles';
 import { fetchCatalogProductsByIds } from '../lib/supabase/catalog';
 import { useAuth, useIsEmailVerified } from '../lib/auth/hooks';
-import type { BattleWithRelations } from '../lib/supabase/types';
+import type { BattleWithRelations, Genre } from '../lib/supabase/types';
 
 const PAGE_SIZE = 20;
 
 export function BattlesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { user } = useAuth();
   const isEmailVerified = useIsEmailVerified();
   const [battles, setBattles] = useState<BattleWithRelations[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState<'active' | 'voting' | 'completed'>('active');
+  const [genreFilter, setGenreFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleFilterChange = (newFilter: 'active' | 'voting' | 'completed') => {
@@ -32,6 +36,44 @@ export function BattlesPage() {
     setHasMore(false);
     setFilter(newFilter);
   };
+
+  const handleGenreFilterChange = (nextGenreId: string) => {
+    setBattles([]);
+    setPage(0);
+    setHasMore(false);
+    setGenreFilter(nextGenreId);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchGenres() {
+      const { data, error: genresError } = await supabase
+        .from('genres')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+
+      if (cancelled) return;
+
+      if (genresError) {
+        console.error('Error loading battle genres:', genresError);
+        setGenres([]);
+        return;
+      }
+
+      setGenres(
+        (((data as Genre[] | null) ?? [])).map((genre) => ({
+          ...genre,
+          sort_order: genre.sort_order ?? 0,
+          is_active: genre.is_active ?? false,
+        }))
+      );
+    }
+
+    void fetchGenres();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +90,7 @@ export function BattlesPage() {
       const to = from + PAGE_SIZE - 1;
 
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('battles')
           .select(`
             id,
@@ -59,6 +101,8 @@ export function BattlesPage() {
             producer2_id,
             product1_id,
             product2_id,
+            genre_id,
+            genre:genres(id, name, name_en, name_de, slug),
             status,
             accepted_at,
             rejected_at,
@@ -79,8 +123,13 @@ export function BattlesPage() {
             updated_at
           `)
           .eq('status', filter)
-          .order('created_at', { ascending: false })
-          .range(from, to);
+          .order('created_at', { ascending: false });
+
+        if (genreFilter) {
+          query = query.eq('genre_id', genreFilter);
+        }
+
+        const { data, error } = await query.range(from, to);
 
         if (error) throw error;
         const rows = ((data as BattleWithRelations[] | null) ?? []);
@@ -170,7 +219,7 @@ export function BattlesPage() {
 
     void fetchBattles();
     return () => { cancelled = true; };
-  }, [filter, page, t]);
+  }, [filter, genreFilter, page, t]);
 
   return (
     <div className="min-h-screen bg-zinc-950 pt-8 pb-32">
@@ -180,7 +229,8 @@ export function BattlesPage() {
           <p className="text-zinc-400">{t('battles.subtitle')}</p>
         </div>
 
-        <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0">
           <Button
             variant={filter === 'active' ? 'primary' : 'outline'}
             onClick={() => handleFilterChange('active')}
@@ -199,6 +249,18 @@ export function BattlesPage() {
           >
             {t('battles.legacyVoting')}
           </Button>
+          </div>
+          <div className="w-full sm:w-64">
+            <Select
+              label={t('battles.filterByGenre')}
+              value={genreFilter}
+              onChange={(event) => handleGenreFilterChange(event.target.value)}
+              options={[
+                { value: '', label: t('common.all') },
+                ...genres.map((genre) => ({ value: genre.id, label: getLocalizedName(genre, language) })),
+              ]}
+            />
+          </div>
         </div>
 
         {error && (
@@ -271,7 +333,7 @@ interface BattleCardProps {
 }
 
 function BattleCard({ battle }: BattleCardProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const totalVotes = battle.votes_producer1 + battle.votes_producer2;
   const percent1 = totalVotes > 0 ? (battle.votes_producer1 / totalVotes) * 100 : 50;
   const percent2 = totalVotes > 0 ? (battle.votes_producer2 / totalVotes) * 100 : 50;
@@ -318,6 +380,9 @@ function BattleCard({ battle }: BattleCardProps) {
                 ? t('battles.ended')
                 : t('battles.upcomingBattles')}
             </Badge>
+            {battle.genre && (
+              <Badge variant="default">{getLocalizedName(battle.genre, language)}</Badge>
+            )}
           </div>
         </div>
 

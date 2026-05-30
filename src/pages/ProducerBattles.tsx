@@ -10,8 +10,9 @@ import { trackJoinBattle } from '../lib/analytics';
 import { useAuth, usePermissions } from '../lib/auth/hooks';
 import { FoundingTrialExpiredPaywall } from '../components/producers/FoundingTrialExpiredPaywall';
 import { useTranslation, type TranslateFn } from '../lib/i18n';
+import { getLocalizedName } from '../lib/i18n/localized';
 import { supabase } from '@/lib/supabase/client';
-import type { BattleStatus } from '../lib/supabase/types';
+import type { BattleStatus, Genre } from '../lib/supabase/types';
 import { formatDate, formatDateTime } from '../lib/utils/format';
 
 interface ProducerOption {
@@ -22,6 +23,7 @@ interface ProducerOption {
 interface ProductOption {
   id: string;
   title: string;
+  genre_id: string | null;
 }
 
 interface ManagedBattle {
@@ -218,6 +220,10 @@ function toBattleInsertErrorMessage(error: {
     return t('producerBattles.maxActiveBattlesReached');
   }
 
+  if (code === 'P0001' && message === 'BATTLE_GENRE_INVALID') {
+    return t('producerBattles.genreInvalid');
+  }
+
   const isRlsError =
     code === '42501'
     || message.includes('new row violates row-level security')
@@ -303,11 +309,12 @@ function toOfficialCampaignErrorMessage(message: string) {
 }
 
 export function ProducerBattlesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { profile } = useAuth();
   const { foundingTrialExpired } = usePermissions();
 
   const [producers, setProducers] = useState<ProducerOption[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [myProducts, setMyProducts] = useState<ProductOption[]>([]);
   const [producer2Products, setProducer2Products] = useState<ProductOption[]>([]);
   const [battles, setBattles] = useState<ManagedBattle[]>([]);
@@ -334,6 +341,7 @@ export function ProducerBattlesPage() {
   const [form, setForm] = useState({
     title: '',
     description: '',
+    genreId: '',
     producer2Id: '',
     product1Id: '',
     product2Id: '',
@@ -350,9 +358,11 @@ export function ProducerBattlesPage() {
   const product1Options = useMemo(
     () => [
       { value: '', label: t('producerBattles.chooseProduct') },
-      ...myProducts.map((p) => ({ value: p.id, label: p.title })),
+      ...myProducts
+        .filter((p) => !form.genreId || p.genre_id === form.genreId)
+        .map((p) => ({ value: p.id, label: p.title })),
     ],
-    [myProducts, t]
+    [form.genreId, myProducts, t]
   );
 
   const product2Options = useMemo(
@@ -361,6 +371,14 @@ export function ProducerBattlesPage() {
       ...producer2Products.map((p) => ({ value: p.id, label: p.title })),
     ],
     [producer2Products, t]
+  );
+
+  const genreOptions = useMemo(
+    () => [
+      { value: '', label: t('producerBattles.chooseGenre') },
+      ...genres.map((genre) => ({ value: genre.id, label: getLocalizedName(genre, language) })),
+    ],
+    [genres, language, t]
   );
 
   const loadQuotaStatus = useCallback(async () => {
@@ -515,7 +533,7 @@ export function ProducerBattlesPage() {
     setMatchmakingOpponents(
       (((data as MatchmakingOpponent[] | null) ?? [])).map((row) => ({
         ...row,
-        source: 'sql',
+        source: 'sql' as const,
         score: null,
         reason: null,
       })).filter((user) => user.role !== 'admin')
@@ -600,8 +618,8 @@ export function ProducerBattlesPage() {
 
     const { error: applyError } = await supabase.rpc('apply_to_admin_battle_campaign', {
       p_campaign_id: campaignId,
-      p_message: message.trim() || null,
-      p_proposed_product_id: proposedProductId,
+      p_message: message.trim() || undefined,
+      p_proposed_product_id: proposedProductId || undefined,
     });
 
     if (applyError) {
@@ -627,7 +645,7 @@ export function ProducerBattlesPage() {
       setIsLoading(true);
       setError(null);
 
-      const [producersRes, productsRes] = await Promise.all([
+      const [producersRes, productsRes, genresRes] = await Promise.all([
         supabase
           .from('public_producer_profiles')
           .select('user_id, username')
@@ -637,10 +655,15 @@ export function ProducerBattlesPage() {
           .order('username', { ascending: true }),
         supabase
           .from('products')
-          .select('id, title')
+          .select('id, title, genre_id')
           .eq('producer_id', profile.id)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('genres')
+          .select('*')
+          .eq('is_active', true)
+          .order('sort_order'),
       ]);
 
       let producerData = producersRes.data;
@@ -666,11 +689,21 @@ export function ProducerBattlesPage() {
         if (productsRes.error) {
           console.error('Error loading producer products:', productsRes.error);
         }
+        if (genresRes.error) {
+          console.error('Error loading genres for battle creation:', genresRes.error);
+        }
 
         const producerRows = ((producerData as Array<{ user_id: string; username: string | null }> | null) ?? [])
           .map((row) => ({ id: row.user_id, username: row.username }));
         setProducers(producerRows);
         setMyProducts((productsRes.data as ProductOption[] | null) ?? []);
+        setGenres(
+          (((genresRes.data as Genre[] | null) ?? [])).map((genre) => ({
+            ...genre,
+            sort_order: genre.sort_order ?? 0,
+            is_active: genre.is_active ?? false,
+          }))
+        );
 
         const [nextQuota] = await Promise.all([
           loadQuotaStatus(),
@@ -698,13 +731,19 @@ export function ProducerBattlesPage() {
         return;
       }
 
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('products')
-        .select('id, title')
+        .select('id, title, genre_id')
         .eq('producer_id', form.producer2Id)
         .eq('is_published', true)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+
+      if (form.genreId) {
+        query = query.eq('genre_id', form.genreId);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (!isCancelled) {
         if (fetchError) {
@@ -721,7 +760,7 @@ export function ProducerBattlesPage() {
     return () => {
       isCancelled = true;
     };
-  }, [form.producer2Id]);
+  }, [form.genreId, form.producer2Id]);
 
   const hasReachedActiveBattlesLimit = useCallback(async () => {
     if (!profile?.id) return false;
@@ -753,6 +792,11 @@ export function ProducerBattlesPage() {
       return;
     }
 
+    if (!form.genreId) {
+      setError(t('producerBattles.genreRequired'));
+      return;
+    }
+
     setError(null);
     setIsSaving(true);
 
@@ -777,6 +821,7 @@ export function ProducerBattlesPage() {
       p_description: form.description.trim() || undefined,
       p_product1_id: form.product1Id || undefined,
       p_product2_id: form.product2Id || undefined,
+      p_genre_id: form.genreId,
     });
 
     if (rpcError) {
@@ -794,6 +839,7 @@ export function ProducerBattlesPage() {
     setForm({
       title: '',
       description: '',
+      genreId: '',
       producer2Id: '',
       product1Id: '',
       product2Id: '',
@@ -865,15 +911,15 @@ export function ProducerBattlesPage() {
     : 0;
   const quotaBlockedMessage = quotaStatus && !hasPlanBattleAccess
     ? t('producerBattles.planInsufficientNotice')
-    : hasReachedBattleLimit
+    : quotaStatus && hasReachedBattleLimit
     ? t('producerBattles.quotaReachedNotice', {
-      limit: battleLimit,
+      limit: battleLimit ?? 0,
       used: quotaStatus.used_this_month,
       date: quotaStatus.reset_at ? formatDate(quotaStatus.reset_at) : t('common.notAvailable'),
     })
     : null;
   const canUseMatchmaking = canCreateBattle;
-  const shouldShowPlansCta = Boolean(quotaStatus) && quotaStatus.tier !== 'elite' && !canCreateBattle;
+  const shouldShowPlansCta = quotaStatus != null && quotaStatus.tier !== 'elite' && !canCreateBattle;
 
   if (foundingTrialExpired) {
     return <FoundingTrialExpiredPaywall />;
@@ -1058,6 +1104,20 @@ export function ProducerBattlesPage() {
               value={form.description}
               onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
               placeholder={t('producerBattles.descriptionPlaceholder')}
+            />
+
+            <Select
+              label={t('producerBattles.genreLabel')}
+              value={form.genreId}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  genreId: event.target.value,
+                  product1Id: '',
+                  product2Id: '',
+                }))
+              }
+              options={genreOptions}
             />
 
             <Select

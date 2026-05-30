@@ -1398,6 +1398,7 @@ export type Database = {
           description: string | null
           extension_count: number | null
           featured: boolean
+          genre_id: string | null
           id: string
           prize_description: string | null
           producer1_id: string
@@ -1427,6 +1428,7 @@ export type Database = {
           description?: string | null
           extension_count?: number | null
           featured?: boolean
+          genre_id?: string | null
           id?: string
           prize_description?: string | null
           producer1_id: string
@@ -1456,6 +1458,7 @@ export type Database = {
           description?: string | null
           extension_count?: number | null
           featured?: boolean
+          genre_id?: string | null
           id?: string
           prize_description?: string | null
           producer1_id?: string
@@ -1477,6 +1480,13 @@ export type Database = {
           winner_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "battles_genre_id_fkey"
+            columns: ["genre_id"]
+            isOneToOne: false
+            referencedRelation: "genres"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "battles_producer1_id_fkey"
             columns: ["producer1_id"]
@@ -8865,8 +8875,8 @@ export type Database = {
       rpc_create_battle: {
         Args: {
           p_battle_type?: string
-          p_cooldown_days?: number
           p_description?: string
+          p_genre_id?: string
           p_producer2_id: string
           p_product1_id?: string
           p_product2_id?: string
